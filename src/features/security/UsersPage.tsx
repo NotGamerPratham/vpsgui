@@ -1,16 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Plus, Shield, Check } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
+import { apiClient } from '../../api/client';
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  mfa: boolean;
+  status: string;
+}
 
 export function UsersPage() {
-  const members = [
-    { id: 'usr-1', name: 'Alex Rivers', email: 'alex@vpsgui.com', role: 'Owner', mfa: true, status: 'active' },
-    { id: 'usr-2', name: 'Sarah Chen', email: 'sarah@vpsgui.com', role: 'DevOps Admin', mfa: true, status: 'active' },
-    { id: 'usr-3', name: 'Marcus Vance', email: 'marcus@vpsgui.com', role: 'Developer', mfa: false, status: 'active' },
-  ];
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get<TeamMember[]>('/users')
+      .then((data) => setMembers(Array.isArray(data) ? data : []))
+      .catch(() => setMembers([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -32,34 +46,48 @@ export function UsersPage() {
       </div>
 
       <Card className="bg-card/70 border-border/70 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">User Name</TableHead>
-              <TableHead className="text-xs">Email</TableHead>
-              <TableHead className="text-xs">Role</TableHead>
-              <TableHead className="text-xs">MFA Status</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((m) => (
-              <TableRow key={m.id}>
-                <TableCell className="font-bold text-xs text-foreground">{m.name}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{m.email}</TableCell>
-                <TableCell>
-                  <Badge variant="purple" className="text-[10px] px-2 py-0.5">{m.role}</Badge>
-                </TableCell>
-                <TableCell className="text-xs font-mono text-emerald-400 font-semibold">
-                  {m.mfa ? 'TOTP Enabled' : 'Disabled'}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="success" className="text-[10px] px-2 py-0.5 uppercase">{m.status}</Badge>
-                </TableCell>
+        {members.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border/60">
+              <Users className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">No Team Members Configured</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                Team members and RBAC roles are managed through the VPSGUI backend API. Set up authentication to manage users.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">User Name</TableHead>
+                <TableHead className="text-xs">Email</TableHead>
+                <TableHead className="text-xs">Role</TableHead>
+                <TableHead className="text-xs">MFA Status</TableHead>
+                <TableHead className="text-xs">Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {members.map((m) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-bold text-xs text-foreground">{m.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{m.email}</TableCell>
+                  <TableCell>
+                    <Badge variant="purple" className="text-[10px] px-2 py-0.5">{m.role}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-emerald-400 font-semibold">
+                    {m.mfa ? 'TOTP Enabled' : 'Disabled'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="success" className="text-[10px] px-2 py-0.5 uppercase">{m.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </div>
   );

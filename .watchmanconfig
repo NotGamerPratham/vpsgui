@@ -1,0 +1,11 @@
+{
+  "ignore_dirs": [
+    "node_modules",
+    "dist",
+    "build",
+    ".git",
+    ".vite",
+    "sdk/node/dist",
+    "sdk/python/build"
+  ]
+}

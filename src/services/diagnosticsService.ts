@@ -36,13 +36,10 @@ class DiagnosticsService {
         }));
       }
 
-      return [{ name: cleanDomain, type: 'A', data: '135.181.42.89', ttl: 300 }];
+      return [];
     } catch (e) {
-      console.warn('DNS lookup fallback:', e);
-      return [
-        { name: domain, type: 'A', data: '135.181.42.89', ttl: 300 },
-        { name: domain, type: 'AAAA', data: '2a01:4f8:c010:1234::1', ttl: 300 },
-      ];
+      console.warn('DNS lookup failed:', e);
+      return [];
     }
   }
 
@@ -67,33 +64,39 @@ class DiagnosticsService {
       const endTime = performance.now();
       const latencyMs = Math.round(endTime - startTime);
       return {
-        latencyMs: latencyMs > 0 ? latencyMs : 14,
-        status: 'ok',
-        message: `CORS mode Ping test to ${hostOrIp} completed in ${latencyMs || 14}ms`,
+        latencyMs: latencyMs > 0 ? latencyMs : 0,
+        status: 'error',
+        message: `Ping to ${hostOrIp} failed or was blocked by CORS after ${latencyMs}ms`,
       };
     }
   }
 
   /**
-   * Real IP Geolocation using ipify API
+   * Real IP Geolocation using ipify API for public IP
+   * and ip-api.com for geolocation data
    */
   async getPublicIpInfo(): Promise<IpInfoResult> {
     try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      const data = await response.json();
-      return {
-        ip: data.ip,
-        city: 'Ashburn',
-        country: 'United States',
-        org: 'Cloud Infrastructure Provider',
-      };
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      const ip = ipData.ip;
+
+      // Attempt geolocation via ip-api (free, no key needed for non-commercial)
+      try {
+        const geoResponse = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName,country,org`);
+        const geoData = await geoResponse.json();
+        return {
+          ip,
+          city: geoData.city || undefined,
+          region: geoData.regionName || undefined,
+          country: geoData.country || undefined,
+          org: geoData.org || undefined,
+        };
+      } catch {
+        return { ip };
+      }
     } catch (e) {
-      return {
-        ip: '135.181.42.89',
-        city: 'Frankfurt',
-        country: 'Germany',
-        org: 'Hetzner Cloud',
-      };
+      return { ip: 'Unavailable' };
     }
   }
 }

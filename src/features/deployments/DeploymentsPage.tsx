@@ -1,15 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layers, GitBranch, CheckCircle2, RotateCw } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
+import { apiClient } from '../../api/client';
+
+interface DeploymentItem {
+  id: string;
+  app: string;
+  branch: string;
+  commit: string;
+  status: string;
+  duration: string;
+  time: string;
+}
 
 export function DeploymentsPage() {
-  const deployments = [
-    { id: 'dep-1', app: 'vpsgui-web-frontend', branch: 'main', commit: '7a9f201', status: 'deployed', duration: '42s', time: '10 mins ago' },
-    { id: 'dep-2', app: 'vpsgui-api-gateway', branch: 'main', commit: 'b410294', status: 'deployed', duration: '1m 12s', time: '2 hours ago' },
-  ];
+  const [deployments, setDeployments] = useState<DeploymentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get<DeploymentItem[]>('/deployments')
+      .then((data) => setDeployments(Array.isArray(data) ? data : []))
+      .catch(() => setDeployments([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -26,34 +42,48 @@ export function DeploymentsPage() {
       </div>
 
       <Card className="bg-card/70 border-border/70 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Application</TableHead>
-              <TableHead className="text-xs">Git Branch</TableHead>
-              <TableHead className="text-xs">Commit Hash</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="text-xs">Build Duration</TableHead>
-              <TableHead className="text-xs">Time</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {deployments.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-bold text-xs text-foreground">{d.app}</TableCell>
-                <TableCell className="font-mono text-xs text-primary flex items-center gap-1">
-                  <GitBranch className="h-3.5 w-3.5 text-muted-foreground" /> {d.branch}
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{d.commit}</TableCell>
-                <TableCell>
-                  <Badge variant="success" className="text-[10px] uppercase font-mono">{d.status}</Badge>
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{d.duration}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{d.time}</TableCell>
+        {deployments.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border/60">
+              <Layers className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">No Deployments Recorded</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                Deployment history is tracked by the VPSGUI agent. Configure Git webhooks to enable push-to-deploy pipelines.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Application</TableHead>
+                <TableHead className="text-xs">Git Branch</TableHead>
+                <TableHead className="text-xs">Commit Hash</TableHead>
+                <TableHead className="text-xs">Status</TableHead>
+                <TableHead className="text-xs">Build Duration</TableHead>
+                <TableHead className="text-xs">Time</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {deployments.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="font-bold text-xs text-foreground">{d.app}</TableCell>
+                  <TableCell className="font-mono text-xs text-primary flex items-center gap-1">
+                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" /> {d.branch}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{d.commit}</TableCell>
+                  <TableCell>
+                    <Badge variant="success" className="text-[10px] uppercase font-mono">{d.status}</Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{d.duration}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{d.time}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </div>
   );

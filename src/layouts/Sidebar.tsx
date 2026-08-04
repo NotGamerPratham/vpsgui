@@ -171,6 +171,21 @@ export function Sidebar() {
           </div>
         ))}
       </div>
+
+      {/* Footer Developer Credit */}
+      {!sidebarCollapsed && (
+        <div className="border-t border-border p-3 text-[10px] text-muted-foreground text-center">
+          Developed by{' '}
+          <a
+            href="https://notgamerpratham.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary font-bold hover:underline"
+          >
+            NotGamerPratham
+          </a>
+        </div>
+      )}
     </aside>
   );
 }

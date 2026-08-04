@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Plus, CheckCircle2, Lock } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
+import { apiClient } from '../../api/client';
+
+interface ProxyRule {
+  id: string;
+  domain: string;
+  upstream: string;
+  ssl: string;
+  expires: string;
+  status: string;
+}
 
 export function ReverseProxyPage() {
-  const proxyRules = [
-    { id: 'px-1', domain: 'api.vpsgui.com', upstream: 'http://127.0.0.1:8080', ssl: "Let's Encrypt", expires: '74 days', status: 'active' },
-    { id: 'px-2', domain: 'dash.vpsgui.dev', upstream: 'http://127.0.0.1:3000', ssl: 'Cloudflare SSL', expires: '240 days', status: 'active' },
-  ];
+  const [proxyRules, setProxyRules] = useState<ProxyRule[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get<ProxyRule[]>('/proxy/rules')
+      .then((data) => setProxyRules(Array.isArray(data) ? data : []))
+      .catch(() => setProxyRules([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -31,30 +46,44 @@ export function ReverseProxyPage() {
       </div>
 
       <Card className="bg-card/70 border-border/70 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Domain Name</TableHead>
-              <TableHead className="text-xs">Upstream Target</TableHead>
-              <TableHead className="text-xs">SSL Provider</TableHead>
-              <TableHead className="text-xs">SSL Expiry</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {proxyRules.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-bold text-xs font-mono text-foreground">{p.domain}</TableCell>
-                <TableCell className="font-mono text-xs text-primary">{p.upstream}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{p.ssl}</TableCell>
-                <TableCell className="font-mono text-xs text-emerald-400">{p.expires}</TableCell>
-                <TableCell>
-                  <Badge variant="success" className="text-[10px] uppercase font-mono">{p.status}</Badge>
-                </TableCell>
+        {proxyRules.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border/60">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">No Reverse Proxy Rules Configured</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                Configure Nginx or Caddy reverse proxy rules from the VPSGUI agent to manage domain routing and SSL certificates.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Domain Name</TableHead>
+                <TableHead className="text-xs">Upstream Target</TableHead>
+                <TableHead className="text-xs">SSL Provider</TableHead>
+                <TableHead className="text-xs">SSL Expiry</TableHead>
+                <TableHead className="text-xs">Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {proxyRules.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-bold text-xs font-mono text-foreground">{p.domain}</TableCell>
+                  <TableCell className="font-mono text-xs text-primary">{p.upstream}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.ssl}</TableCell>
+                  <TableCell className="font-mono text-xs text-emerald-400">{p.expires}</TableCell>
+                  <TableCell>
+                    <Badge variant="success" className="text-[10px] uppercase font-mono">{p.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </div>
   );

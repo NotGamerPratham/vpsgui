@@ -5,7 +5,7 @@ import { MainLayout } from './layouts/MainLayout';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ServersPage } from './features/infrastructure/ServersPage';
 import { MultiVPSPage } from './features/multivps/MultiVPSPage';
-import { TopologyMapPage } from './features/map/TopologyMapPage';
+import { InfrastructureMapPage as TopologyMapPage } from './features/map/InfrastructureMapPage';
 import { DockerContainersPage } from './features/docker/DockerContainersPage';
 import { DockerImagesPage } from './features/docker/DockerImagesPage';
 import { FileManagerPage } from './features/filemanager/FileManagerPage';

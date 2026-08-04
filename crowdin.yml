@@ -1,0 +1,20 @@
+# Crowdin Localization Configuration for VPSGUI
+# https://crowdin.com
+
+project_id: "vpsgui"
+api_token_env: "CROWDIN_PERSONAL_TOKEN"
+
+preserve_hierarchy: true
+
+files:
+  - source: /src/i18n/locales/en.json
+    translation: /src/i18n/locales/%two_letters_code%.json
+    languages_mapping:
+      two_letters_code:
+        de: "de"
+        es: "es"
+        fr: "fr"
+        ja: "ja"
+        zh: "zh"
+        hi: "hi"
+        pt: "pt"

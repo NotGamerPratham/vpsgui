@@ -6,16 +6,24 @@
 
 **VPSGUI** is a modern, production-ready, open-source **Open Infrastructure Workspace** for managing servers, containers, cloud resources, automation, and operations from a single unified workspace interface.
 
-Designed for developers, DevOps engineers, and sysadmins, VPSGUI combines the precision of **VS Code**, the speed of **Linear**, and the power of modern cloud platforms.
+Developed by **[NotGamerPratham](https://notgamerpratham.com)**.
+
+Repository: **[https://github.com/NotGamerPratham/vpsgui](https://github.com/NotGamerPratham/vpsgui)**
 
 ---
 
-## 1-Click Linux Agent Installer
+## 1-Click Setup & Execution
 
-Deploy `vpsgui-agent` to any Linux VPS (`Ubuntu`, `Debian`, `CentOS`, `Alpine`, `Arch`):
+Run the setup script to install dependencies, build assets, and launch VPSGUI:
 
 ```bash
-curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash
+chmod +x run.sh && ./run.sh
+```
+
+Or deploy `vpsgui-agent` to any Linux VPS (`Ubuntu`, `Debian`, `CentOS`, `Alpine`, `Arch`):
+
+```bash
+curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash
 ```
 
 ---
@@ -47,16 +55,20 @@ VPSGUI/
 │   ├── sdk/             # VPSGUI TypeScript SDK & REST Client
 │   ├── types/           # Domain TypeScript Interfaces
 │   └── config/          # Shared ESLint, Tailwind & TS Configuration
+├── sdk/
+│   ├── node/            # @vpsgui/sdk - Official Node.js/TypeScript SDK (npm)
+│   └── python/          # vpsgui - Official Python SDK (PyPI)
 ├── backend/
 │   ├── api/             # REST API Gateway & Authentication
 │   ├── gateway/         # Reverse Proxy & SSL Management
 │   └── telemetry/       # High-Throughput Telemetry Ingestion Engine
 ├── agent/
 │   ├── vpsgui-agent.go  # Lightweight Go/Rust Linux VPS Daemon
-│   ├── install.sh       # 1-Click Automated Linux Installer
+│   ├── install.sh       # Automated Linux Installer Script
 │   └── systemd/         # Systemd Unit File
-├── docs/                # Comprehensive Developer Documentation Suite
-├── deploy/              # Production Nginx & Infrastructure Manifests
+├── docs/                # Developer Documentation Suite
+├── deploy/              # Production Nginx Manifests
+├── run.sh               # All-in-one Linux Setup Script
 └── docker-compose.yml   # Production Docker Container Setup
 ```
 
@@ -66,35 +78,62 @@ VPSGUI/
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/vpsgui/vpsgui.git
+   git clone https://github.com/NotGamerPratham/vpsgui.git
    cd vpsgui
    ```
 
-2. **Install dependencies**:
+2. **Run All-In-One Setup Script**:
    ```bash
-   npm install
-   ```
-
-3. **Start local development server**:
-   ```bash
-   npm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-4. **Build for production**:
-   ```bash
-   npm run build
+   chmod +x run.sh && ./run.sh
    ```
 
 ---
 
-## Docker Deployment
+## SDK Packages
 
-Run VPSGUI using Docker Compose:
+VPSGUI provides official SDK client libraries for programmatic API access.
+
+### Node.js / TypeScript (`@vpsgui/sdk`)
 
 ```bash
-docker-compose up -d --build
+npm install @vpsgui/sdk
 ```
+
+```typescript
+import { VpsguiClient } from '@vpsgui/sdk';
+
+const client = new VpsguiClient({
+  baseUrl: 'https://your-vps-ip/api/v1',
+  token: 'your-jwt-token',
+});
+
+const nodes = await client.nodes.list();
+const containers = await client.docker.listContainers();
+const telemetry = await client.system.telemetry();
+```
+
+[View full Node SDK docs](sdk/node/README.md)
+
+### Python (`vpsgui`)
+
+```bash
+pip install vpsgui
+```
+
+```python
+from vpsgui import VpsguiClient
+
+client = VpsguiClient(
+    base_url="https://your-vps-ip/api/v1",
+    token="your-jwt-token",
+)
+
+nodes = client.nodes.list()
+containers = client.docker.list_containers()
+telemetry = client.system.telemetry()
+```
+
+[View full Python SDK docs](sdk/python/README.md)
 
 ---
 
@@ -108,6 +147,8 @@ docker-compose up -d --build
 
 ---
 
-## License
+## Author & License
 
-VPSGUI is released under the [MIT License](file:///LICENSE).
+Developed by **[NotGamerPratham](https://notgamerpratham.com)**.
+
+VPSGUI is open-source software released under the [MIT License](file:///LICENSE).

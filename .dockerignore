@@ -1,0 +1,41 @@
+# Dependencies & Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build Outputs & Dist
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Environment & Local Configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Version Control & IDEs
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SDK Build Artifacts
+sdk/node/dist/
+sdk/node/node_modules/
+sdk/python/build/
+sdk/python/dist/
+sdk/python/*.egg-info/
+sdk/python/__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+Thumbs.db

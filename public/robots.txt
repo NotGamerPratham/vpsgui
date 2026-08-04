@@ -1,0 +1,21 @@
+# Robots.txt for VPSGUI Open Infrastructure Workspace
+# Repository: https://github.com/NotGamerPratham/vpsgui
+
+User-agent: *
+Allow: /
+Allow: /docs
+Allow: /login
+Allow: /register
+
+# Protect Application Dashboard & Private Gateway Endpoints
+Disallow: /dashboard
+Disallow: /servers
+Disallow: /docker/
+Disallow: /terminal
+Disallow: /files
+Disallow: /security/
+Disallow: /settings
+Disallow: /api/
+
+# Sitemap Location
+Sitemap: https://vpsgui.dev/sitemap.xml

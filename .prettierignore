@@ -1,0 +1,10 @@
+# Prettier Ignore List
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+package-lock.json
+sdk/node/dist/
+sdk/python/
+public/service-worker.js

@@ -1,16 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HardDrive, CheckCircle2, AlertTriangle, ShieldCheck, Trash2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Progress } from '../../components/ui/progress';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
+import { apiClient } from '../../api/client';
+
+interface Partition {
+  device: string;
+  mountPoint: string;
+  fsType: string;
+  totalGb: number;
+  usedGb: number;
+  freeGb: number;
+  usage: number;
+  smart: string;
+}
 
 export function StorageManagerPage() {
-  const partitions = [
-    { device: '/dev/nvme0n1p1', mountPoint: '/', fsType: 'ext4', totalGb: 250, usedGb: 98, freeGb: 152, usage: 40, smart: 'passed' },
-    { device: '/dev/nvme0n1p2', mountPoint: '/var/lib/docker', fsType: 'ext4', totalGb: 500, usedGb: 210, freeGb: 290, usage: 42, smart: 'passed' },
-    { device: '/dev/sda1', mountPoint: '/mnt/backup-vol', fsType: 'xfs', totalGb: 1000, usedGb: 840, freeGb: 160, usage: 84, smart: 'warning' },
-  ];
+  const [partitions, setPartitions] = useState<Partition[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get<Partition[]>('/storage/partitions')
+      .then((data) => setPartitions(Array.isArray(data) ? data : []))
+      .catch(() => setPartitions([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -33,40 +49,54 @@ export function StorageManagerPage() {
       </div>
 
       <Card className="bg-card/70 border-border/70 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Device</TableHead>
-              <TableHead className="text-xs">Mount Point</TableHead>
-              <TableHead className="text-xs">FS Type</TableHead>
-              <TableHead className="text-xs">Usage (Used / Total)</TableHead>
-              <TableHead className="text-xs">SMART Health</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {partitions.map((part) => (
-              <TableRow key={part.device}>
-                <TableCell className="font-bold text-xs font-mono text-foreground">{part.device}</TableCell>
-                <TableCell className="font-mono text-xs text-primary">{part.mountPoint}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{part.fsType}</TableCell>
-                <TableCell className="w-48">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] font-mono">
-                      <span>{part.usedGb} / {part.totalGb} GB</span>
-                      <span>{part.usage}%</span>
-                    </div>
-                    <Progress value={part.usage} indicatorClassName={part.usage > 80 ? 'bg-amber-500' : 'bg-primary'} />
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span className={`inline-flex items-center text-xs font-semibold ${part.smart === 'passed' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {part.smart.toUpperCase()}
-                  </span>
-                </TableCell>
+        {partitions.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border/60">
+              <HardDrive className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">No Disk Partition Data Available</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                Storage partition data is reported by the VPSGUI agent running on your Linux VPS. Connect your server to view disk usage and SMART health.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Device</TableHead>
+                <TableHead className="text-xs">Mount Point</TableHead>
+                <TableHead className="text-xs">FS Type</TableHead>
+                <TableHead className="text-xs">Usage (Used / Total)</TableHead>
+                <TableHead className="text-xs">SMART Health</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {partitions.map((part) => (
+                <TableRow key={part.device}>
+                  <TableCell className="font-bold text-xs font-mono text-foreground">{part.device}</TableCell>
+                  <TableCell className="font-mono text-xs text-primary">{part.mountPoint}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{part.fsType}</TableCell>
+                  <TableCell className="w-48">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-mono">
+                        <span>{part.usedGb} / {part.totalGb} GB</span>
+                        <span>{part.usage}%</span>
+                      </div>
+                      <Progress value={part.usage} indicatorClassName={part.usage > 80 ? 'bg-amber-500' : 'bg-primary'} />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center text-xs font-semibold ${part.smart === 'passed' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {part.smart.toUpperCase()}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </div>
   );
