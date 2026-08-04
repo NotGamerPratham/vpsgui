@@ -1,0 +1,8 @@
+{
+  "name": "vpsgui",
+  "displayName": "VPSGUI Infrastructure Workspace",
+  "version": "1.0.0",
+  "description": "Production-ready open source VPS & infrastructure management workspace.",
+  "author": "NotGamerPratham",
+  "license": "MIT"
+}
