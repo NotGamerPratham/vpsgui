@@ -1,4 +1,5 @@
 import React from 'react';
+import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
 import { CategoryNavigation } from './CategoryNavigation';
@@ -7,7 +8,7 @@ import { CommandPalette } from '../components/overlays/CommandPalette';
 import { NotificationsDrawer } from '../components/overlays/NotificationsDrawer';
 import { QuickLauncherModal } from '../components/overlays/QuickLauncherModal';
 
-export function MainLayout({ children }: { children: React.ReactNode }) {
+export function MainLayout({ children }: { children?: React.ReactNode }) {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       {/* Collapsible Sidebar */}
@@ -26,7 +27,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
         {/* Page Content Scroll Container */}
         <main className="flex-1 overflow-y-auto bg-background/50 p-6 scrollbar-thin">
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
 

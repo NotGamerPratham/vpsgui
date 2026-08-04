@@ -21,6 +21,7 @@ interface UIState {
   // Actions
   setTheme: (theme: ThemeName) => void;
   setLanguage: (lang: LanguageCode) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setQuickLauncherOpen: (open: boolean) => void;
@@ -55,6 +56,7 @@ export const useUIStore = create<UIState>((set) => ({
   },
 
   setLanguage: (language) => set({ language }),
+  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   setQuickLauncherOpen: (open) => set({ quickLauncherOpen: open }),

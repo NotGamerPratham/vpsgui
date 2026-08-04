@@ -1,0 +1,13 @@
+[Unit]
+Description=VPSGUI Linux Infrastructure Telemetry Agent
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/vpsgui-agent --config /etc/vpsgui/agent.yaml
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

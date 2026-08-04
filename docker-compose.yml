@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  vpsgui-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vpsgui_web
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - VITE_API_BASE_URL=http://vpsgui-backend:8080/api/v1
+      - VITE_WS_URL=ws://vpsgui-backend:8080/ws
+    depends_on:
+      - vpsgui-backend
+
+  vpsgui-backend:
+    image: vpsgui/backend:latest
+    container_name: vpsgui_backend
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/vpsgui:/etc/vpsgui
