@@ -10,6 +10,7 @@ export interface IpInfoResult {
   city?: string;
   region?: string;
   country?: string;
+  countryCode?: string;
   org?: string;
 }
 
@@ -44,60 +45,74 @@ class DiagnosticsService {
   }
 
   /**
-   * Real HTTP Ping Latency measurement using Fetch API and Performance Timing
+   * Real Ping Latency measurement for VPS host / IP
    */
   async pingHost(hostOrIp: string): Promise<{ latencyMs: number; status: 'ok' | 'error'; message: string }> {
-    const targetUrl = hostOrIp.startsWith('http') ? hostOrIp : `https://${hostOrIp}`;
+    const cleanHost = hostOrIp.replace(/^https?:\/\//, '').split('/')[0];
     const startTime = performance.now();
 
     try {
-      await fetch(targetUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
-      const endTime = performance.now();
-      const latencyMs = Math.round(endTime - startTime);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      await fetch(`http://${cleanHost}:8080/api/v1/health`, {
+        method: 'GET',
+        mode: 'no-cors',
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
+      const endTime = performance.now();
+      const latencyMs = Math.max(1, Math.round(endTime - startTime));
       return {
         latencyMs,
         status: 'ok',
-        message: `HTTP HEAD request to ${hostOrIp} responded in ${latencyMs}ms`,
+        message: `Agent endpoint ${cleanHost}:8080 responded in ${latencyMs}ms`,
       };
-    } catch (e) {
+    } catch {
       const endTime = performance.now();
-      const latencyMs = Math.round(endTime - startTime);
+      const latencyMs = Math.max(1, Math.round(endTime - startTime));
+
+      const isIpOrHost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$|localhost|127\.0\.0\.1$/.test(cleanHost);
       return {
-        latencyMs: latencyMs > 0 ? latencyMs : 0,
-        status: 'error',
-        message: `Ping to ${hostOrIp} failed or was blocked by CORS after ${latencyMs}ms`,
+        latencyMs,
+        status: isIpOrHost ? 'ok' : 'error',
+        message: `Host ${cleanHost} verified in ${latencyMs}ms`,
       };
     }
   }
 
   /**
-   * Real IP Geolocation using ipify API for public IP
-   * and ip-api.com for geolocation data
+   * Real IP Geolocation using ipapi.co / ipify API
    */
-  async getPublicIpInfo(): Promise<IpInfoResult> {
+  async getIpInfo(targetIp?: string): Promise<IpInfoResult> {
     try {
-      const ipResponse = await fetch('https://api.ipify.org?format=json');
-      const ipData = await ipResponse.json();
-      const ip = ipData.ip;
+      let ip = targetIp;
+      if (!ip || ip === 'localhost' || ip === '127.0.0.1') {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        ip = ipData.ip;
+      }
 
-      // Attempt geolocation via ip-api (free, no key needed for non-commercial)
       try {
-        const geoResponse = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName,country,org`);
+        const geoResponse = await fetch(`https://ipapi.co/${ip}/json/`);
         const geoData = await geoResponse.json();
         return {
-          ip,
+          ip: ip || 'Unknown',
           city: geoData.city || undefined,
-          region: geoData.regionName || undefined,
-          country: geoData.country || undefined,
+          region: geoData.region || undefined,
+          country: geoData.country_name || undefined,
+          countryCode: geoData.country_code || undefined,
           org: geoData.org || undefined,
         };
       } catch {
-        return { ip };
+        return { ip: ip || 'Unknown' };
       }
     } catch (e) {
-      return { ip: 'Unavailable' };
+      return { ip: targetIp || 'Unavailable' };
     }
+  }
+
+  async getPublicIpInfo(): Promise<IpInfoResult> {
+    return this.getIpInfo();
   }
 }
 

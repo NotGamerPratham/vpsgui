@@ -31,7 +31,7 @@ class ServerService {
   async fetchNodesFromApi(): Promise<NodeSpec[]> {
     try {
       const nodes = await apiClient.get<NodeSpec[]>('/nodes');
-      if (Array.isArray(nodes)) {
+      if (Array.isArray(nodes) && nodes.length > 0) {
         this.saveNodes(nodes);
         return nodes;
       }
@@ -42,7 +42,7 @@ class ServerService {
   }
 
   async createNode(payload: AddNodePayload): Promise<NodeSpec> {
-    // 1. Attempt real API POST request to register node on backend agent
+    // 1. Attempt REST API POST request to central API Gateway
     try {
       const apiNode = await apiClient.post<NodeSpec>('/nodes', payload);
       if (apiNode && apiNode.id) {
@@ -55,7 +55,9 @@ class ServerService {
       // Backend REST agent endpoint unattached
     }
 
-    // 2. Client-side handling without fake data
+    // 2. Resolve real IP Geolocation from target IP
+    const geo = await diagnosticsService.getIpInfo(payload.ipAddress);
+
     const isLocal =
       payload.ipAddress === '127.0.0.1' ||
       payload.ipAddress === 'localhost' ||
@@ -77,11 +79,11 @@ class ServerService {
         type: payload.type,
         status: 'online',
         location: {
-          city: 'Local Host',
-          country: 'Self Hosted',
-          countryCode: 'LOC',
+          city: geo.city || 'Local Host',
+          country: geo.country || 'Self Hosted',
+          countryCode: geo.countryCode || 'LOC',
           flagIcon: 'Globe',
-          provider: 'Local Machine',
+          provider: geo.org || 'Local Machine',
         },
         hardware: {
           cpuCores: cores,
@@ -101,7 +103,7 @@ class ServerService {
         },
         network: {
           ipAddress: payload.ipAddress,
-          publicIp: payload.ipAddress,
+          publicIp: geo.ip || payload.ipAddress,
           hostname: `${payload.name}.vpsgui.local`,
           sshPort: payload.sshPort,
           bandwidthUsageGb: 0,
@@ -115,8 +117,30 @@ class ServerService {
         updatedAt: new Date().toISOString(),
       };
     } else {
-      // Remote Target VPS - Require live agent installation via install.sh
-      const pingRes = await diagnosticsService.pingHost(payload.ipAddress);
+      // 3. Attempt direct HTTP query to vpsgui-agent running on target VPS IP (port 8080)
+      let agentHardware = null;
+      let agentOs = null;
+      let agentActive = false;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(`http://${payload.ipAddress}:8080/api/v1/node`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.hardware) {
+            agentHardware = data.hardware;
+            agentOs = data.os;
+            agentActive = true;
+          }
+        }
+      } catch (e) {
+        // vpsgui-agent not responding on port 8080
+      }
 
       newNode = {
         id: `node-${Date.now()}`,
@@ -124,15 +148,15 @@ class ServerService {
         alias: payload.alias,
         tags: payload.tags.length > 0 ? payload.tags : ['linux-vps'],
         type: payload.type,
-        status: pingRes.status === 'ok' ? 'online' : 'offline',
+        status: agentActive ? 'online' : 'offline',
         location: {
-          city: 'Target Server',
-          country: 'Linux VPS',
-          countryCode: 'VPS',
+          city: geo.city || 'Target Server',
+          country: geo.country || 'Linux VPS',
+          countryCode: geo.countryCode || 'VPS',
           flagIcon: 'Globe',
-          provider: 'Remote VPS Provider',
+          provider: geo.org || 'VPS Host',
         },
-        hardware: {
+        hardware: agentHardware || {
           cpuCores: 0,
           cpuModel: 'Awaiting Agent Installation',
           ramGb: 0,
@@ -141,7 +165,7 @@ class ServerService {
           diskType: 'SSD',
           architecture: 'x86_64',
         },
-        os: {
+        os: agentOs || {
           name: 'Linux VPS (Agent Not Detected)',
           family: 'ubuntu',
           version: 'Unattached',
@@ -156,8 +180,8 @@ class ServerService {
           bandwidthUsageGb: 0,
           monthlyLimitGb: 0,
         },
-        agentVersion: 'unattached',
-        agentStatus: pingRes.status === 'ok' ? 'healthy' : 'unreachable',
+        agentVersion: agentActive ? 'v1.4.2' : 'unattached',
+        agentStatus: agentActive ? 'healthy' : 'unreachable',
         lastHeartbeat: new Date().toISOString(),
         isFavorite: false,
         createdAt: new Date().toISOString(),
@@ -177,48 +201,46 @@ class ServerService {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return null;
 
+    // 1. Resolve real IP Geolocation for target VPS IP
+    const geo = await diagnosticsService.getIpInfo(node.network.publicIp);
+
+    // 2. Query target VPS agent endpoint http://ip:8080/api/v1/node
+    let agentData: any = null;
     try {
-      const apiNode = await apiClient.get<NodeSpec>(`/nodes/${node.id}`);
-      if (apiNode && apiNode.status === 'online') {
-        const updated = nodes.map((n) => (n.id === nodeId ? apiNode : n));
-        this.saveNodes(updated);
-        return apiNode;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`http://${node.network.publicIp}:8080/api/v1/node`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        agentData = await res.json();
       }
     } catch (e) {
-      // Unattached endpoint
+      // Unattached agent
     }
 
-    const pingRes = await diagnosticsService.pingHost(node.network.publicIp);
+    const updatedNode: NodeSpec = {
+      ...node,
+      status: agentData ? 'online' : node.status,
+      agentStatus: agentData ? 'healthy' : node.agentStatus,
+      location: {
+        city: geo.city || node.location.city,
+        country: geo.country || node.location.country,
+        countryCode: geo.countryCode || node.location.countryCode,
+        flagIcon: 'Globe',
+        provider: geo.org || node.location.provider,
+      },
+      hardware: agentData?.hardware || node.hardware,
+      os: agentData?.os || node.os,
+      agentVersion: agentData ? 'v1.4.2' : node.agentVersion,
+      updatedAt: new Date().toISOString(),
+    };
 
-    // If ping succeeds or manual verify clicked for reachable host
-    const isReachable = pingRes.status === 'ok' || node.network.publicIp !== '0.0.0.0';
-
-    if (isReachable) {
-      const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
-      const updatedNode: NodeSpec = {
-        ...node,
-        status: 'online',
-        agentStatus: 'healthy',
-        hardware: {
-          ...node.hardware,
-          cpuCores: node.hardware.cpuCores > 0 ? node.hardware.cpuCores : cores,
-          cpuModel: node.hardware.cpuModel !== 'Awaiting Agent Installation' ? node.hardware.cpuModel : 'Linux VPS Processor',
-          ramGb: node.hardware.ramGb > 0 ? node.hardware.ramGb : 8,
-        },
-        os: {
-          ...node.os,
-          name: node.os.name !== 'Linux VPS (Agent Not Detected)' ? node.os.name : 'Ubuntu Linux VPS',
-          version: 'Active Agent v1.4.2',
-        },
-        agentVersion: 'v1.4.2',
-      };
-
-      const updated = nodes.map((n) => (n.id === nodeId ? updatedNode : n));
-      this.saveNodes(updated);
-      return updatedNode;
-    }
-
-    return null;
+    const updated = nodes.map((n) => (n.id === nodeId ? updatedNode : n));
+    this.saveNodes(updated);
+    return updatedNode;
   }
 }
 
