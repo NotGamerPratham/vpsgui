@@ -7,7 +7,7 @@ The `vpsgui-agent` is a lightweight daemon written in Go/Rust that runs on your 
 Run the following command in your Linux VPS terminal:
 
 ```bash
-curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash
 ```
 
 ## Supported Operating Systems

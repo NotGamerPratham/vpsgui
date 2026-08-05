@@ -8,7 +8,7 @@ export function DocsPage() {
   const [activeTab, setActiveTab] = useState<'agent' | 'api' | 'architecture' | 'security'>('agent');
   const [copied, setCopied] = useState(false);
 
-  const installScript = `curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash`;
+  const installScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
   const copyScript = (text: string) => {
     navigator.clipboard.writeText(text);

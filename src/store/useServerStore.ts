@@ -15,7 +15,9 @@ interface ServerState {
   setTypeFilter: (type: string | null) => void;
   setStatusFilter: (status: string | null) => void;
   toggleFavorite: (id: string) => void;
+  fetchNodesFromApi: () => Promise<void>;
   addNode: (payload: AddNodePayload) => Promise<NodeSpec>;
+  verifyNodeConnection: (id: string) => Promise<boolean>;
   removeNode: (id: string) => void;
   rebootNode: (id: string) => void;
 }
@@ -41,6 +43,16 @@ export const useServerStore = create<ServerState>((set, get) => ({
       return { nodes: updatedNodes };
     }),
 
+  fetchNodesFromApi: async () => {
+    const apiNodes = await serverService.fetchNodesFromApi();
+    if (apiNodes.length > 0) {
+      set({
+        nodes: apiNodes,
+        selectedNodeId: get().selectedNodeId || apiNodes[0].id,
+      });
+    }
+  },
+
   addNode: async (payload) => {
     const newNode = await serverService.createNode(payload);
     set((state) => ({
@@ -48,6 +60,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
       selectedNodeId: newNode.id,
     }));
     return newNode;
+  },
+
+  verifyNodeConnection: async (id) => {
+    const updated = await serverService.verifyNodeConnection(id);
+    if (updated) {
+      set({ nodes: serverService.getNodes() });
+      return true;
+    }
+    return false;
   },
 
   removeNode: (id) =>

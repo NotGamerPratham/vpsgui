@@ -55,7 +55,7 @@ packages:
   - git
   - docker.io
 runcmd:
-  - curl -sSL https://get.vpsgui.dev/agent.sh | bash`,
+  - curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | bash`,
   };
 
   const copyCode = () => {

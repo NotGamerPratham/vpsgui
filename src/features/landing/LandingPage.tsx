@@ -57,8 +57,6 @@ export function LandingPage() {
     setTimeout(() => setCopiedSdk(false), 2000);
   };
 
-  const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 8 : 8;
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-primary selection:text-primary-foreground">
       {/* Top Announcement Bar */}
@@ -168,44 +166,6 @@ export function LandingPage() {
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Glassmorphic Mockup Preview */}
-        <div className="max-w-6xl mx-auto mt-14 relative">
-          <div className="rounded-2xl border border-border/80 glass-panel p-4 sm:p-6 shadow-2xl space-y-4 overflow-hidden">
-            {/* Header bar of mockup */}
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center space-x-2">
-                <span className="h-3 w-3 rounded-full bg-rose-500/80" />
-                <span className="h-3 w-3 rounded-full bg-amber-500/80" />
-                <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-                <span className="text-xs font-mono text-muted-foreground ml-2">vpsgui-workspace.internal</span>
-              </div>
-              <Badge variant="success" className="font-mono text-[10px]">
-                Agent Online ({cores} vCPUs Detected)
-              </Badge>
-            </div>
-
-            {/* Mock stats grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-left">
-              <div className="p-3.5 rounded-xl border border-border/60 bg-card/60 space-y-1">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">Host Processor</span>
-                <p className="text-sm font-bold text-foreground font-mono">{cores} vCPU Cores Active</p>
-              </div>
-              <div className="p-3.5 rounded-xl border border-border/60 bg-card/60 space-y-1">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">Telemetry Stream</span>
-                <p className="text-sm font-bold text-emerald-400 font-mono">Live WebSocket 2s</p>
-              </div>
-              <div className="p-3.5 rounded-xl border border-border/60 bg-card/60 space-y-1">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">Docker Engine</span>
-                <p className="text-sm font-bold text-cyan-400 font-mono">/var/run/docker.sock</p>
-              </div>
-              <div className="p-3.5 rounded-xl border border-border/60 bg-card/60 space-y-1">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">Security Inspection</span>
-                <p className="text-sm font-bold text-violet-400 font-mono">UFW & SSH Enforced</p>
-              </div>
             </div>
           </div>
         </div>

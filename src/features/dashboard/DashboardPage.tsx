@@ -30,14 +30,15 @@ import { Progress } from '../../components/ui/progress';
 import { TelemetryPoint } from '../../types/monitoring';
 
 export function DashboardPage() {
-  const { nodes } = useServerStore();
+  const { nodes, fetchNodesFromApi } = useServerStore();
   const { setQuickLauncherOpen, setCommandPaletteOpen } = useUIStore();
 
   const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
   const [copied, setCopied] = useState(false);
-  const installScript = `curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash`;
+  const installScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
   useEffect(() => {
+    fetchNodesFromApi();
     telemetrySocket.connect();
 
     const unsubscribe = globalEventBus.on('telemetry_tick', (data: any) => {

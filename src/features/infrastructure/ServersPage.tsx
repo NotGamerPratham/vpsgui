@@ -14,6 +14,8 @@ import {
   HardDrive,
   Star,
   Copy,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
@@ -23,9 +25,14 @@ import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
 
 export function ServersPage() {
-  const { nodes, toggleFavorite, addNode, removeNode, rebootNode } = useServerStore();
+  const { nodes, toggleFavorite, addNode, removeNode, rebootNode, verifyNodeConnection } = useServerStore();
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+  const localInstallScript = `cd /var/www/vpsgui/agent && bash install.sh`;
+  const remoteInstallScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
   // Form State
   const [formData, setFormData] = useState({
@@ -46,11 +53,11 @@ export function ServersPage() {
       n.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.ipAddress) return;
 
-    addNode({
+    await addNode({
       name: formData.name,
       alias: formData.alias,
       type: 'linux',
@@ -58,12 +65,24 @@ export function ServersPage() {
       sshPort: Number(formData.sshPort),
       authMethod: formData.authMethod,
       sshUser: formData.sshUser,
-      tags: formData.tags.split(',').map((t) => t.trim()),
+      tags: formData.tags.split(',').map((t) => t.trim()).filter(Boolean),
       autoInstallAgent: formData.autoInstallAgent,
     });
 
     setIsAddModalOpen(false);
     setFormData({ name: '', alias: '', ipAddress: '', sshPort: 22, sshUser: 'root', authMethod: 'ssh_key', tags: 'production, web', autoInstallAgent: true });
+  };
+
+  const copyNodeScript = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedScriptId(id);
+    setTimeout(() => setCopiedScriptId(null), 2000);
+  };
+
+  const handleVerify = async (id: string) => {
+    setVerifyingId(id);
+    await verifyNodeConnection(id);
+    setVerifyingId(null);
   };
 
   return (
@@ -80,7 +99,7 @@ export function ServersPage() {
           </p>
         </div>
 
-        <Button onClick={() => setIsAddModalOpen(true)} className="gap-1.5 text-xs bg-primary">
+        <Button onClick={() => setIsAddModalOpen(true)} className="gap-1.5 text-xs bg-primary font-bold">
           <Plus className="h-4 w-4" />
           <span>Add VPS Server</span>
         </Button>
@@ -104,72 +123,126 @@ export function ServersPage() {
       </div>
 
       {/* Nodes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredNodes.map((node) => (
-          <Card key={node.id} className="bg-card/70 border-border/70 hover:border-primary/40 transition-all flex flex-col justify-between">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary">
-                    <Server className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-foreground leading-none">{node.name}</h3>
-                    <p className="text-[11px] text-muted-foreground mt-1 font-mono">{node.network.publicIp}</p>
-                  </div>
-                </div>
-
-                <button onClick={() => toggleFavorite(node.id)} className="text-muted-foreground hover:text-amber-400">
-                  <Star className={`h-4 w-4 ${node.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-                </button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-3 pt-0 flex-1">
-              <div className="flex items-center justify-between text-xs border-y border-border/40 py-2">
-                <span className="text-muted-foreground">Location</span>
-                <span className="font-medium text-foreground flex items-center gap-1">
-                  <Globe className="h-3 w-3 text-primary" /> {node.location.city}, {node.location.country}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                <div className="flex items-center gap-1.5 bg-muted/30 p-2 rounded border border-border/40">
-                  <Cpu className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>{node.hardware.cpuCores} vCPU Cores</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-muted/30 p-2 rounded border border-border/40">
-                  <HardDrive className="h-3.5 w-3.5 text-violet-400" />
-                  <span>{node.hardware.ramGb} GB RAM</span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1 pt-1">
-                {node.tags.map((tag) => (
-                  <Badge key={tag} variant="outline" className="text-[10px] py-0 px-1.5">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-
-            <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5 flex items-center justify-between">
-              <Badge variant="success" className="text-[10px] px-1.5 py-0">
-                {node.status.toUpperCase()}
-              </Badge>
-
-              <div className="flex items-center space-x-1">
-                <Button size="sm" variant="ghost" title="Reboot Node" onClick={() => rebootNode(node.id)} className="h-7 w-7 p-0">
-                  <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-                <Button size="sm" variant="ghost" title="Delete Node" onClick={() => removeNode(node.id)} className="h-7 w-7 p-0 hover:text-rose-400">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+      {filteredNodes.length === 0 ? (
+        <Card className="bg-card/70 border-border/70 p-12">
+          <div className="flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground border border-border/60">
+              <Server className="h-6 w-6" />
             </div>
-          </Card>
-        ))}
-      </div>
+            <div>
+              <h3 className="font-bold text-sm text-foreground">No VPS Servers Added</h3>
+              <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                Click <strong>"Add VPS Server"</strong> above to register your target Linux VPS IP address or local server.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredNodes.map((node) => {
+            const isUnattached = node.agentStatus === 'unreachable' || node.hardware.cpuCores === 0;
+
+            return (
+              <Card key={node.id} className="bg-card/70 border-border/70 hover:border-primary/40 transition-all flex flex-col justify-between">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary">
+                        <Server className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-foreground leading-none">{node.name}</h3>
+                        <p className="text-[11px] text-muted-foreground mt-1 font-mono">{node.network.publicIp}</p>
+                      </div>
+                    </div>
+
+                    <button onClick={() => toggleFavorite(node.id)} className="text-muted-foreground hover:text-amber-400">
+                      <Star className={`h-4 w-4 ${node.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+                    </button>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-3 pt-0 flex-1">
+                  <div className="flex items-center justify-between text-xs border-y border-border/40 py-2">
+                    <span className="text-muted-foreground">Location</span>
+                    <span className="font-medium text-foreground flex items-center gap-1">
+                      <Globe className="h-3 w-3 text-primary" /> {node.location.city}, {node.location.country}
+                    </span>
+                  </div>
+
+                  {isUnattached ? (
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
+                        <span className="flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5" /> Agent Not Detected
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleVerify(node.id)}
+                          disabled={verifyingId === node.id}
+                          className="h-6 text-[10px] text-amber-400 hover:bg-amber-500/20 px-2 gap-1 font-mono"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${verifyingId === node.id ? 'animate-spin' : ''}`} />
+                          <span>{verifyingId === node.id ? 'Testing...' : 'Verify Agent'}</span>
+                        </Button>
+                      </div>
+
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        Run installer on target VPS <code className="text-amber-400 font-mono">{node.network.publicIp}</code>:
+                      </p>
+
+                      <div className="space-y-1 pt-1">
+                        <button
+                          onClick={() => copyNodeScript(node.id, localInstallScript)}
+                          className="flex w-full items-center justify-between text-[10px] font-mono text-muted-foreground bg-slate-950/80 p-1.5 rounded border border-border/50 hover:border-amber-500/50 hover:text-amber-300 transition-colors"
+                        >
+                          <span className="truncate">{localInstallScript}</span>
+                          <Copy className="h-3 w-3 shrink-0 ml-1" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-1.5 bg-muted/30 p-2 rounded border border-border/40">
+                        <Cpu className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>{node.hardware.cpuCores} vCPU Cores</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-muted/30 p-2 rounded border border-border/40">
+                        <HardDrive className="h-3.5 w-3.5 text-violet-400" />
+                        <span>{node.hardware.ramGb > 0 ? `${node.hardware.ramGb} GB RAM` : 'Dynamic RAM'}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {node.tags.map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-[10px] py-0 px-1.5">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+
+                <div className="border-t border-border/60 bg-muted/20 px-4 py-2.5 flex items-center justify-between">
+                  <Badge variant={node.status === 'online' ? 'success' : 'outline'} className="text-[10px] px-1.5 py-0 font-mono">
+                    {isUnattached ? 'UNATTACHED' : node.status.toUpperCase()}
+                  </Badge>
+
+                  <div className="flex items-center space-x-1">
+                    <Button size="sm" variant="ghost" title="Reboot Node" onClick={() => rebootNode(node.id)} className="h-7 w-7 p-0">
+                      <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                    <Button size="sm" variant="ghost" title="Delete Node" onClick={() => removeNode(node.id)} className="h-7 w-7 p-0 hover:text-rose-400">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add Server Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
@@ -180,7 +253,7 @@ export function ServersPage() {
               <span>Connect New VPS Node</span>
             </DialogTitle>
             <DialogDescription>
-              Enter server connection details or SSH credentials to pair with VPSGUI.
+              Enter target Linux VPS IP address or SSH credentials to pair with VPSGUI.
             </DialogDescription>
           </DialogHeader>
 
@@ -201,7 +274,7 @@ export function ServersPage() {
                 <Input
                   value={formData.alias}
                   onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
-                  placeholder="e.g. Primary Nginx Node"
+                  placeholder="e.g. Primary Web Server"
                   className="text-xs mt-1"
                 />
               </div>
@@ -209,11 +282,11 @@ export function ServersPage() {
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className="text-xs font-semibold text-foreground">Public IP Address</label>
+                <label className="text-xs font-semibold text-foreground">Target VPS IP Address / Hostname</label>
                 <Input
                   value={formData.ipAddress}
                   onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })}
-                  placeholder="e.g. 135.181.42.89"
+                  placeholder="e.g. 194.62.248.20 or localhost"
                   required
                   className="text-xs mt-1 font-mono"
                 />
@@ -224,40 +297,29 @@ export function ServersPage() {
                   type="number"
                   value={formData.sshPort}
                   onChange={(e) => setFormData({ ...formData, sshPort: Number(e.target.value) })}
+                  placeholder="22"
+                  required
                   className="text-xs mt-1 font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-foreground">Tags (comma separated)</label>
+              <label className="text-xs font-semibold text-foreground">Tags (Comma Separated)</label>
               <Input
                 value={formData.tags}
                 onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                placeholder="production, web, europe"
+                placeholder="production, web, docker"
                 className="text-xs mt-1"
               />
             </div>
 
-            <div className="flex items-center space-x-2 pt-2">
-              <input
-                type="checkbox"
-                id="agent"
-                checked={formData.autoInstallAgent}
-                onChange={(e) => setFormData({ ...formData, autoInstallAgent: e.target.checked })}
-                className="rounded border-border bg-card text-primary focus:ring-primary"
-              />
-              <label htmlFor="agent" className="text-xs text-muted-foreground">
-                Auto-install lightweight <span className="font-mono text-primary">vpsgui-agent</span> binary via SSH
-              </label>
-            </div>
-
-            <DialogFooter>
+            <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)} className="text-xs">
                 Cancel
               </Button>
-              <Button type="submit" className="text-xs bg-primary">
-                Add Server
+              <Button type="submit" className="text-xs bg-primary font-bold">
+                Connect VPS Node
               </Button>
             </DialogFooter>
           </form>

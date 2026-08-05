@@ -10,8 +10,8 @@ export function AgentPage() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'go' | 'rust'>('go');
 
-  const goInstallScript = `curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash -s -- --token=vpsgui_tok_84920492840`;
-  const rustInstallScript = `wget -qO- https://get.vpsgui.dev/agent-rust.sh | sudo sh -s -- --token=vpsgui_tok_84920492840`;
+  const goInstallScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash -s -- --token=vpsgui_tok_84920492840`;
+  const rustInstallScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo sh -s -- --token=vpsgui_tok_84920492840`;
 
   const copyScript = () => {
     navigator.clipboard.writeText(activeTab === 'go' ? goInstallScript : rustInstallScript);

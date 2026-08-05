@@ -45,7 +45,7 @@ Architected by **NotGamerPratham** ([notgamerpratham.com](https://notgamerpratha
 - **Dynamic Host Discovery**: Automatically targets `window.location.origin` or environment override `VITE_API_BASE_URL` to seamlessly discover the host server on deployment.
 
 ### 2. Linux VPS Daemon (`agent/`)
-- Installed via 1-click installer: `curl -sSL https://get.vpsgui.dev/agent.sh | sudo bash`.
+- Installed via 1-click installer: `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`.
 - Operates as systemd service `vpsgui-agent.service`.
 - Reads real `/proc/stat`, `/proc/meminfo`, `/sys/class/net`, and system metrics.
 
