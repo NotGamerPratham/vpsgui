@@ -13,8 +13,8 @@ export function Breadcrumbs() {
   const pathNames = location.pathname.split('/').filter((x) => x);
 
   const copySshCommand = () => {
-    if (selectedNode) {
-      navigator.clipboard.writeText(`ssh root@${selectedNode.network.publicIp} -p ${selectedNode.network.sshPort}`);
+    if (selectedNode && selectedNode.network) {
+      navigator.clipboard.writeText(`ssh root@${selectedNode.network.publicIp || '127.0.0.1'} -p ${selectedNode.network.sshPort || 22}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -49,7 +49,7 @@ export function Breadcrumbs() {
       </div>
 
       {/* Node Context Quick Actions */}
-      {selectedNode && (
+      {selectedNode && selectedNode.network && (
         <div className="hidden sm:flex items-center space-x-3 text-[11px] text-muted-foreground">
           <div className="flex items-center space-x-1.5 bg-muted/40 rounded px-2 py-0.5 font-mono border border-border/40">
             <Server className="h-3 w-3 text-primary" />
