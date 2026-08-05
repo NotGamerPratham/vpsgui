@@ -34,6 +34,7 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { AuthPage } from './auth/AuthPage';
 import { DocsPage } from './features/docs/DocsPage';
+import { LandingPage } from './features/landing/LandingPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,11 +50,12 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/landing" element={<LandingPage />} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
 
           <Route element={<MainLayout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/servers" element={<ServersPage />} />
             <Route path="/multivps" element={<MultiVPSPage />} />
