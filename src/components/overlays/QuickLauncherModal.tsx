@@ -2,15 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  Server,
   Terminal,
   Container,
   Box,
   Workflow,
   Archive,
-  RotateCw,
-  HardDrive,
-  ShieldCheck,
+  FolderTree,
 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
@@ -22,10 +19,10 @@ export function QuickLauncherModal() {
   if (!quickLauncherOpen) return null;
 
   const quickActions = [
-    { title: 'Add New VPS Server', desc: 'Connect node via SSH or Agent script', icon: Server, color: 'text-primary', path: '/servers?action=add' },
     { title: 'Open SSH Workbench', desc: 'Split terminal with saved command snippets', icon: Terminal, color: 'text-cyan-400', path: '/terminal' },
-    { title: 'Deploy 1-Click Application', desc: 'Launch Nginx, Postgres, Redis, WordPress', icon: Box, color: 'text-violet-400', path: '/catalog' },
-    { title: 'Create Docker Container', desc: 'Pull image and configure port mappings', icon: Container, color: 'text-emerald-400', path: '/docker/containers' },
+    { title: 'VPS File Manager', desc: 'VS Code style file explorer & editor', icon: FolderTree, color: 'text-violet-400', path: '/files' },
+    { title: 'Deploy 1-Click Application', desc: 'Launch Nginx, Postgres, Redis, WordPress', icon: Box, color: 'text-emerald-400', path: '/catalog' },
+    { title: 'Create Docker Container', desc: 'Pull image and configure port mappings', icon: Container, color: 'text-primary', path: '/docker/containers' },
     { title: 'Run Automation Workflow', desc: 'Trigger multi-step backup or deployment pipeline', icon: Workflow, color: 'text-amber-400', path: '/automation/workflows' },
     { title: 'Create Snapshot Backup', desc: 'Instant disk volume backup & S3 upload', icon: Archive, color: 'text-rose-400', path: '/backups' },
   ];

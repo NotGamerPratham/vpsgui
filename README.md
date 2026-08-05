@@ -4,6 +4,18 @@
   <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80" alt="VPSGUI Infrastructure Banner" width="100%" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/NotGamerPratham/vpsgui"><img src="https://img.shields.io/github/v/release/NotGamerPratham/vpsgui?style=flat-square&color=3B82F6" alt="Release" /></a>
+  <a href="https://github.com/NotGamerPratham/vpsgui/actions"><img src="https://img.shields.io/badge/Build-Passing-10B981?style=flat-square&logo=github&logoColor=white" alt="Build Status" /></a>
+  <a href="https://github.com/NotGamerPratham/vpsgui/blob/main/LICENSE"><img src="https://img.shields.io/github/license/NotGamerPratham/vpsgui?style=flat-square&color=10B981" alt="License" /></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
+  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://vitejs.dev"><img src="https://img.shields.io/badge/Vite-5.4-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /></a>
+  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-3.4-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go_Agent-1.22-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Agent" /></a>
+  <a href="https://notgamerpratham.com"><img src="https://img.shields.io/badge/Author-NotGamerPratham-FF4655?style=flat-square&logo=github&logoColor=white" alt="NotGamerPratham" /></a>
+</p>
+
 **VPSGUI** is a modern, production-ready, open-source **Open Infrastructure Workspace** for managing servers, containers, cloud resources, automation, and operations from a single unified workspace interface.
 
 Developed by **[NotGamerPratham](https://notgamerpratham.com)**.

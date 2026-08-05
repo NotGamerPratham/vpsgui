@@ -6,25 +6,14 @@ import {
   Server,
   Container,
   Zap,
-  Plus,
-  ArrowUpRight,
-  ShieldCheck,
-  RotateCw,
   Terminal,
-  TrendingUp,
-  Clock,
   LayoutGrid,
-  Copy,
-  Check,
-  AlertCircle,
   FolderTree,
   Radio,
   Sparkles,
-  Layers,
-  Globe,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useServerStore } from '../../store/useServerStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -53,12 +42,10 @@ const itemVariants = {
 export function DashboardPage() {
   const navigate = useNavigate();
   const { nodes, fetchNodesFromApi } = useServerStore();
-  const { setQuickLauncherOpen, setCommandPaletteOpen } = useUIStore();
+  const { setCommandPaletteOpen } = useUIStore();
 
   const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
   const [latestData, setLatestData] = useState<{ cpuPercent: number; ramPercent: number; tempC?: number; netRxKbps?: number; netTxKbps?: number } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const installScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
   useEffect(() => {
     fetchNodesFromApi();
@@ -95,18 +82,13 @@ export function DashboardPage() {
     };
   }, []);
 
-  const copyScript = () => {
-    navigator.clipboard.writeText(installScript);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const hostNode = nodes[0];
+  const totalCpuCores = hostNode?.hardware?.cpuCores || 4;
+  const totalRamGb = hostNode?.hardware?.ramGb || 16;
+  const isOnline = hostNode?.status === 'online';
 
-  const totalCpuCores = nodes.reduce((sum, n) => sum + n.hardware.cpuCores, 0);
-  const totalRamGb = nodes.reduce((sum, n) => sum + n.hardware.ramGb, 0);
-  const onlineNodes = nodes.filter((n) => n.status === 'online').length;
-
-  const currentCpu = latestData?.cpuPercent ?? (telemetry.length > 0 ? telemetry[telemetry.length - 1].cpuPercent : 14);
-  const currentRam = latestData?.ramPercent ?? (telemetry.length > 0 ? telemetry[telemetry.length - 1].ramPercent : 38);
+  const currentCpu = latestData?.cpuPercent ?? (telemetry.length > 0 ? telemetry[telemetry.length - 1].cpuPercent : 0);
+  const currentRam = latestData?.ramPercent ?? (telemetry.length > 0 ? telemetry[telemetry.length - 1].ramPercent : 0);
 
   return (
     <motion.div
@@ -121,17 +103,17 @@ export function DashboardPage() {
           <div className="flex items-center space-x-3">
             <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary animate-pulse" />
-              <span>Infrastructure Command Center</span>
+              <span>Host VPS Command Center</span>
             </h1>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ repeat: Infinity, repeatType: 'reverse', duration: 1.5 }}>
-              <Badge variant={onlineNodes > 0 ? 'success' : 'outline'} className="font-mono text-[10px] gap-1 px-2 py-0.5 shadow-sm">
+              <Badge variant={isOnline ? 'success' : 'outline'} className="font-mono text-[10px] gap-1 px-2 py-0.5 shadow-sm">
                 <Radio className="h-3 w-3 animate-ping text-emerald-400" />
-                <span>{onlineNodes}/{nodes.length} Host Connected</span>
+                <span>{hostNode?.name || 'vps128'} ({hostNode?.network?.publicIp || '127.0.0.1'}) Active</span>
               </Badge>
             </motion.div>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Realtime telemetry stream for Linux VPS nodes, Docker engines, and system processes.
+            Realtime telemetry stream for current host Linux VPS, Docker engine, and system processes.
           </p>
         </div>
 
@@ -139,64 +121,26 @@ export function DashboardPage() {
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
             <Button size="sm" variant="outline" onClick={() => setCommandPaletteOpen(true)} className="gap-1.5 text-xs shadow-sm border-border/80">
               <LayoutGrid className="h-3.5 w-3.5 text-primary" />
-              <span>Cmd+K Search</span>
-            </Button>
-          </motion.div>
-
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
-            <Button size="sm" onClick={() => setQuickLauncherOpen(true)} className="gap-1.5 text-xs bg-primary font-bold shadow-md shadow-primary/20">
-              <Plus className="h-3.5 w-3.5" />
-              <span>Connect Linux VPS</span>
+              <span>Cmd+K Explorer</span>
             </Button>
           </motion.div>
         </div>
       </motion.div>
 
-      {/* Unattached Onboarding Hero Banner */}
-      {nodes.length === 0 && (
-        <motion.div variants={itemVariants}>
-          <Card className="bg-card/90 border-primary/40 p-6 space-y-4 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 h-40 w-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2 text-primary font-bold text-sm">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>Connect Your Linux VPS Server</span>
-                </div>
-                <p className="text-xs text-muted-foreground max-w-xl">
-                  VPSGUI requires a live deployed Linux VPS server running the lightweight <span className="font-mono text-primary font-bold">vpsgui-agent</span>. Run this 1-line installation script on your Linux VPS terminal to stream real-time metrics.
-                </p>
-              </div>
-
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button onClick={copyScript} className="gap-1.5 text-xs bg-primary shrink-0 font-bold shadow-md">
-                  {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                  <span>{copied ? 'Copied Command' : 'Copy Linux Agent Script'}</span>
-                </Button>
-              </motion.div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-slate-950 p-4 font-mono text-xs text-emerald-400 flex items-center justify-between shadow-inner">
-              <code>{installScript}</code>
-            </div>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Primary KPI Cards with Spring Animations & Gauges */}
+      {/* Primary KPI Cards */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div whileHover={{ y: -4, scale: 1.015 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
           <Card className="bg-card/80 border-border/70 hover:border-primary/50 transition-all shadow-md group relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <CardContent className="p-5 flex items-center justify-between relative z-10">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Linux Nodes</p>
-                <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  {onlineNodes} <span className="text-xs font-normal text-muted-foreground">/ {nodes.length} Host</span>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Host VPS Status</p>
+                <h3 className="text-xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
+                  {hostNode?.name || 'vps128'}
                 </h3>
-                <p className="text-[11px] text-muted-foreground flex items-center mt-1">
+                <p className="text-[11px] text-muted-foreground flex items-center mt-1 font-mono">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
-                  {onlineNodes > 0 ? 'Live Telemetry Socket' : 'Self-Host Mode Active'}
+                  {hostNode?.network?.publicIp || '127.0.0.1'}
                 </p>
               </div>
               <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
@@ -239,9 +183,9 @@ export function DashboardPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <CardContent className="p-5 flex items-center justify-between relative z-10">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cluster RAM</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Host Memory</p>
                 <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  {totalRamGb} <span className="text-xs font-normal text-muted-foreground">GB Allocated</span>
+                  {totalRamGb} <span className="text-xs font-normal text-muted-foreground">GB RAM</span>
                 </h3>
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
@@ -267,12 +211,12 @@ export function DashboardPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <CardContent className="p-5 flex items-center justify-between relative z-10">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Docker Containers</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Docker Services</p>
                 <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  Active <span className="text-xs font-normal text-muted-foreground">Services</span>
+                  Host Docker
                 </h3>
                 <p className="text-[11px] text-emerald-400 font-semibold flex items-center mt-1">
-                  <Zap className="h-3 w-3 mr-1 fill-emerald-400" /> Docker Engine Ready
+                  <Zap className="h-3 w-3 mr-1 fill-emerald-400" /> Host Engine Active
                 </p>
               </div>
               <div className="h-11 w-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
@@ -295,8 +239,8 @@ export function DashboardPage() {
             <Terminal className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">Web SSH Shell</h4>
-            <p className="text-[10px] text-muted-foreground">Terminal workbench</p>
+            <h4 className="text-xs font-bold text-foreground">Host SSH Shell</h4>
+            <p className="text-[10px] text-muted-foreground">VPS terminal</p>
           </div>
         </motion.button>
 
@@ -310,8 +254,8 @@ export function DashboardPage() {
             <FolderTree className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">File Explorer</h4>
-            <p className="text-[10px] text-muted-foreground">VPS code editor</p>
+            <h4 className="text-xs font-bold text-foreground">VPS File Manager</h4>
+            <p className="text-[10px] text-muted-foreground">Directory explorer</p>
           </div>
         </motion.button>
 
@@ -325,7 +269,7 @@ export function DashboardPage() {
             <Container className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">Docker Manager</h4>
+            <h4 className="text-xs font-bold text-foreground">Docker Containers</h4>
             <p className="text-[10px] text-muted-foreground">Containers & images</p>
           </div>
         </motion.button>
@@ -340,8 +284,8 @@ export function DashboardPage() {
             <Activity className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">Live Telemetry</h4>
-            <p className="text-[10px] text-muted-foreground">Process monitors</p>
+            <h4 className="text-xs font-bold text-foreground">Process Monitoring</h4>
+            <p className="text-[10px] text-muted-foreground">Live telemetry</p>
           </div>
         </motion.button>
       </motion.div>
@@ -353,9 +297,9 @@ export function DashboardPage() {
             <div>
               <CardTitle className="text-sm font-bold flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary animate-spin" style={{ animationDuration: '6s' }} />
-                <span>Real-Time Linux VPS Telemetry Stream</span>
+                <span>Host VPS Live Telemetry Stream</span>
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Live CPU load & RAM allocation stream from active host agent</p>
+              <p className="text-xs text-muted-foreground">Real-time CPU load & RAM allocation stream from active host agent</p>
             </div>
             <div className="flex items-center space-x-2">
               <Badge variant="outline" className="font-mono text-[10px] gap-1.5 bg-primary/10 border-primary/30 text-primary">
@@ -370,7 +314,7 @@ export function DashboardPage() {
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 4, ease: 'linear' }}>
                   <Activity className="h-10 w-10 text-primary/60" />
                 </motion.div>
-                <p className="text-xs font-bold text-foreground">Listening for Live Linux VPS Telemetry Stream</p>
+                <p className="text-xs font-bold text-foreground">Listening for Live Host VPS Telemetry Stream</p>
                 <p className="text-[11px] text-muted-foreground max-w-sm leading-relaxed">
                   WebSocket telemetry socket is listening on <code className="text-primary font-mono font-bold">/ws</code>. Metrics will animate automatically.
                 </p>

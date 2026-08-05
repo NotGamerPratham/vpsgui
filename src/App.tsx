@@ -1,6 +1,7 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ProtectedRoute } from './auth/ProtectedRoute';
 import { MainLayout } from './layouts/MainLayout';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ServersPage } from './features/infrastructure/ServersPage';
@@ -55,38 +56,41 @@ export function App() {
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
 
-          <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/servers" element={<ServersPage />} />
-            <Route path="/multivps" element={<MultiVPSPage />} />
-            <Route path="/topology" element={<TopologyMapPage />} />
-            <Route path="/docker/containers" element={<DockerContainersPage />} />
-            <Route path="/docker/images" element={<DockerImagesPage />} />
-            <Route path="/files" element={<FileManagerPage />} />
-            <Route path="/terminal" element={<TerminalPage />} />
-            <Route path="/monitoring" element={<MonitoringPage />} />
-            <Route path="/health" element={<HealthMatrixPage />} />
-            <Route path="/diagnostics" element={<DiagnosticsPage />} />
-            <Route path="/disks" element={<StorageManagerPage />} />
-            <Route path="/network" element={<NetworkManagerPage />} />
-            <Route path="/firewall" element={<FirewallPage />} />
-            <Route path="/ssh-keys" element={<SshKeysPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/catalog" element={<CatalogPage />} />
-            <Route path="/secrets" element={<SecretsPage />} />
-            <Route path="/iac" element={<IacPage />} />
-            <Route path="/automation" element={<AutomationPage />} />
-            <Route path="/queue" element={<JobQueuePage />} />
-            <Route path="/audit" element={<AuditCenterPage />} />
-            <Route path="/spotlight" element={<SpotlightExplorerPage />} />
-            <Route path="/agent" element={<AgentPage />} />
-            <Route path="/deployments" element={<DeploymentsPage />} />
-            <Route path="/proxy" element={<ReverseProxyPage />} />
-            <Route path="/databases" element={<DatabasesPage />} />
-            <Route path="/backups" element={<BackupsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/docs" element={<DocsPage />} />
+          {/* Protected Authenticated Infrastructure Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/servers" element={<ServersPage />} />
+              <Route path="/multivps" element={<MultiVPSPage />} />
+              <Route path="/topology" element={<TopologyMapPage />} />
+              <Route path="/docker/containers" element={<DockerContainersPage />} />
+              <Route path="/docker/images" element={<DockerImagesPage />} />
+              <Route path="/files" element={<FileManagerPage />} />
+              <Route path="/terminal" element={<TerminalPage />} />
+              <Route path="/monitoring" element={<MonitoringPage />} />
+              <Route path="/health" element={<HealthMatrixPage />} />
+              <Route path="/diagnostics" element={<DiagnosticsPage />} />
+              <Route path="/disks" element={<StorageManagerPage />} />
+              <Route path="/network" element={<NetworkManagerPage />} />
+              <Route path="/firewall" element={<FirewallPage />} />
+              <Route path="/ssh-keys" element={<SshKeysPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/catalog" element={<CatalogPage />} />
+              <Route path="/secrets" element={<SecretsPage />} />
+              <Route path="/iac" element={<IacPage />} />
+              <Route path="/automation" element={<AutomationPage />} />
+              <Route path="/queue" element={<JobQueuePage />} />
+              <Route path="/audit" element={<AuditCenterPage />} />
+              <Route path="/spotlight" element={<SpotlightExplorerPage />} />
+              <Route path="/agent" element={<AgentPage />} />
+              <Route path="/deployments" element={<DeploymentsPage />} />
+              <Route path="/proxy" element={<ReverseProxyPage />} />
+              <Route path="/databases" element={<DatabasesPage />} />
+              <Route path="/backups" element={<BackupsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/docs" element={<DocsPage />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>

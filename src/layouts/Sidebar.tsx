@@ -99,7 +99,6 @@ export function Sidebar() {
     {
       title: 'DEVELOPER & DOCS',
       items: [
-        { path: '/landing', label: 'Project Website', icon: Globe },
         { path: '/docs', label: 'Dev Docs & API', icon: BookOpen },
         { path: '/settings', label: 'Preferences', icon: Settings },
       ],

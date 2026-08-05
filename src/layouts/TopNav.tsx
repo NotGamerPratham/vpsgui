@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Plus, Palette, Bell, Globe, ChevronRight } from 'lucide-react';
+import { Search, Plus, Palette, Bell, Globe, Server } from 'lucide-react';
 import { useUIStore } from '../store/useUIStore';
 import { useServerStore } from '../store/useServerStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -15,34 +15,24 @@ export function TopNav() {
     setCommandPaletteOpen,
     setQuickLauncherOpen,
     setNotificationsOpen,
-    setSidebarCollapsed,
-    sidebarCollapsed,
   } = useUIStore();
 
-  const { selectedNodeId, nodes, setSelectedNodeId } = useServerStore();
+  const { nodes } = useServerStore();
   const { currentOrg, organizations, setCurrentOrg } = useAuthStore();
   const { unreadCount } = useNotificationStore();
 
-  const activeNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
+  const activeNode = nodes[0];
 
   return (
     <header className="flex h-14 w-full items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur-md z-20">
-      {/* Left Section: Active Server Dropdown & Org Selector */}
+      {/* Left Section: Host Server Badge & Org Selector */}
       <div className="flex items-center space-x-3">
-        {/* Active Node Dropdown */}
-        <div className="flex items-center rounded-lg bg-muted/60 px-2.5 py-1 border border-border/80 text-xs font-mono">
+        {/* Active Host Node Badge */}
+        <div className="flex items-center rounded-lg bg-muted/60 px-3 py-1 border border-border/80 text-xs font-mono">
           <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
-          <Select
-            value={selectedNodeId || ''}
-            onChange={(e) => setSelectedNodeId(e.target.value)}
-            className="h-7 border-none bg-transparent text-xs font-bold focus:ring-0 cursor-pointer shadow-none text-foreground"
-          >
-            {nodes.map((node) => (
-              <option key={node.id} value={node.id} className="bg-card text-foreground">
-                {node.name} ({node.network.publicIp})
-              </option>
-            ))}
-          </Select>
+          <Server className="h-3.5 w-3.5 mr-1.5 text-primary" />
+          <span className="font-bold text-foreground">{activeNode?.name || 'vps128'}</span>
+          <span className="ml-1 text-muted-foreground">({activeNode?.network?.publicIp || '127.0.0.1'})</span>
         </div>
 
         {/* Organization Switcher */}
@@ -73,7 +63,7 @@ export function TopNav() {
         >
           <div className="flex items-center space-x-2">
             <Search className="h-3.5 w-3.5 text-primary" />
-            <span>Search nodes, containers, commands...</span>
+            <span>Search containers, files, commands...</span>
           </div>
           <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
             Ctrl + K

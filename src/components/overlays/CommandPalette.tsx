@@ -6,7 +6,7 @@ import {
   Server,
   Terminal,
   Box,
-  Plus,
+  FolderTree,
   X,
   Zap,
 } from 'lucide-react';
@@ -32,10 +32,6 @@ export function CommandPalette() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [commandPaletteOpen, setCommandPaletteOpen]);
-
-  const filteredNodes = nodes.filter(
-    (n) => n.name.toLowerCase().includes(query.toLowerCase()) || (n.network?.publicIp && n.network.publicIp.includes(query))
-  );
 
   const handleSelect = (path: string) => {
     setCommandPaletteOpen(false);
@@ -70,7 +66,7 @@ export function CommandPalette() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search nodes, commands, settings... (Esc to close)"
+                placeholder="Search tools, containers, files... (Esc to close)"
                 className="w-full bg-transparent text-sm font-medium text-foreground placeholder:text-muted-foreground focus:outline-none"
                 autoFocus
               />
@@ -81,17 +77,9 @@ export function CommandPalette() {
 
             {/* Results List */}
             <div className="max-h-[60vh] overflow-y-auto p-2 space-y-4">
-              {/* Quick Actions */}
               <div>
                 <h5 className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quick Commands</h5>
                 <div className="space-y-1 mt-1">
-                  <button
-                    onClick={() => handleSelect('/servers')}
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
-                  >
-                    <Plus className="h-4 w-4 mr-2.5 text-emerald-400" />
-                    <span className="font-medium">Connect New VPS Node</span>
-                  </button>
                   <button
                     onClick={() => handleSelect('/terminal')}
                     className="flex w-full items-center rounded-lg px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
@@ -100,39 +88,41 @@ export function CommandPalette() {
                     <span className="font-medium">Open SSH Split Workbench Terminal</span>
                   </button>
                   <button
+                    onClick={() => handleSelect('/files')}
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
+                  >
+                    <FolderTree className="h-4 w-4 mr-2.5 text-violet-400" />
+                    <span className="font-medium">Open VPS File Manager</span>
+                  </button>
+                  <button
                     onClick={() => handleSelect('/catalog')}
                     className="flex w-full items-center rounded-lg px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
                   >
-                    <Box className="h-4 w-4 mr-2.5 text-violet-400" />
+                    <Box className="h-4 w-4 mr-2.5 text-emerald-400" />
                     <span className="font-medium">Deploy Application from Catalog</span>
                   </button>
                 </div>
               </div>
 
-              {/* Deployed Nodes */}
-              {filteredNodes.length > 0 && (
-                <div>
-                  <h5 className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Discovered VPS Nodes</h5>
-                  <div className="space-y-1 mt-1">
-                    {filteredNodes.map((node) => (
-                      <button
-                        key={node.id}
-                        onClick={() => handleSelect('/servers')}
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs hover:bg-muted/60 transition-colors"
-                      >
-                        <div className="flex items-center">
-                          <Server className="h-4 w-4 mr-2.5 text-primary" />
-                          <span className="font-medium text-foreground">{node.name}</span>
-                          <span className="ml-2 font-mono text-[10px] text-muted-foreground">({node.network?.publicIp || '127.0.0.1'})</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                          {node.status}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+              {/* Host VPS Node */}
+              <div>
+                <h5 className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Active Host VPS</h5>
+                <div className="space-y-1 mt-1">
+                  <button
+                    onClick={() => handleSelect('/servers')}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs hover:bg-muted/60 transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <Server className="h-4 w-4 mr-2.5 text-primary" />
+                      <span className="font-medium text-foreground">{nodes[0]?.name || 'vps128'}</span>
+                      <span className="ml-2 font-mono text-[10px] text-muted-foreground">({nodes[0]?.network?.publicIp || '127.0.0.1'})</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      HOST ONLINE
+                    </span>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Footer info */}

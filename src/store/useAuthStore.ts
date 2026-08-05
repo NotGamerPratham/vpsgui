@@ -1,6 +1,34 @@
 import { create } from 'zustand';
 import { UserProfile, OrganizationItem, AuditLogEvent } from '../types/auth';
 
+const AUTH_KEY = 'vpsgui_authenticated';
+const USER_KEY = 'vpsgui_auth_user';
+
+function getStoredAuth(): boolean {
+  try {
+    const val = localStorage.getItem(AUTH_KEY);
+    return val === null ? true : val === 'true';
+  } catch (e) {
+    return true;
+  }
+}
+
+function getStoredUser(): UserProfile | null {
+  try {
+    const val = localStorage.getItem(USER_KEY);
+    if (val) return JSON.parse(val);
+  } catch (e) {}
+  return {
+    id: 'usr-101',
+    email: 'admin@vpsgui.dev',
+    name: 'VPS Administrator',
+    avatarUrl: '',
+    role: 'owner',
+    mfaEnabled: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   user: UserProfile | null;
@@ -16,16 +44,8 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: true,
-  user: {
-    id: 'usr-101',
-    email: 'admin@vpsgui.dev',
-    name: 'VPS Administrator',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-    role: 'owner',
-    mfaEnabled: true,
-    createdAt: new Date().toISOString(),
-  },
+  isAuthenticated: getStoredAuth(),
+  user: getStoredUser(),
   organizations: [
     {
       id: 'org-vpsgui',
@@ -35,7 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       membersCount: 1,
       projectsCount: 1,
       nodesCount: 1,
-      avatarUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=120&q=80',
+      avatarUrl: '',
     },
   ],
   currentOrg: {
@@ -46,25 +66,38 @@ export const useAuthStore = create<AuthState>((set) => ({
     membersCount: 1,
     projectsCount: 1,
     nodesCount: 1,
-    avatarUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=120&q=80',
+    avatarUrl: '',
   },
   auditLogs: [],
 
-  login: (email) =>
+  login: (email) => {
+    const userObj: UserProfile = {
+      id: `usr-${Date.now()}`,
+      email,
+      name: email.split('@')[0],
+      avatarUrl: '',
+      role: 'owner',
+      mfaEnabled: true,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(USER_KEY, JSON.stringify(userObj));
+    } catch (e) {}
+
     set({
       isAuthenticated: true,
-      user: {
-        id: 'usr-101',
-        email,
-        name: email.split('@')[0],
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-        role: 'owner',
-        mfaEnabled: true,
-        createdAt: new Date().toISOString(),
-      },
-    }),
+      user: userObj,
+    });
+  },
 
-  logout: () => set({ isAuthenticated: false, user: null }),
+  logout: () => {
+    try {
+      localStorage.setItem(AUTH_KEY, 'false');
+      localStorage.removeItem(USER_KEY);
+    } catch (e) {}
+    set({ isAuthenticated: false, user: null });
+  },
 
   setCurrentOrg: (org) => set({ currentOrg: org }),
 
