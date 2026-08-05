@@ -39,7 +39,7 @@ export function TopNav() {
           >
             {nodes.map((node) => (
               <option key={node.id} value={node.id} className="bg-card text-foreground">
-                {node.name} ({node.network.publicIp})
+                {node.name} ({node.network?.publicIp || '127.0.0.1'})
               </option>
             ))}
           </Select>

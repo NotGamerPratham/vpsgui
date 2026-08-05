@@ -5,9 +5,11 @@ After=network.target docker.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/vpsgui-agent --config /etc/vpsgui/agent.yaml
+WorkingDirectory=/var/www/vpsgui/agent
+ExecStart=/usr/bin/node /var/www/vpsgui/agent/server.js
 Restart=always
-RestartSec=5s
+RestartSec=3s
+Environment=PORT=8080
 
 [Install]
 WantedBy=multi-user.target

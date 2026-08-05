@@ -1,8 +1,9 @@
 import { globalEventBus } from '../event-bus';
 
 const getWsUrl = (): string => {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
+  const envUrl = import.meta.env.VITE_WS_URL;
+  if (envUrl && !envUrl.includes('vpsgui.dev')) {
+    return envUrl;
   }
   if (typeof window !== 'undefined' && window.location.origin) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

@@ -21,16 +21,22 @@ echo "[VPSGUI] npm version: $(npm -v)"
 echo "[VPSGUI] Installing workspace dependencies..."
 npm install
 
-# 3. Build Production Web Assets
-echo "[VPSGUI] Building production web assets..."
+# 3. Grant Binaries Executable Permissions & Build Production Web Assets
+echo "[VPSGUI] Setting binary permissions & building production web assets..."
+chmod -R +x node_modules/.bin/ || true
 npm run build
 
-# 4. Option: Launch via Docker Compose if Docker is available
+# 4. Install & Start Telemetry Agent Server on Port 8080
+if [ -f "agent/install.sh" ]; then
+    echo "[VPSGUI] Starting VPSGUI Agent Telemetry Service..."
+    bash agent/install.sh || true
+fi
+
+# 5. Launch Option
 if command -v docker &> /dev/null && command -v docker-compose &> /dev/null; then
     echo "[VPSGUI] Docker detected. Launching VPSGUI via Docker Compose..."
     docker-compose up -d --build
     echo "[VPSGUI] VPSGUI is live via Docker at http://localhost:80"
 else
-    echo "[VPSGUI] Starting preview dev server on port 3000..."
-    npm run dev -- --host 0.0.0.0 --port 3000
+    echo "[VPSGUI] Production web assets compiled to /var/www/vpsgui/dist."
 fi
