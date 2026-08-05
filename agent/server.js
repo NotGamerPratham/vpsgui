@@ -28,7 +28,7 @@ function getRealTelemetry() {
     timestamp: new Date().toISOString(),
     cpuUsagePercent: cpuPercent,
     cpuCores: cpus.length,
-    cpuModel: cpus[0]?.model || 'Linux Host CPU',
+    cpuModel: cpus[0]?.model || 'Linux Processor',
     memoryTotalBytes: totalMem,
     memoryUsedBytes: usedMem,
     memoryFreeBytes: freeMem,
@@ -122,6 +122,49 @@ function getRealDirectoryContents(reqPath) {
   }
 }
 
+function getNodePayload() {
+  const telemetry = getRealTelemetry();
+  return {
+    id: `node-${os.hostname()}`,
+    name: os.hostname(),
+    status: 'online',
+    agentStatus: 'healthy',
+    location: {
+      city: 'Host Node',
+      country: 'Linux VPS',
+      countryCode: 'VPS',
+      flagIcon: 'Globe',
+      provider: 'Active Telemetry Host',
+    },
+    hardware: {
+      cpuCores: telemetry.cpuCores,
+      cpuModel: telemetry.cpuModel,
+      ramGb: Math.round(telemetry.memoryTotalBytes / 1073741824),
+      swapGb: 0,
+      diskGb: 80,
+      diskType: 'NVMe',
+      architecture: telemetry.osArch,
+    },
+    os: {
+      name: telemetry.osName,
+      family: telemetry.osPlatform,
+      version: 'Active Agent v1.4.2',
+      kernel: telemetry.osName,
+      uptimeSeconds: telemetry.uptimeSeconds,
+    },
+    network: {
+      ipAddress: '127.0.0.1',
+      publicIp: '127.0.0.1',
+      hostname: os.hostname(),
+      sshPort: 22,
+    },
+    tags: ['linux-vps', 'production'],
+    isFavorite: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
@@ -157,50 +200,12 @@ const server = http.createServer((req, res) => {
     const targetPath = reqUrl.searchParams.get('path');
     res.writeHead(200);
     res.end(JSON.stringify(getRealDirectoryContents(targetPath)));
-  } else if (pathname === '/api/v1/nodes' || pathname === '/api/v1/node') {
-    const telemetry = getRealTelemetry();
+  } else if (pathname === '/api/v1/node') {
     res.writeHead(200);
-    res.end(
-      JSON.stringify([{
-        id: `node-${os.hostname()}`,
-        name: os.hostname(),
-        status: 'online',
-        agentStatus: 'healthy',
-        location: {
-          city: 'Host Node',
-          country: 'Linux VPS',
-          countryCode: 'VPS',
-          flagIcon: 'Globe',
-          provider: 'Active Telemetry Host',
-        },
-        hardware: {
-          cpuCores: telemetry.cpuCores,
-          cpuModel: telemetry.cpuModel,
-          ramGb: Math.round(telemetry.memoryTotalBytes / 1073741824),
-          swapGb: 0,
-          diskGb: 80,
-          diskType: 'NVMe',
-          architecture: telemetry.osArch,
-        },
-        os: {
-          name: telemetry.osName,
-          family: telemetry.osPlatform,
-          version: 'Active Agent v1.4.2',
-          kernel: telemetry.osName,
-          uptimeSeconds: telemetry.uptimeSeconds,
-        },
-        network: {
-          ipAddress: '127.0.0.1',
-          publicIp: '127.0.0.1',
-          hostname: os.hostname(),
-          sshPort: 22,
-        },
-        tags: ['linux-vps', 'production'],
-        isFavorite: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }])
-    );
+    res.end(JSON.stringify(getNodePayload()));
+  } else if (pathname === '/api/v1/nodes') {
+    res.writeHead(200);
+    res.end(JSON.stringify([getNodePayload()]));
   } else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Endpoint not found', pathname }));

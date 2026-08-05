@@ -6,8 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:all": "npm run build",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "test:watch": "tsc --noEmit --watch",
+    "preview": "vite preview --host 0.0.0.0 --port 3000",
+    "agent:start": "node agent/server.js",
+    "deploy:vps": "bash run.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.23",
@@ -25,6 +31,7 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/node": "^22.3.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

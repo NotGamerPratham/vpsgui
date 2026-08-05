@@ -1,58 +1,53 @@
 import React from 'react';
-import {
-  Server,
-  Search,
-  Bell,
-  Plus,
-  Palette,
-  ChevronDown,
-  Globe,
-  Building2,
-  SlidersHorizontal,
-} from 'lucide-react';
-import { useServerStore } from '../store/useServerStore';
+import { Search, Plus, Palette, Bell, Globe, ChevronRight } from 'lucide-react';
 import { useUIStore } from '../store/useUIStore';
+import { useServerStore } from '../store/useServerStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { themeCatalog, ThemeName } from '../design-system/tokens';
-import { Select } from '../components/ui/select';
-import { Badge } from '../components/ui/badge';
+import { useNotificationStore } from '../store/useNotificationStore';
 import { Button } from '../components/ui/button';
+import { Select } from '../components/ui/select';
+import { themeCatalog, ThemeName } from '../design-system/tokens';
 
 export function TopNav() {
-  const { nodes, selectedNodeId, setSelectedNodeId } = useServerStore();
-  const { theme, setTheme, setCommandPaletteOpen, setQuickLauncherOpen, setNotificationsOpen } = useUIStore();
-  const { user, currentOrg, organizations, setCurrentOrg } = useAuthStore();
+  const {
+    theme,
+    setTheme,
+    setCommandPaletteOpen,
+    setQuickLauncherOpen,
+    setNotificationsOpen,
+    setSidebarCollapsed,
+    sidebarCollapsed,
+  } = useUIStore();
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
+  const { selectedNodeId, nodes, setSelectedNodeId } = useServerStore();
+  const { currentOrg, organizations, setCurrentOrg } = useAuthStore();
+  const { unreadCount } = useNotificationStore();
+
+  const activeNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border/70 bg-card/80 backdrop-blur-xl px-4 select-none">
-      {/* Left section: Node selector & Org Selector */}
+    <header className="flex h-14 w-full items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur-md z-20">
+      {/* Left Section: Active Server Dropdown & Org Selector */}
       <div className="flex items-center space-x-3">
-        {/* Node Selector */}
-        <div className="relative flex items-center bg-muted/40 rounded-lg p-1 border border-border/60">
-          <Server className="h-4 w-4 text-primary ml-2 mr-1.5 shrink-0" />
+        {/* Active Node Dropdown */}
+        <div className="flex items-center rounded-lg bg-muted/60 px-2.5 py-1 border border-border/80 text-xs font-mono">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
           <Select
             value={selectedNodeId || ''}
             onChange={(e) => setSelectedNodeId(e.target.value)}
-            className="h-7 border-none bg-transparent text-xs font-semibold focus:ring-0 pl-1 pr-6 py-0 shadow-none cursor-pointer"
+            className="h-7 border-none bg-transparent text-xs font-bold focus:ring-0 cursor-pointer shadow-none text-foreground"
           >
             {nodes.map((node) => (
               <option key={node.id} value={node.id} className="bg-card text-foreground">
-                {node.name} ({node.network?.publicIp || '127.0.0.1'})
+                {node.name} ({node.network.publicIp})
               </option>
             ))}
           </Select>
-          {selectedNode && (
-            <Badge variant="success" className="ml-2 hidden sm:inline-flex text-[10px] py-0 px-1.5 font-mono">
-              {selectedNode.status.toUpperCase()}
-            </Badge>
-          )}
         </div>
 
-        {/* Org Selector */}
-        <div className="hidden lg:flex items-center space-x-2 border-l border-border/60 pl-3">
-          <Building2 className="h-4 w-4 text-muted-foreground" />
+        {/* Organization Switcher */}
+        <div className="hidden sm:flex items-center text-xs text-muted-foreground border-l border-border/60 pl-3">
+          <Globe className="h-3.5 w-3.5 mr-1.5 text-primary" />
           <Select
             value={currentOrg?.id || ''}
             onChange={(e) => {
@@ -86,13 +81,13 @@ export function TopNav() {
         </button>
       </div>
 
-      {/* Right Section: Theme, Actions & User */}
+      {/* Right Section: Theme & Actions */}
       <div className="flex items-center space-x-2">
         {/* Quick Action Button */}
         <Button
           size="sm"
           onClick={() => setQuickLauncherOpen(true)}
-          className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-bold"
         >
           <Plus className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Quick Action</span>
@@ -114,7 +109,7 @@ export function TopNav() {
           </Select>
         </div>
 
-        {/* Notifications Drawer */}
+        {/* Real-Time Notifications Drawer Button */}
         <Button
           variant="ghost"
           size="icon"
@@ -122,21 +117,12 @@ export function TopNav() {
           className="h-8 w-8 relative text-muted-foreground hover:text-foreground"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 font-mono text-[9px] font-bold text-white shadow-sm animate-pulse">
+              {unreadCount}
+            </span>
+          )}
         </Button>
-
-        {/* User Profile Avatar */}
-        <div className="flex items-center space-x-2 border-l border-border/60 pl-2">
-          <img
-            src={user?.avatarUrl}
-            alt={user?.name}
-            className="h-7 w-7 rounded-full border border-border/80 object-cover"
-          />
-          <div className="hidden xl:flex flex-col text-left">
-            <span className="text-xs font-semibold leading-none text-foreground">{user?.name}</span>
-            <span className="text-[10px] text-muted-foreground leading-none mt-0.5">{user?.role}</span>
-          </div>
-        </div>
       </div>
     </header>
   );

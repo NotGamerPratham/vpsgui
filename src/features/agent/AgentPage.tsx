@@ -89,7 +89,7 @@ export function AgentPage() {
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-foreground">{node.name}</h4>
-                    <p className="text-[11px] text-muted-foreground font-mono">{node.network.publicIp} (Port {node.network.sshPort})</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">{node.network?.publicIp || '127.0.0.1'} (Port {node.network?.sshPort || 22})</p>
                   </div>
                 </div>
 

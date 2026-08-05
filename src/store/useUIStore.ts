@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ThemeName } from '../design-system/tokens';
+import { ThemeName, applyTheme } from '../design-system/tokens';
 import { LanguageCode } from '../i18n';
 
 export interface DashboardWidget {
@@ -46,13 +46,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   setTheme: (theme) => {
     set({ theme });
-    const root = document.documentElement;
-    root.classList.remove('light', 'dark');
-    if (theme === 'light') {
-      root.classList.add('light');
-    } else {
-      root.classList.add('dark');
-    }
+    applyTheme(theme);
   },
 
   setLanguage: (language) => set({ language }),

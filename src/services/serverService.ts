@@ -5,19 +5,71 @@ import { diagnosticsService } from './diagnosticsService';
 const STORAGE_KEY = 'vpsgui_nodes_inventory';
 
 class ServerService {
+  getDefaultHostNode(): NodeSpec {
+    const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
+
+    return {
+      id: 'node-host-primary',
+      name: 'vps128',
+      alias: 'Primary Linux VPS Host',
+      tags: ['linux-vps', 'production', 'host-system'],
+      type: 'linux',
+      status: 'online',
+      location: {
+        city: 'Local VPS',
+        country: 'Linux Host',
+        countryCode: 'VPS',
+        flagIcon: 'Globe',
+        provider: 'Primary Host System',
+      },
+      hardware: {
+        cpuCores: 4,
+        cpuModel: 'QEMU Virtual CPU',
+        ramGb: 16,
+        swapGb: 0,
+        diskGb: 80,
+        diskType: 'NVMe',
+        architecture: 'x86_64',
+      },
+      os: {
+        name: 'Ubuntu Linux VPS',
+        family: 'ubuntu',
+        version: 'Active Agent v1.4.2',
+        kernel: 'Linux Daemon',
+        uptimeSeconds: 3600,
+      },
+      network: {
+        ipAddress: hostIp,
+        publicIp: hostIp,
+        hostname: 'vps128',
+        sshPort: 22,
+        bandwidthUsageGb: 0,
+        monthlyLimitGb: 2000,
+      },
+      agentVersion: 'v1.4.2',
+      agentStatus: 'healthy',
+      lastHeartbeat: new Date().toISOString(),
+      isFavorite: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   getNodes(): NodeSpec[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
     } catch (e) {
       console.warn('Failed to load nodes from localStorage:', e);
     }
-    return [];
+    const defaultNode = this.getDefaultHostNode();
+    this.saveNodes([defaultNode]);
+    return [defaultNode];
   }
 
   saveNodes(nodes: NodeSpec[]) {
@@ -38,15 +90,78 @@ class ServerService {
     } catch (e) {
       // Unattached state
     }
-    return this.getNodes();
+    return this.autoDiscoverHostNode();
+  }
+
+  async autoDiscoverHostNode(): Promise<NodeSpec[]> {
+    const currentNodes = this.getNodes();
+    const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
+
+    const geo = await diagnosticsService.getIpInfo(hostIp);
+    const agentData = await this.queryAgent(hostIp);
+
+    if (agentData && agentData.hardware) {
+      const hostNode: NodeSpec = {
+        id: currentNodes[0]?.id || 'node-host-primary',
+        name: agentData.name || currentNodes[0]?.name || 'vps128',
+        alias: 'Primary Linux VPS Host',
+        tags: ['linux-vps', 'production', 'host-system'],
+        type: 'linux',
+        status: 'online',
+        location: {
+          city: geo.city || agentData.location?.city || 'Local VPS',
+          country: geo.country || agentData.location?.country || 'Linux Host',
+          countryCode: geo.countryCode || 'VPS',
+          flagIcon: 'Globe',
+          provider: geo.org || agentData.location?.provider || 'Primary Host System',
+        },
+        hardware: {
+          cpuCores: agentData.hardware.cpuCores,
+          cpuModel: agentData.hardware.cpuModel || 'QEMU Virtual CPU',
+          ramGb: agentData.hardware.ramGb,
+          swapGb: agentData.hardware.swapGb || 0,
+          diskGb: agentData.hardware.diskGb || 80,
+          diskType: agentData.hardware.diskType || 'NVMe',
+          architecture: agentData.hardware.architecture || 'x86_64',
+        },
+        os: (agentData.os as any) || {
+          name: 'Ubuntu Linux VPS',
+          family: 'ubuntu',
+          version: 'Active Agent v1.4.2',
+          kernel: 'Linux Daemon',
+          uptimeSeconds: 3600,
+        },
+        network: {
+          ipAddress: hostIp,
+          publicIp: hostIp,
+          hostname: agentData.name || 'vps128',
+          sshPort: 22,
+          bandwidthUsageGb: 0,
+          monthlyLimitGb: 2000,
+        },
+        agentVersion: 'v1.4.2',
+        agentStatus: 'healthy',
+        lastHeartbeat: new Date().toISOString(),
+        isFavorite: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const updated = [hostNode, ...currentNodes.filter((n) => n.id !== hostNode.id)];
+      this.saveNodes(updated);
+      return updated;
+    }
+
+    return currentNodes;
   }
 
   async queryAgent(ipAddress: string): Promise<Partial<NodeSpec> | null> {
     const cleanIp = ipAddress.replace(/^https?:\/\//, '').split('/')[0];
     const urls = [
-      `/api/v1/nodes/${cleanIp}`,
+      `/api/v1/node`,
+      `/api/v1/nodes`,
       `http://${cleanIp}:8080/api/v1/node`,
-      `https://${cleanIp}:8080/api/v1/node`,
+      `http://${cleanIp}:8080/api/v1/nodes`,
       `http://${cleanIp}/api/v1/node`,
     ];
 
@@ -59,8 +174,9 @@ class ServerService {
 
         if (res.ok) {
           const data = await res.json();
-          if (data && (data.hardware || data.status)) {
-            return data;
+          const nodeObj = Array.isArray(data) ? data[0] : data;
+          if (nodeObj && nodeObj.hardware && typeof nodeObj.hardware.cpuCores === 'number') {
+            return nodeObj;
           }
         }
       } catch (e) {
@@ -71,7 +187,6 @@ class ServerService {
   }
 
   async createNode(payload: AddNodePayload): Promise<NodeSpec> {
-    // 1. Attempt REST API POST request to central API Gateway
     try {
       const apiNode = await apiClient.post<NodeSpec>('/nodes', payload);
       if (apiNode && apiNode.id) {
@@ -80,14 +195,9 @@ class ServerService {
         this.saveNodes(updated);
         return apiNode;
       }
-    } catch (e) {
-      // Backend REST agent endpoint unattached
-    }
+    } catch (e) {}
 
-    // 2. Resolve real IP Geolocation from target IP
     const geo = await diagnosticsService.getIpInfo(payload.ipAddress);
-
-    // 3. Attempt direct agent query
     const agentData = await this.queryAgent(payload.ipAddress);
 
     const isLocal =
@@ -97,7 +207,7 @@ class ServerService {
 
     let newNode: NodeSpec;
 
-    if (agentData) {
+    if (agentData && agentData.hardware) {
       newNode = {
         id: `node-${Date.now()}`,
         name: payload.name,
@@ -112,19 +222,19 @@ class ServerService {
           flagIcon: 'Globe',
           provider: geo.org || 'Cloud Provider',
         },
-        hardware: (agentData.hardware as any) || {
-          cpuCores: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4,
-          cpuModel: 'Linux Processor',
-          ramGb: 8,
-          swapGb: 0,
-          diskGb: 0,
-          diskType: 'SSD',
-          architecture: 'x86_64',
+        hardware: {
+          cpuCores: agentData.hardware.cpuCores,
+          cpuModel: agentData.hardware.cpuModel || 'Linux Processor',
+          ramGb: agentData.hardware.ramGb,
+          swapGb: agentData.hardware.swapGb || 0,
+          diskGb: agentData.hardware.diskGb || 80,
+          diskType: agentData.hardware.diskType || 'NVMe',
+          architecture: agentData.hardware.architecture || 'x86_64',
         },
         os: (agentData.os as any) || {
           name: 'Linux Operating System',
           family: 'ubuntu',
-          version: 'Active Agent',
+          version: 'Active Agent v1.4.2',
           kernel: 'Linux Daemon',
           uptimeSeconds: 100,
         },
@@ -256,42 +366,41 @@ class ServerService {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return null;
 
-    // 1. Resolve real IP Geolocation for target VPS IP
     const geo = await diagnosticsService.getIpInfo(node.network.publicIp);
-
-    // 2. Direct agent query across endpoints
     const agentData = await this.queryAgent(node.network.publicIp);
 
-    const isConnected = !!agentData || node.network.publicIp !== '0.0.0.0';
+    if (agentData && agentData.hardware) {
+      const updatedNode: NodeSpec = {
+        ...node,
+        status: 'online',
+        agentStatus: 'healthy',
+        location: {
+          city: geo.city || node.location.city,
+          country: geo.country || node.location.country,
+          countryCode: geo.countryCode || node.location.countryCode,
+          flagIcon: 'Globe',
+          provider: geo.org || node.location.provider,
+        },
+        hardware: {
+          cpuCores: agentData.hardware.cpuCores,
+          cpuModel: agentData.hardware.cpuModel || node.hardware.cpuModel,
+          ramGb: agentData.hardware.ramGb,
+          swapGb: agentData.hardware.swapGb || 0,
+          diskGb: agentData.hardware.diskGb || 80,
+          diskType: agentData.hardware.diskType || 'NVMe',
+          architecture: agentData.hardware.architecture || 'x86_64',
+        },
+        os: (agentData.os as any) || node.os,
+        agentVersion: 'v1.4.2',
+        updatedAt: new Date().toISOString(),
+      };
 
-    const updatedNode: NodeSpec = {
-      ...node,
-      status: 'online',
-      agentStatus: 'healthy',
-      location: {
-        city: geo.city || node.location.city,
-        country: geo.country || node.location.country,
-        countryCode: geo.countryCode || node.location.countryCode,
-        flagIcon: 'Globe',
-        provider: geo.org || node.location.provider,
-      },
-      hardware: (agentData?.hardware as any) || {
-        ...node.hardware,
-        cpuCores: node.hardware.cpuCores > 0 ? node.hardware.cpuCores : (typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4),
-        ramGb: node.hardware.ramGb > 0 ? node.hardware.ramGb : 8,
-      },
-      os: (agentData?.os as any) || {
-        ...node.os,
-        name: node.os.name !== 'Linux VPS (Agent Not Detected)' ? node.os.name : 'Linux VPS Host',
-        version: 'Active Agent v1.4.2',
-      },
-      agentVersion: 'v1.4.2',
-      updatedAt: new Date().toISOString(),
-    };
+      const updated = nodes.map((n) => (n.id === nodeId ? updatedNode : n));
+      this.saveNodes(updated);
+      return updatedNode;
+    }
 
-    const updated = nodes.map((n) => (n.id === nodeId ? updatedNode : n));
-    this.saveNodes(updated);
-    return updatedNode;
+    return null;
   }
 }
 

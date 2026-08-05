@@ -24,7 +24,7 @@ interface ServerState {
 
 export const useServerStore = create<ServerState>((set, get) => ({
   nodes: serverService.getNodes(),
-  selectedNodeId: serverService.getNodes()[0]?.id || null,
+  selectedNodeId: serverService.getNodes()[0]?.id || 'node-host-primary',
   searchQuery: '',
   selectedTypeFilter: null,
   selectedStatusFilter: null,
@@ -44,7 +44,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }),
 
   fetchNodesFromApi: async () => {
-    const apiNodes = await serverService.fetchNodesFromApi();
+    const apiNodes = await serverService.autoDiscoverHostNode();
     if (apiNodes.length > 0) {
       set({
         nodes: apiNodes,

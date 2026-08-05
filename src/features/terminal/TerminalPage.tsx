@@ -9,9 +9,10 @@ export function TerminalPage() {
   const { nodes, selectedNodeId } = useServerStore();
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
 
+  const publicIp = selectedNode?.network?.publicIp || '127.0.0.1';
   const [inputCommand, setInputCommand] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>(
-    [`Connected to root@${selectedNode.network.publicIp} (Ubuntu 24.04 LTS)`, `Type 'help' or click a command snippet below.`]
+    [`Connected to root@${publicIp} (Ubuntu 24.04 LTS)`, `Type 'help' or click a command snippet below.`]
   );
 
   const snippets = [
