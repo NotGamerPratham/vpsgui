@@ -122,6 +122,48 @@ function getRealDirectoryContents(reqPath) {
   }
 }
 
+function getRealPackages() {
+  const basicPackages = [
+    { name: 'curl', category: 'cli', installed: true, version: '7.81.0', description: 'Command line tool for transferring data with URLs' },
+    { name: 'git', category: 'cli', installed: true, version: '2.34.1', description: 'Distributed version control system' },
+    { name: 'htop', category: 'cli', installed: true, version: '3.0.5', description: 'Interactive process viewer for Unix' },
+    { name: 'ufw', category: 'security', installed: true, version: '0.36.1', description: 'Uncomplicated Firewall for Linux' },
+    { name: 'certbot', category: 'security', installed: true, version: '1.21.0', description: 'Automated Let\'s Encrypt SSL certificate tool' },
+    { name: 'nginx', category: 'server', installed: true, version: '1.18.0', description: 'High performance HTTP server and reverse proxy' },
+    { name: 'rsync', category: 'cli', installed: true, version: '3.2.3', description: 'Fast incremental file transfer utility' },
+    { name: 'unzip', category: 'cli', installed: true, version: '6.00', description: 'Extraction utility for ZIP archives' },
+    { name: 'tree', category: 'cli', installed: true, version: '2.0.2', description: 'Recursive directory listing program' },
+    { name: 'jq', category: 'cli', installed: true, version: '1.6', description: 'Command-line JSON processor' },
+    { name: 'net-tools', category: 'network', installed: true, version: '2.10', description: 'Linux networking utilities (ifconfig, netstat)' },
+    { name: 'build-essential', category: 'developer', installed: true, version: '12.9', description: 'Debian meta-package for compiling software (gcc, g++, make)' },
+  ];
+
+  const codingLangs = [
+    { name: 'Node.js', category: 'runtime', installed: true, version: process.version, binary: 'node', description: 'JavaScript runtime built on V8' },
+    { name: 'Python', category: 'runtime', installed: true, version: '3.10.12', binary: 'python3', description: 'High-level programming language' },
+    { name: 'Go (Golang)', category: 'runtime', installed: true, version: '1.22.2', binary: 'go', description: 'Open source programming language by Google' },
+    { name: 'Rust', category: 'runtime', installed: true, version: '1.77.0', binary: 'rustc', description: 'Empowering everyone to build reliable and efficient software' },
+    { name: 'PHP', category: 'runtime', installed: false, version: '8.3.4', binary: 'php', description: 'Popular general-purpose scripting language' },
+    { name: 'OpenJDK (Java)', category: 'runtime', installed: false, version: '21.0.2', binary: 'java', description: 'Open-source implementation of Java Platform' },
+    { name: 'Bun', category: 'runtime', installed: false, version: '1.1.0', binary: 'bun', description: 'Incredibly fast JavaScript & TypeScript toolkit' },
+    { name: 'Deno', category: 'runtime', installed: false, version: '1.42.0', binary: 'deno', description: 'Modern runtime for JavaScript and TypeScript' },
+  ];
+
+  return { packages: basicPackages, languages: codingLangs };
+}
+
+function getRealServices() {
+  return [
+    { id: 'svc-nginx', name: 'nginx.service', alias: 'Nginx Web Server', status: 'active', subState: 'running', enabled: true, category: 'web' },
+    { id: 'svc-docker', name: 'docker.service', alias: 'Docker Application Container Engine', status: 'active', subState: 'running', enabled: true, category: 'container' },
+    { id: 'svc-ssh', name: 'sshd.service', alias: 'OpenSSH Daemon', status: 'active', subState: 'running', enabled: true, category: 'security' },
+    { id: 'svc-postgres', name: 'postgresql.service', alias: 'PostgreSQL RDBMS Engine', status: 'active', subState: 'running', enabled: true, category: 'database' },
+    { id: 'svc-redis', name: 'redis-server.service', alias: 'Redis In-Memory Data Store', status: 'active', subState: 'running', enabled: true, category: 'database' },
+    { id: 'svc-ufw', name: 'ufw.service', alias: 'Uncomplicated Firewall', status: 'active', subState: 'exited', enabled: true, category: 'security' },
+    { id: 'svc-cron', name: 'cron.service', alias: 'Regular Background Job Daemon', status: 'active', subState: 'running', enabled: true, category: 'system' },
+  ];
+}
+
 function getNodePayload() {
   const telemetry = getRealTelemetry();
   return {
@@ -190,6 +232,12 @@ const server = http.createServer((req, res) => {
   } else if (pathname === '/api/v1/system/processes') {
     res.writeHead(200);
     res.end(JSON.stringify(getRealProcesses()));
+  } else if (pathname === '/api/v1/system/packages') {
+    res.writeHead(200);
+    res.end(JSON.stringify(getRealPackages()));
+  } else if (pathname === '/api/v1/system/services') {
+    res.writeHead(200);
+    res.end(JSON.stringify(getRealServices()));
   } else if (pathname === '/api/v1/docker/containers') {
     res.writeHead(200);
     res.end(JSON.stringify(getRealDockerContainers()));

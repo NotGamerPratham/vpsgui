@@ -37,6 +37,8 @@ import { ProfilePage } from './features/profile/ProfilePage';
 import { AuthPage } from './auth/AuthPage';
 import { DocsPage } from './features/docs/DocsPage';
 import { LandingPage } from './features/landing/LandingPage';
+import { PackagesPage } from './features/system/PackagesPage';
+import { ServicesPage } from './features/system/ServicesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +65,8 @@ export function App() {
               <Route element={<MainLayout />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/servers" element={<ServersPage />} />
+                <Route path="/packages" element={<PackagesPage />} />
+                <Route path="/services" element={<ServicesPage />} />
                 <Route path="/multivps" element={<MultiVPSPage />} />
                 <Route path="/topology" element={<TopologyMapPage />} />
                 <Route path="/docker/containers" element={<DockerContainersPage />} />
