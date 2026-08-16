@@ -1,0 +1,7 @@
+{
+  "name": "vpsgui-agent",
+  "version": "1.4.2",
+  "type": "commonjs",
+  "private": true,
+  "main": "server.js"
+}
