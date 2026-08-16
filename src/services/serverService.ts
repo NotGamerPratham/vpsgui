@@ -123,7 +123,7 @@ class ServerService {
         ramGb: agentData?.hardware?.ramGb || 16,
         swapGb: agentData?.hardware?.swapGb || 0,
         diskGb: agentData?.hardware?.diskGb || 80,
-        diskType: agentData?.hardware?.diskType || 'NVMe',
+        diskType: 'NVMe',
         architecture: agentData?.hardware?.architecture || 'x86_64',
       },
       os: (agentData?.os as any) || {
@@ -153,14 +153,15 @@ class ServerService {
     return [hostNode];
   }
 
-  // Ping agent endpoints with timeout fallback
+  // Ping agent endpoints with port 46509 fallback
   async queryAgent(ipAddress: string): Promise<Partial<NodeSpec> | null> {
     const cleanIp = ipAddress.replace(/^https?:\/\//, '').split('/')[0];
     const urls = [
       `/api/v1/node`,
       `/api/v1/nodes`,
+      `http://${cleanIp}:46509/api/v1/node`,
+      `http://${cleanIp}:46509/api/v1/nodes`,
       `http://${cleanIp}:8080/api/v1/node`,
-      `http://${cleanIp}:8080/api/v1/nodes`,
       `http://${cleanIp}/api/v1/node`,
     ];
 

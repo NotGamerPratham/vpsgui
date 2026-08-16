@@ -2,7 +2,7 @@
  * VPSGUI Agent Server Daemon
  * Developed by NotGamerPratham (https://notgamerpratham.com)
  * 
- * Lightweight HTTP daemon listening on port 8080.
+ * Lightweight HTTP daemon listening on port 46509.
  * Serves real host hardware metrics, process stats, Docker containers, and systemd units.
  */
 
@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 46509;
 
 // Calculate CPU load, RAM allocation, and uptime from OS primitives
 function getRealTelemetry() {
