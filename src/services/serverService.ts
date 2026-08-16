@@ -1,3 +1,10 @@
+/**
+ * Server Management Service
+ * Developed by NotGamerPratham (https://notgamerpratham.com)
+ * 
+ * Handles host node auto-discovery and pairs with the vpsgui-agent daemon
+ */
+
 import { NodeSpec, AddNodePayload } from '../types/node';
 import { apiClient } from '../api/client';
 import { diagnosticsService } from './diagnosticsService';
@@ -5,6 +12,7 @@ import { diagnosticsService } from './diagnosticsService';
 const STORAGE_KEY = 'vpsgui_nodes_inventory';
 
 class ServerService {
+  // Returns fallback host node spec if agent query is connecting
   getDefaultHostNode(): NodeSpec {
     const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
 
@@ -55,6 +63,7 @@ class ServerService {
     };
   }
 
+  // Load nodes inventory locked to single active host Linux VPS
   getNodes(): NodeSpec[] {
     const defaultNode = this.getDefaultHostNode();
     try {
@@ -67,6 +76,7 @@ class ServerService {
         }
       }
     } catch (e) {
+      // Fall back to default host node
       console.warn('Failed to load nodes from localStorage:', e);
     }
     this.saveNodes([defaultNode]);
@@ -77,6 +87,7 @@ class ServerService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes.slice(0, 1)));
     } catch (e) {
+      // Storage quota error or browser restricted mode
       console.error('Failed to save nodes to localStorage:', e);
     }
   }
@@ -85,6 +96,7 @@ class ServerService {
     return this.autoDiscoverHostNode();
   }
 
+  // Auto-discover the host Linux VPS running vpsgui-agent
   async autoDiscoverHostNode(): Promise<NodeSpec[]> {
     const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
 
@@ -141,6 +153,7 @@ class ServerService {
     return [hostNode];
   }
 
+  // Ping agent endpoints with timeout fallback
   async queryAgent(ipAddress: string): Promise<Partial<NodeSpec> | null> {
     const cleanIp = ipAddress.replace(/^https?:\/\//, '').split('/')[0];
     const urls = [
@@ -162,13 +175,15 @@ class ServerService {
           const data = await res.json();
           const nodeObj = Array.isArray(data) ? data[0] : data;
           if (nodeObj && nodeObj.hardware && typeof nodeObj.hardware.cpuCores === 'number') {
+            // Found real agent data :)
             return nodeObj;
           }
         }
       } catch (e) {
-        // Continue
+        // Try next URL fallback
       }
     }
+    // Agent endpoint unreachable :/
     return null;
   }
 

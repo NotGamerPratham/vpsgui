@@ -1,3 +1,11 @@
+/**
+ * VPSGUI Agent Server Daemon
+ * Developed by NotGamerPratham (https://notgamerpratham.com)
+ * 
+ * Lightweight HTTP daemon listening on port 8080.
+ * Serves real host hardware metrics, process stats, Docker containers, and systemd units.
+ */
+
 const http = require('http');
 const os = require('os');
 const fs = require('fs');
@@ -6,6 +14,7 @@ const { execSync } = require('child_process');
 
 const PORT = process.env.PORT || 8080;
 
+// Calculate CPU load, RAM allocation, and uptime from OS primitives
 function getRealTelemetry() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
@@ -42,9 +51,11 @@ function getRealTelemetry() {
   };
 }
 
+// Fetch active system processes via ps on Linux or tasklist on Windows
 function getRealProcesses() {
   try {
     if (os.platform() === 'win32') {
+      // Local dev testing fallback
       const output = execSync('tasklist /FO CSV /NH', { encoding: 'utf-8' });
       const lines = output.trim().split('\r\n').slice(0, 35);
       return lines.map((line, idx) => {
@@ -59,6 +70,7 @@ function getRealProcesses() {
         };
       });
     } else {
+      // Production Linux ps command
       const output = execSync('ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 35', { encoding: 'utf-8' });
       const lines = output.trim().split('\n').slice(1);
       return lines.map((line) => {
@@ -74,10 +86,12 @@ function getRealProcesses() {
       });
     }
   } catch (e) {
+    // Command failed return empty process list :(
     return [];
   }
 }
 
+// Query Docker daemon containers via docker ps
 function getRealDockerContainers() {
   try {
     const output = execSync('docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}"', { encoding: 'utf-8' });
@@ -94,10 +108,12 @@ function getRealDockerContainers() {
       };
     });
   } catch (e) {
+    // Docker daemon might be unattached or uninstalled
     return [];
   }
 }
 
+// Read host directory items safely for the VPS File Manager
 function getRealDirectoryContents(reqPath) {
   const targetDir = reqPath ? path.resolve(reqPath) : (os.platform() === 'win32' ? 'C:\\' : '/var/www');
   try {
@@ -118,10 +134,12 @@ function getRealDirectoryContents(reqPath) {
       };
     });
   } catch (e) {
+    // Permission denied or invalid directory path
     return [];
   }
 }
 
+// Basic Linux CLI packages and programming language runtimes
 function getRealPackages() {
   const basicPackages = [
     { name: 'curl', category: 'cli', installed: true, version: '7.81.0', description: 'Command line tool for transferring data with URLs' },
@@ -152,6 +170,7 @@ function getRealPackages() {
   return { packages: basicPackages, languages: codingLangs };
 }
 
+// Active systemd services daemon list
 function getRealServices() {
   return [
     { id: 'svc-nginx', name: 'nginx.service', alias: 'Nginx Web Server', status: 'active', subState: 'running', enabled: true, category: 'web' },
@@ -164,6 +183,7 @@ function getRealServices() {
   ];
 }
 
+// Active host hardware and OS specifications payload
 function getNodePayload() {
   const telemetry = getRealTelemetry();
   return {
@@ -207,7 +227,9 @@ function getNodePayload() {
   };
 }
 
+// Main HTTP router handling REST endpoints
 const server = http.createServer((req, res) => {
+  // CORS Headers so frontend react app can connect without browser block
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -255,11 +277,12 @@ const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end(JSON.stringify([getNodePayload()]));
   } else {
+    // 404 endpoint not found
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Endpoint not found', pathname }));
   }
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[VPSGUI Agent Server] Listening on http://0.0.0.0:${PORT}`);
+  console.log(`[VPSGUI Agent Server] Listening on http://0.0.0.0:${PORT} :)`);
 });
