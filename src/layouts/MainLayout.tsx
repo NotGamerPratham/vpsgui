@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sidebar } from './Sidebar';
@@ -8,9 +8,14 @@ import { Breadcrumbs } from './Breadcrumbs';
 import { CommandPalette } from '../components/overlays/CommandPalette';
 import { NotificationsDrawer } from '../components/overlays/NotificationsDrawer';
 import { QuickLauncherModal } from '../components/overlays/QuickLauncherModal';
+import { startTelemetryPolling } from '../services/telemetryPoller';
 
 export function MainLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
+
+  useEffect(() => {
+    return startTelemetryPolling(3000);
+  }, []);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">

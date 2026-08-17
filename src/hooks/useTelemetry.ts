@@ -9,11 +9,13 @@ export function useTelemetry(intervalMs: number = 3000) {
 
   const refreshTelemetry = useCallback(async () => {
     try {
-      const [tData, pData] = await Promise.all([
+      const [tPoint, pData] = await Promise.all([
         metricsService.fetchLiveTelemetry(),
         metricsService.fetchProcesses(),
       ]);
-      setTelemetry(tData);
+      if (tPoint) {
+        setTelemetry((prev) => [...prev.slice(-29), tPoint]);
+      }
       setProcesses(pData);
     } catch (e) {
       console.warn('Telemetry fetch error:', e);

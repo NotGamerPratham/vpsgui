@@ -5,7 +5,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
-import { telemetrySocket } from '../../websocket/socket';
 import { globalEventBus } from '../../event-bus';
 import { apiClient } from '../../api/client';
 import { TelemetryPoint } from '../../types/monitoring';
@@ -24,8 +23,6 @@ export function MultiVPSPage() {
   }, [nodes]);
 
   useEffect(() => {
-    telemetrySocket.connect();
-
     const unsubscribe = globalEventBus.on('telemetry_tick', (data: any) => {
       if (!data) return;
       setLiveTelemetry((prev) => ({

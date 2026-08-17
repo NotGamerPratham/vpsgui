@@ -2,7 +2,7 @@
  * Docker Engine Service
  * Developed by NotGamerPratham (https://notgamerpratham.com)
  * 
- * Hey dev! :) This service handles querying Docker containers and local images straight from the host Docker daemon.
+ * Handles querying Docker containers and local images straight from the host Docker daemon.
  */
 
 import { ContainerItem, DockerImageItem } from '../types/docker';
@@ -26,6 +26,15 @@ class DockerService {
     } catch (e) {
       // Docker daemon query fallback :(
       return [];
+    }
+  }
+
+  // Perform container actions (start, stop, restart, remove) on host Docker daemon
+  async controlContainer(id: string, action: 'start' | 'stop' | 'restart' | 'remove'): Promise<{ success: boolean; output: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; output: string }>('/docker/containers/action', { id, action });
+    } catch (e: any) {
+      return { success: false, output: e.message || 'Action failed' };
     }
   }
 }

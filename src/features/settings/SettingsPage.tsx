@@ -1,13 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Settings, Palette, Globe, Bell, Shield, Key } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { useUIStore } from '../../store/useUIStore';
 import { themeCatalog, ThemeName } from '../../design-system/tokens';
 import { i18nTranslations, LanguageCode } from '../../i18n';
 
+const AGENT_TOKEN_KEY = 'vpsgui_auth_token';
+
 export function SettingsPage() {
   const { theme, setTheme, language, setLanguage } = useUIStore();
+  const [agentToken, setAgentToken] = useState(() => localStorage.getItem(AGENT_TOKEN_KEY) || '');
+  const [tokenSaved, setTokenSaved] = useState(false);
+
+  const handleSaveToken = () => {
+    if (agentToken.trim()) {
+      localStorage.setItem(AGENT_TOKEN_KEY, agentToken.trim());
+    } else {
+      localStorage.removeItem(AGENT_TOKEN_KEY);
+    }
+    setTokenSaved(true);
+    setTimeout(() => setTokenSaved(false), 2000);
+  };
 
   return (
     <div className="space-y-6">
@@ -68,6 +83,33 @@ export function SettingsPage() {
                 {lang}
               </button>
             ))}
+          </div>
+        </Card>
+
+        {/* Agent Token */}
+        <Card className="bg-card/70 border-border/70 p-5 space-y-4 md:col-span-2">
+          <div className="flex items-center space-x-2 border-b border-border pb-3">
+            <Key className="h-4 w-4 text-primary" />
+            <h3 className="font-bold text-sm text-foreground">Agent Token</h3>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            The vpsgui-agent daemon prints a token to its logs on install/startup (also saved to{' '}
+            <code className="font-mono text-[11px]">agent/.agent-token</code>). Paste it here to authorize
+            terminal command execution and Docker/service start, stop, and restart actions.
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              value={agentToken}
+              onChange={(e) => setAgentToken(e.target.value)}
+              placeholder="Paste agent token..."
+              className="text-xs bg-card font-mono flex-1"
+            />
+            <Button size="sm" onClick={handleSaveToken} className="text-xs shrink-0">
+              {tokenSaved ? 'Saved' : 'Save'}
+            </Button>
           </div>
         </Card>
       </div>

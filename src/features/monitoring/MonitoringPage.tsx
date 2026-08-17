@@ -1,19 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Activity, Cpu, HardDrive, Zap, Thermometer, ShieldCheck } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
-import { metricsService } from '../../services/metricsService';
-import { TelemetryPoint, ProcessItem } from '../../types/monitoring';
+import { useTelemetry } from '../../hooks/useTelemetry';
 
 export function MonitoringPage() {
-  const [processes, setProcesses] = useState<ProcessItem[]>([]);
-  const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
-
-  useEffect(() => {
-    metricsService.fetchProcesses().then(setProcesses);
-    metricsService.fetchLiveTelemetry().then(setTelemetry);
-  }, []);
+  const { telemetry, processes } = useTelemetry(3000);
 
   return (
     <div className="space-y-6">

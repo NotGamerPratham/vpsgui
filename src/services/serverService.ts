@@ -161,7 +161,6 @@ class ServerService {
       `/api/v1/nodes`,
       `http://${cleanIp}:46509/api/v1/node`,
       `http://${cleanIp}:46509/api/v1/nodes`,
-      `http://${cleanIp}:8080/api/v1/node`,
       `http://${cleanIp}/api/v1/node`,
     ];
 

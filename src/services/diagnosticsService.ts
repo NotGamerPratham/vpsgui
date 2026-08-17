@@ -54,7 +54,7 @@ class DiagnosticsService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      await fetch(`http://${cleanHost}:8080/api/v1/health`, {
+      await fetch(`http://${cleanHost}:46509/api/v1/health`, {
         method: 'GET',
         mode: 'no-cors',
         signal: controller.signal,
@@ -65,7 +65,7 @@ class DiagnosticsService {
       return {
         latencyMs,
         status: 'ok',
-        message: `Agent endpoint ${cleanHost}:8080 responded in ${latencyMs}ms`,
+        message: `Agent endpoint ${cleanHost}:46509 responded in ${latencyMs}ms`,
       };
     } catch {
       const endTime = performance.now();

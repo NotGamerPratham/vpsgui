@@ -6,10 +6,9 @@ const USER_KEY = 'vpsgui_auth_user';
 
 function getStoredAuth(): boolean {
   try {
-    const val = localStorage.getItem(AUTH_KEY);
-    return val === null ? true : val === 'true';
+    return localStorage.getItem(AUTH_KEY) === 'true';
   } catch (e) {
-    return true;
+    return false;
   }
 }
 

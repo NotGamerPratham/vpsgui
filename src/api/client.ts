@@ -6,7 +6,7 @@ const getBaseUrl = (): string => {
   if (typeof window !== 'undefined' && window.location.origin) {
     return `${window.location.origin}/api/v1`;
   }
-  return 'http://localhost:8080/api/v1';
+  return 'http://localhost:46509/api/v1';
 };
 
 class ApiClient {

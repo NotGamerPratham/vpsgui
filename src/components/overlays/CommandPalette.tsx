@@ -117,8 +117,14 @@ export function CommandPalette() {
                       <span className="font-medium text-foreground">{nodes[0]?.name || 'vps128'}</span>
                       <span className="ml-2 font-mono text-[10px] text-muted-foreground">({nodes[0]?.network?.publicIp || '127.0.0.1'})</span>
                     </div>
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      HOST ONLINE
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        nodes[0]?.status === 'online'
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                          : 'text-muted-foreground bg-muted/20 border-border/60'
+                      }`}
+                    >
+                      {(nodes[0]?.status || 'unknown').toUpperCase()}
                     </span>
                   </button>
                 </div>

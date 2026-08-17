@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Copy,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
@@ -36,12 +37,26 @@ interface LanguageItem {
   description: string;
 }
 
+// apt package identifiers for language runtimes that don't share their display name; null = no
+// direct apt package exists, so 1-click install isn't offered (the copy-command path still works).
+const LANGUAGE_APT_PACKAGE: Record<string, string | null> = {
+  'Node.js': 'nodejs',
+  Python: 'python3',
+  'Go (Golang)': 'golang',
+  Rust: 'rustc',
+  PHP: 'php',
+  'OpenJDK (Java)': 'default-jdk',
+  Bun: null,
+  Deno: null,
+};
+
 export function PackagesPage() {
   const [packages, setPackages] = useState<PackageItem[]>([]);
   const [languages, setLanguages] = useState<LanguageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [installingItem, setInstallingItem] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,13 +102,33 @@ export function PackagesPage() {
     setLoading(false);
   };
 
-  const handleInstall = (name: string) => {
+  const handleInstall = async (name: string, isLanguage: boolean) => {
+    const packageName = isLanguage ? LANGUAGE_APT_PACKAGE[name] : name;
+    if (!packageName) {
+      setInstallError(`${name} has no apt package available for 1-click install — use "Copy Cmd" instead.`);
+      setTimeout(() => setInstallError(null), 4000);
+      return;
+    }
     setInstallingItem(name);
-    setTimeout(() => {
-      setPackages((prev) => prev.map((p) => (p.name === name ? { ...p, installed: true } : p)));
-      setLanguages((prev) => prev.map((l) => (l.name === name ? { ...l, installed: true } : l)));
+    try {
+      // Real `apt-get install -y <packageName>` on the host VPS via the agent (requires an Agent
+      // Token configured under Settings). Only flips to "installed" once the agent confirms success.
+      const res = await apiClient.post<{ success: boolean; output: string }>('/system/packages/install', {
+        packageName,
+      });
+      if (res.success) {
+        setPackages((prev) => prev.map((p) => (p.name === name ? { ...p, installed: true } : p)));
+        setLanguages((prev) => prev.map((l) => (l.name === name ? { ...l, installed: true } : l)));
+      } else {
+        setInstallError(`Install failed for ${name}: ${(res.output || 'unknown error').slice(0, 200)}`);
+        setTimeout(() => setInstallError(null), 5000);
+      }
+    } catch (e: any) {
+      setInstallError(`Install failed for ${name}: ${e?.message || 'agent unreachable'}`);
+      setTimeout(() => setInstallError(null), 5000);
+    } finally {
       setInstallingItem(null);
-    }, 1800);
+    }
   };
 
   const copyInstallCmd = (cmd: string) => {
@@ -131,6 +166,13 @@ export function PackagesPage() {
           </Button>
         </div>
       </div>
+
+      {installError && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span>{installError}</span>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="flex items-center justify-between gap-4">
@@ -195,7 +237,7 @@ export function PackagesPage() {
                       ) : (
                         <Button
                           size="sm"
-                          onClick={() => handleInstall(lang.name)}
+                          onClick={() => handleInstall(lang.name, true)}
                           disabled={installingItem === lang.name}
                           className="h-7 text-[10px] gap-1 bg-cyan-600 hover:bg-cyan-500 font-bold px-2.5"
                         >
@@ -259,7 +301,7 @@ export function PackagesPage() {
                     ) : (
                       <Button
                         size="sm"
-                        onClick={() => handleInstall(pkg.name)}
+                        onClick={() => handleInstall(pkg.name, false)}
                         disabled={installingItem === pkg.name}
                         className="h-7 text-[10px] gap-1 bg-violet-600 hover:bg-violet-500 font-bold px-2.5"
                       >

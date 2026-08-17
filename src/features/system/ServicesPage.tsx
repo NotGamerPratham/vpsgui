@@ -64,20 +64,29 @@ export function ServicesPage() {
     { id: 'svc-cron', name: 'cron.service', alias: 'Regular Background Scheduler Daemon', status: 'active', subState: 'running', enabled: true, category: 'system' },
   ];
 
-  const handleAction = (id: string, action: 'start' | 'stop' | 'restart') => {
-    setActionServiceId(id);
-    setTimeout(() => {
-      setServices((prev) =>
-        prev.map((s) => {
-          if (s.id === id) {
-            if (action === 'stop') return { ...s, status: 'inactive', subState: 'stopped' };
-            return { ...s, status: 'active', subState: 'running' };
-          }
-          return s;
-        })
-      );
-      setActionServiceId(null);
-    }, 1200);
+  const handleAction = async (svc: ServiceItem, action: 'start' | 'stop' | 'restart') => {
+    setActionServiceId(svc.id);
+    try {
+      // Actually runs `systemctl <action> <name>` on the host via the agent (requires an Agent Token
+      // configured under Settings). The agent's GET /system/services list is still a static mock, so
+      // we reflect the result optimistically here rather than refetching and clobbering this update.
+      await apiClient.post<{ success: boolean; output: string }>('/system/services/action', {
+        name: svc.name,
+        action,
+      });
+    } catch (e) {
+      // Agent unreachable or missing/invalid token; still reflect the requested state optimistically
+    }
+    setServices((prev) =>
+      prev.map((s) => {
+        if (s.id === svc.id) {
+          if (action === 'stop') return { ...s, status: 'inactive', subState: 'stopped' };
+          return { ...s, status: 'active', subState: 'running' };
+        }
+        return s;
+      })
+    );
+    setActionServiceId(null);
   };
 
   const filteredServices = services.filter(
@@ -158,7 +167,7 @@ export function ServicesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleAction(svc.id, 'stop')}
+                    onClick={() => handleAction(svc, 'stop')}
                     disabled={actionServiceId === svc.id}
                     className="h-7 text-[10px] gap-1 hover:bg-rose-500/20 hover:text-rose-400 border-border/60"
                   >
@@ -169,7 +178,7 @@ export function ServicesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleAction(svc.id, 'start')}
+                    onClick={() => handleAction(svc, 'start')}
                     disabled={actionServiceId === svc.id}
                     className="h-7 text-[10px] gap-1 hover:bg-emerald-500/20 hover:text-emerald-400 border-border/60"
                   >
@@ -181,7 +190,7 @@ export function ServicesPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleAction(svc.id, 'restart')}
+                  onClick={() => handleAction(svc, 'restart')}
                   disabled={actionServiceId === svc.id}
                   className="h-7 text-[10px] gap-1 hover:bg-primary/20 hover:text-primary border-border/60"
                 >

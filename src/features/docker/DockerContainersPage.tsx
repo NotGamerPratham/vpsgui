@@ -14,6 +14,7 @@ export function DockerContainersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedLogs, setSelectedLogs] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<string | null>(null);
 
   useEffect(() => {
     dockerService.fetchContainers().then((res) => {
@@ -21,6 +22,17 @@ export function DockerContainersPage() {
       setLoading(false);
     });
   }, []);
+
+  const handleContainerAction = async (id: string, action: 'start' | 'stop' | 'restart' | 'remove') => {
+    setActioningId(id);
+    try {
+      await dockerService.controlContainer(id, action);
+    } finally {
+      const refreshed = await dockerService.fetchContainers();
+      setContainers(refreshed);
+      setActioningId(null);
+    }
+  };
 
   const filtered = containers.filter(
     (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.image.toLowerCase().includes(search.toLowerCase())
@@ -107,15 +119,60 @@ export function DockerContainersPage() {
                     {c.cpuPercent}% / {c.memoryUsageMb} MB
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSelectedLogs(`[LOGS FOR ${c.name}]\nStreaming output from /var/run/docker.sock...`)}
-                      className="h-7 w-7 p-0"
-                      title="View Container Logs"
-                    >
-                      <Eye className="h-3.5 w-3.5 text-cyan-400" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {c.state === 'running' ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleContainerAction(c.id, 'stop')}
+                          disabled={actioningId === c.id}
+                          className="h-7 w-7 p-0"
+                          title="Stop Container"
+                        >
+                          <Square className="h-3.5 w-3.5 text-rose-400" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleContainerAction(c.id, 'start')}
+                          disabled={actioningId === c.id}
+                          className="h-7 w-7 p-0"
+                          title="Start Container"
+                        >
+                          <Play className="h-3.5 w-3.5 text-emerald-400" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleContainerAction(c.id, 'restart')}
+                        disabled={actioningId === c.id}
+                        className="h-7 w-7 p-0"
+                        title="Restart Container"
+                      >
+                        <RotateCw className={`h-3.5 w-3.5 text-primary ${actioningId === c.id ? 'animate-spin' : ''}`} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedLogs(`[LOGS FOR ${c.name}]\nStreaming output from /var/run/docker.sock...`)}
+                        className="h-7 w-7 p-0"
+                        title="View Container Logs"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-cyan-400" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleContainerAction(c.id, 'remove')}
+                        disabled={actioningId === c.id}
+                        className="h-7 w-7 p-0"
+                        title="Remove Container"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

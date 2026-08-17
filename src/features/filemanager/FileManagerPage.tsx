@@ -1,36 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { FolderTree, FileText, Folder, Plus, Save, Upload, Search, ChevronRight, Check } from 'lucide-react';
+import { FolderTree, FileText, Folder, Plus, Save, Upload, Search, ChevronRight, ChevronLeft, Check, AlertCircle } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { fileService } from '../../services/fileService';
 import { FileItem } from '../../types/file';
 
+function parentPath(currentPath: string): string {
+  const trimmed = currentPath.replace(/\/+$/, '');
+  const idx = trimmed.lastIndexOf('/');
+  if (idx <= 0) return '/';
+  return trimmed.slice(0, idx);
+}
+
 export function FileManagerPage() {
+  const [currentPath, setCurrentPath] = useState('/etc');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
-    fileService.fetchFiles('/etc').then((res) => {
+    fileService.fetchFiles(currentPath).then((res) => {
       setFiles(res);
-      if (res.length > 0) {
-        setSelectedFile(res[0]);
-        setFileContent(res[0].content || '');
-      }
+      const firstFile = res.find((item) => item.type === 'file') || null;
+      setSelectedFile(firstFile);
+      setFileContent(firstFile?.content || '');
     });
-  }, []);
+  }, [currentPath]);
 
   const handleSelectFile = (file: FileItem) => {
-    if (file.type === 'file') {
-      setSelectedFile(file);
-      setFileContent(file.content || '');
+    if (file.type === 'directory') {
+      setCurrentPath(file.path);
+      return;
     }
+    setSelectedFile(file);
+    setFileContent(file.content || '');
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    if (!selectedFile) return;
+    const result = await fileService.writeFile(selectedFile.path, fileContent);
+    setSaveState(result.success ? 'saved' : 'error');
+    setTimeout(() => setSaveState('idle'), 2000);
   };
 
   return (
@@ -52,9 +63,15 @@ export function FileManagerPage() {
             <Upload className="h-3.5 w-3.5" />
             <span>Upload File</span>
           </Button>
-          <Button size="sm" onClick={handleSave} className="gap-1.5 text-xs bg-primary">
-            {saved ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Save className="h-3.5 w-3.5" />}
-            <span>{saved ? 'Saved!' : 'Save File'}</span>
+          <Button size="sm" onClick={handleSave} disabled={!selectedFile} className="gap-1.5 text-xs bg-primary">
+            {saveState === 'saved' ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : saveState === 'error' ? (
+              <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            <span>{saveState === 'saved' ? 'Saved!' : saveState === 'error' ? 'Save Failed' : 'Save File'}</span>
           </Button>
         </div>
       </div>
@@ -63,11 +80,20 @@ export function FileManagerPage() {
         {/* Left Directory Tree Panel */}
         <Card className="lg:col-span-1 bg-card/70 border-border/70 p-4 overflow-y-auto flex flex-col space-y-2">
           <div className="flex items-center justify-between pb-2 border-b border-border text-xs font-bold text-foreground">
-            <span>EXPLORER (/etc)</span>
-            <Plus className="h-3.5 w-3.5 text-muted-foreground cursor-pointer hover:text-foreground" />
+            <span className="truncate" title={currentPath}>EXPLORER ({currentPath})</span>
+            <Plus className="h-3.5 w-3.5 text-muted-foreground cursor-pointer hover:text-foreground shrink-0" />
           </div>
 
           <div className="space-y-1 font-mono text-xs">
+            {currentPath !== '/' && (
+              <button
+                onClick={() => setCurrentPath(parentPath(currentPath))}
+                className="flex w-full items-center space-x-2 rounded px-2 py-1 text-left text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+              >
+                <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">.. (up)</span>
+              </button>
+            )}
             {files.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">No files in directory</p>
             ) : (

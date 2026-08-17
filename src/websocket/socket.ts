@@ -9,7 +9,7 @@ const getWsUrl = (): string => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws`;
   }
-  return 'ws://localhost:8080/ws';
+  return 'ws://localhost:46509/ws';
 };
 
 class TelemetryWebSocket {

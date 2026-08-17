@@ -18,6 +18,15 @@ class FileService {
       return [];
     }
   }
+
+  // Persist edited file content back to the host VPS via the agent
+  async writeFile(path: string, content: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; error?: string }>('/files/write', { path, content });
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to save file' };
+    }
+  }
 }
 
 export const fileService = new FileService();

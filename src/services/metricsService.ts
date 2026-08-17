@@ -9,13 +9,13 @@ import { TelemetryPoint, ProcessItem } from '../types/monitoring';
 import { apiClient } from '../api/client';
 
 class MetricsService {
-  // Fetch real-time host CPU & RAM telemetry stream :)
-  async fetchLiveTelemetry(): Promise<TelemetryPoint[]> {
+  // Fetch a single real-time host CPU/RAM/disk telemetry snapshot; callers build their own rolling window :)
+  async fetchLiveTelemetry(): Promise<TelemetryPoint | null> {
     try {
-      return await apiClient.get<TelemetryPoint[]>('/system/telemetry');
+      return await apiClient.get<TelemetryPoint>('/system/telemetry');
     } catch (e) {
-      // If endpoint is unreachable, return empty telemetry array :(
-      return [];
+      // If endpoint is unreachable, return null :(
+      return null;
     }
   }
 

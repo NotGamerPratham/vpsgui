@@ -17,7 +17,6 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useServerStore } from '../../store/useServerStore';
 import { useUIStore } from '../../store/useUIStore';
-import { telemetrySocket } from '../../websocket/socket';
 import { globalEventBus } from '../../event-bus';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -49,7 +48,6 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchNodesFromApi();
-    telemetrySocket.connect();
 
     const unsubscribe = globalEventBus.on('telemetry_tick', (data: any) => {
       if (!data) return;
@@ -304,7 +302,7 @@ export function DashboardPage() {
             <div className="flex items-center space-x-2">
               <Badge variant="outline" className="font-mono text-[10px] gap-1.5 bg-primary/10 border-primary/30 text-primary">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Live WebSocket
+                Live Agent Telemetry
               </Badge>
             </div>
           </CardHeader>
@@ -316,7 +314,7 @@ export function DashboardPage() {
                 </motion.div>
                 <p className="text-xs font-bold text-foreground">Listening for Live Host VPS Telemetry Stream</p>
                 <p className="text-[11px] text-muted-foreground max-w-sm leading-relaxed">
-                  WebSocket telemetry socket is listening on <code className="text-primary font-mono font-bold">/ws</code>. Metrics will animate automatically.
+                  Polling <code className="text-primary font-mono font-bold">/api/v1/system/telemetry</code> every few seconds. Metrics will animate automatically once data arrives.
                 </p>
               </div>
             ) : (

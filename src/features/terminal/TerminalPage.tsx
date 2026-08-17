@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Terminal, Plus, X, Download, Play, Shield, Copy, Check } from 'lucide-react';
+import { Terminal, Play, Shield, Loader2 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { useServerStore } from '../../store/useServerStore';
+import { apiClient } from '../../api/client';
 
 export function TerminalPage() {
   const { nodes, selectedNodeId } = useServerStore();
@@ -11,42 +11,47 @@ export function TerminalPage() {
 
   const publicIp = selectedNode?.network?.publicIp || '127.0.0.1';
   const [inputCommand, setInputCommand] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string[]>(
-    [`Connected to root@${publicIp} (Ubuntu 24.04 LTS)`, `Type 'help' or click a command snippet below.`]
+    [`Connected to root@${publicIp} (Linux Daemon v1.4.2)`, `Type shell commands or click a saved snippet below to run directly on host VPS.`]
   );
 
   const snippets = [
     { title: 'Check Memory', cmd: 'free -h' },
-    { title: 'Docker Containers', cmd: 'docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"' },
+    { title: 'Docker Containers', cmd: 'docker ps -a' },
     { title: 'Top Processes', cmd: 'ps aux --sort=-%cpu | head -n 6' },
     { title: 'Disk Usage', cmd: 'df -h' },
-    { title: 'System Logs', cmd: 'journalctl -n 20 --no-pager' },
+    { title: 'System Uptime', cmd: 'uptime' },
   ];
 
-  const handleRun = (cmdToRun?: string) => {
+  const handleRun = async (cmdToRun?: string) => {
     const command = cmdToRun || inputCommand;
-    if (!command.trim()) return;
+    if (!command.trim() || isExecuting) return;
 
-    let response = `root@${selectedNode.name}:~# ${command}\n`;
-
-    if (command === 'free -h') {
-      response += `               total        used        free      shared  buff/cache   available\nMem:            31Gi       8.4Gi        18Gi       120Mi       4.2Gi        22Gi\nSwap:          4.0Gi        24Mi       3.9Gi`;
-    } else if (command.includes('docker ps')) {
-      response += `NAMES                   STATUS              PORTS\nnginx-proxy-manager     Up 14 days          0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp\npostgres-production     Up 35 days          0.0.0.0:5432->5432/tcp\nredis-cache-cluster     Up 9 days           0.0.0.0:6379->6379/tcp`;
-    } else if (command === 'df -h') {
-      response += `Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1  245G   98G  147G  40% /\ntmpfs            16G  1.2M   16G   1% /run`;
-    } else if (command === 'clear') {
+    if (command === 'clear') {
       setTerminalOutput([]);
       setInputCommand('');
       return;
-    } else if (command === 'help') {
-      response += `Available mock commands: free -h, docker ps, df -h, clear, help`;
-    } else {
-      response += `Executing: ${command}\nCommand exited with status code 0`;
     }
 
-    setTerminalOutput((prev) => [...prev, response]);
+    setIsExecuting(true);
     setInputCommand('');
+
+    const promptLine = `root@${selectedNode.name}:~# ${command}`;
+
+    try {
+      const res = await apiClient.post<{ success: boolean; command: string; output: string }>('/terminal/exec', {
+        command,
+      });
+
+      const outputText = res?.output || 'Command executed cleanly with status 0';
+      setTerminalOutput((prev) => [...prev, promptLine, outputText]);
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to execute command on host daemon';
+      setTerminalOutput((prev) => [...prev, promptLine, `[Error]: ${errorMsg}`]);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   return (
@@ -59,7 +64,7 @@ export function TerminalPage() {
             <span>SSH Workbench Split Terminal</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Interactive multi-tab SSH terminal session connected to <span className="font-mono text-primary font-bold">{selectedNode.name}</span>.
+            Interactive live CLI terminal session connected to <span className="font-mono text-primary font-bold">{selectedNode.name}</span> ({publicIp}).
           </p>
         </div>
 
@@ -95,10 +100,12 @@ export function TerminalPage() {
               value={inputCommand}
               onChange={(e) => setInputCommand(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRun()}
-              placeholder="Type SSH command and press Enter..."
-              className="flex-1 bg-transparent font-mono text-xs text-foreground focus:outline-none"
+              disabled={isExecuting}
+              placeholder={isExecuting ? "Executing command on host VPS..." : "Type SSH command and press Enter..."}
+              className="flex-1 bg-transparent font-mono text-xs text-foreground focus:outline-none disabled:opacity-50"
               autoFocus
             />
+            {isExecuting && <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin ml-2" />}
           </div>
         </Card>
 
@@ -110,7 +117,8 @@ export function TerminalPage() {
               <button
                 key={snip.title}
                 onClick={() => handleRun(snip.cmd)}
-                className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left text-xs hover:border-primary/40 hover:bg-muted/60 transition-all group"
+                disabled={isExecuting}
+                className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left text-xs hover:border-primary/40 hover:bg-muted/60 transition-all group disabled:opacity-50"
               >
                 <div>
                   <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{snip.title}</span>

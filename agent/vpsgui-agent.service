@@ -9,7 +9,9 @@ WorkingDirectory=/var/www/vpsgui/agent
 ExecStart=/usr/bin/node /var/www/vpsgui/agent/server.js
 Restart=always
 RestartSec=3s
-Environment=PORT=8080
+Environment=PORT=46509
+# Set a fixed shared secret here (or let the agent auto-generate/persist one to agent/.agent-token).
+# Environment=AGENT_TOKEN=replace-with-a-long-random-value
 
 [Install]
 WantedBy=multi-user.target
