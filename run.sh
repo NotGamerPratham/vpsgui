@@ -45,8 +45,18 @@ rm -rf "${WEB_ROOT:?}/"*
 cp -r "${SCRIPT_DIR}/dist/." "${WEB_ROOT}/"
 
 # 5. Agent (listens on 127.0.0.1:46509)
+#
+# Runs BEFORE the frontend is considered done. If the agent install fails, the deployment must fail
+# loudly rather than leaving a freshly built UI talking to a stale daemon — the symptom of that is
+# new pages calling endpoints the old agent does not have, which looks like a frontend bug.
 echo "[VPSGUI] Installing the VPSGUI telemetry agent..."
-bash "${SCRIPT_DIR}/agent/install.sh"
+if ! bash "${SCRIPT_DIR}/agent/install.sh"; then
+  echo "" >&2
+  echo "[VPSGUI] AGENT INSTALL FAILED — the web assets were published but the agent was NOT updated." >&2
+  echo "[VPSGUI] The UI will call endpoints the running agent does not implement (404) and writes" >&2
+  echo "[VPSGUI] may be rejected (403). Resolve the above error and re-run before using this deploy." >&2
+  exit 1
+fi
 
 # 6. nginx
 if command -v nginx >/dev/null 2>&1; then

@@ -47,7 +47,11 @@ echo "Copying agent to ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 install -m 0644 "${SCRIPT_DIR}/server.js" "${INSTALL_DIR}/server.js"
 install -m 0644 "${SCRIPT_DIR}/package.json" "${INSTALL_DIR}/package.json"
-[ -f "${SCRIPT_DIR}/server.cjs" ] && install -m 0644 "${SCRIPT_DIR}/server.cjs" "${INSTALL_DIR}/server.cjs"
+# A bare `[ -f x ] && cmd` as a top-level statement aborts the whole script under `set -e` when the
+# test fails, silently skipping everything below it — including the service restart.
+if [ -f "${SCRIPT_DIR}/server.cjs" ]; then
+  install -m 0644 "${SCRIPT_DIR}/server.cjs" "${INSTALL_DIR}/server.cjs"
+fi
 
 # Reuse an existing token across upgrades so operators do not have to re-paste it into the web UI.
 if [ -f "${SERVICE_FILE}" ] && grep -q '^Environment=AGENT_TOKEN=' "${SERVICE_FILE}"; then
@@ -114,11 +118,38 @@ systemctl restart vpsgui-agent
 sleep 1
 if ! systemctl is-active --quiet vpsgui-agent; then
   echo "Error: vpsgui-agent failed to start. Inspect: journalctl -u vpsgui-agent -n 50" >&2
+  # A stale process squatting on the port is a common cause: systemd's copy cannot bind and
+  # crash-loops while the old one keeps answering with outdated code.
+  echo "" >&2
+  echo "If something else is already bound to port 46509, stop it first:" >&2
+  ss -tlnp 2>/dev/null | grep 46509 >&2 || true
+  exit 1
+fi
+
+# Confirm the daemon now answering on the port is the build we just installed. Restarting the unit
+# is not proof: a manually started `node agent/server.js` from an earlier session keeps the port and
+# serves old code, which looks identical from the outside except that new endpoints still 404.
+RUNNING_VERSION="$(
+  curl -fsS -H "Authorization: Bearer ${AGENT_TOKEN}" \
+    "http://127.0.0.1:46509/api/v1/agent/info" 2>/dev/null |
+    sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+)"
+
+if [ -z "${RUNNING_VERSION}" ]; then
+  echo "Error: the agent is running but did not answer /api/v1/agent/info." >&2
+  echo "Something older is likely bound to port 46509. Check: ss -tlnp | grep 46509" >&2
+  exit 1
+fi
+
+if [ "${RUNNING_VERSION}" != "${AGENT_VERSION}" ]; then
+  echo "Error: port 46509 is served by agent v${RUNNING_VERSION}, but v${AGENT_VERSION} was just installed." >&2
+  echo "An old process is holding the port. Find and stop it, then re-run this installer:" >&2
+  ss -tlnp 2>/dev/null | grep 46509 >&2 || true
   exit 1
 fi
 
 echo ""
-echo "VPSGUI Agent v${AGENT_VERSION} installed and running on 127.0.0.1:46509."
+echo "VPSGUI Agent v${AGENT_VERSION} installed and verified serving on 127.0.0.1:46509."
 echo ""
 echo "Agent Token (paste into the VPSGUI web UI under Settings -> Agent Token):"
 echo "  ${AGENT_TOKEN}"
