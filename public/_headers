@@ -1,22 +1,26 @@
-# Security & Performance Headers for VPSGUI Web Application
+# Security & Performance Headers for VPSGUI (Netlify / Cloudflare Pages format).
+#
+# Self-hosted deployments are served by deploy/nginx.conf instead — keep the two in sync.
+# Rules are applied most-specific-first, so /assets/* and /service-worker.js must precede /*.
 
-/*
-  # Security Headers
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  X-XSS-Protection: 1; mode=block
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: accelerometer=(), camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' ws: wss: https:; frame-ancestors 'none';
-
-# Static Assets Cache Control
+# Hashed build assets are immutable.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Service Worker - Never Cache
+# The service worker must never be cached, or clients pin an old app shell forever.
 /service-worker.js
   Cache-Control: no-cache, no-store, must-revalidate
 
-# SPA Routing Fallback
+# API responses carry live host telemetry, process lists, and file contents — never cache them.
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate, private
+
 /*
-  X-VPSGUI-Version: 1.0.0
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), microphone=(), geolocation=()
+  # connect-src permits arbitrary http/https origins because the Diagnostics page probes
+  # user-entered hosts by design. Tighten to the three named APIs if that page is unused.
+  # X-XSS-Protection is deliberately omitted: it is deprecated and can introduce vulnerabilities.
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

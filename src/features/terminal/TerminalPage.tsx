@@ -1,20 +1,33 @@
-import React, { useState } from 'react';
-import { Terminal, Play, Shield, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Terminal, Play, Loader2 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { useServerStore } from '../../store/useServerStore';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
+
+/** Command execution timeout must exceed the agent's own 10s cap so the agent's message wins. */
+const EXEC_TIMEOUT_MS = 20000;
+const MAX_OUTPUT_LINES = 2000;
 
 export function TerminalPage() {
   const { nodes, selectedNodeId } = useServerStore();
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0] || null;
+  const hostLabel = selectedNode?.name || 'host';
 
-  const publicIp = selectedNode?.network?.publicIp || '127.0.0.1';
   const [inputCommand, setInputCommand] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [terminalOutput, setTerminalOutput] = useState<string[]>(
-    [`Connected to root@${publicIp} (Linux Daemon v1.4.2)`, `Type shell commands or click a saved snippet below to run directly on host VPS.`]
-  );
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([
+    'VPSGUI terminal. Commands run on the host via the vpsgui-agent daemon.',
+    'Requires a valid Agent Token (Settings -> Agent Token). Type "clear" to reset.',
+  ]);
+  const outputEndRef = useRef<HTMLDivElement>(null);
+
+  // Keep the newest output in view; long command output used to scroll off-screen unnoticed.
+  useEffect(() => {
+    outputEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [terminalOutput]);
 
   const snippets = [
     { title: 'Check Memory', cmd: 'free -h' },
@@ -24,33 +37,73 @@ export function TerminalPage() {
     { title: 'System Uptime', cmd: 'uptime' },
   ];
 
+  const appendOutput = (lines: string[]) =>
+    setTerminalOutput((prev) => [...prev, ...lines].slice(-MAX_OUTPUT_LINES));
+
   const handleRun = async (cmdToRun?: string) => {
-    const command = cmdToRun || inputCommand;
-    if (!command.trim() || isExecuting) return;
+    const command = (cmdToRun ?? inputCommand).trim();
+    if (!command || isExecuting) return;
+
+    setHistory((prev) => (prev[prev.length - 1] === command ? prev : [...prev, command]).slice(-100));
+    setHistoryIndex(-1);
+    setInputCommand('');
 
     if (command === 'clear') {
       setTerminalOutput([]);
-      setInputCommand('');
       return;
     }
 
     setIsExecuting(true);
-    setInputCommand('');
-
-    const promptLine = `root@${selectedNode.name}:~# ${command}`;
+    const promptLine = `root@${hostLabel}:~# ${command}`;
 
     try {
-      const res = await apiClient.post<{ success: boolean; command: string; output: string }>('/terminal/exec', {
-        command,
-      });
-
-      const outputText = res?.output || 'Command executed cleanly with status 0';
-      setTerminalOutput((prev) => [...prev, promptLine, outputText]);
-    } catch (err: any) {
-      const errorMsg = err?.message || 'Failed to execute command on host daemon';
-      setTerminalOutput((prev) => [...prev, promptLine, `[Error]: ${errorMsg}`]);
+      const res = await apiClient.post<{ success: boolean; command: string; output: string }>(
+        '/terminal/exec',
+        { command },
+        EXEC_TIMEOUT_MS
+      );
+      // A command that exits non-zero is reported as a failure rather than being dressed up as
+      // "executed cleanly with status 0".
+      const output = res?.output?.length ? res.output : res?.success ? '(no output)' : '(command failed with no output)';
+      appendOutput([promptLine, res?.success ? output : `[exit != 0] ${output}`]);
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.status === 401
+          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          : err instanceof Error
+          ? err.message
+          : 'Failed to execute command on host daemon';
+      appendOutput([promptLine, `[Error]: ${message}`]);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  /** Up/Down recall previously entered commands, as any real shell does. */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleRun();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (history.length === 0) return;
+      const next = historyIndex < 0 ? history.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(next);
+      setInputCommand(history[next]);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex < 0) return;
+      const next = historyIndex + 1;
+      if (next >= history.length) {
+        setHistoryIndex(-1);
+        setInputCommand('');
+      } else {
+        setHistoryIndex(next);
+        setInputCommand(history[next]);
+      }
     }
   };
 
@@ -61,15 +114,19 @@ export function TerminalPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Terminal className="h-5 w-5 text-primary" />
-            <span>SSH Workbench Split Terminal</span>
+            <span>Host Terminal</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Interactive live CLI terminal session connected to <span className="font-mono text-primary font-bold">{selectedNode.name}</span> ({publicIp}).
+            Commands execute on <span className="font-mono text-primary font-bold">{hostLabel}</span> through the
+            vpsgui-agent HTTP daemon. This is not an interactive SSH session — each command runs
+            independently, so shell state (cd, exports) does not persist between commands.
           </p>
         </div>
 
-        <Badge variant="success" className="font-mono text-xs py-1 px-3">
-          SSH Active (AES256-GCM)
+        {/* Reflects the actual transport. The previous badge claimed an "SSH Active (AES256-GCM)"
+            session, which never existed: requests go over HTTP(S) to the agent. */}
+        <Badge variant="outline" className="font-mono text-xs py-1 px-3">
+          Agent HTTP transport
         </Badge>
       </div>
 
@@ -79,31 +136,36 @@ export function TerminalPage() {
           {/* Terminal Tab Header */}
           <div className="flex items-center justify-between border-b border-border bg-slate-900 px-4 py-2 text-xs">
             <div className="flex items-center space-x-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono text-foreground font-bold">root@{selectedNode.name}</span>
+              <span className={`h-2.5 w-2.5 rounded-full ${isExecuting ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+              <span className="font-mono text-foreground font-bold">root@{hostLabel}</span>
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground">Port {selectedNode.network.sshPort}</span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {isExecuting ? 'running' : 'idle'}
+            </span>
           </div>
 
           {/* Terminal Console Output */}
           <div className="flex-1 overflow-y-auto p-4 font-mono text-xs text-emerald-400 space-y-2 leading-relaxed">
             {terminalOutput.map((line, idx) => (
-              <div key={idx} className="whitespace-pre-wrap">{line}</div>
+              <div key={idx} className="whitespace-pre-wrap break-words">{line}</div>
             ))}
+            <div ref={outputEndRef} />
           </div>
 
           {/* Terminal Input Line */}
           <div className="flex items-center border-t border-border bg-slate-900 px-4 py-2">
-            <span className="font-mono text-xs text-emerald-400 mr-2 shrink-0">root@{selectedNode.name}:~#</span>
+            <span className="font-mono text-xs text-emerald-400 mr-2 shrink-0">root@{hostLabel}:~#</span>
             <input
               type="text"
               value={inputCommand}
               onChange={(e) => setInputCommand(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRun()}
+              onKeyDown={handleKeyDown}
               disabled={isExecuting}
-              placeholder={isExecuting ? "Executing command on host VPS..." : "Type SSH command and press Enter..."}
+              placeholder={isExecuting ? 'Executing command on host VPS...' : 'Type a command and press Enter (Up/Down for history)...'}
               className="flex-1 bg-transparent font-mono text-xs text-foreground focus:outline-none disabled:opacity-50"
               autoFocus
+              autoComplete="off"
+              spellCheck={false}
             />
             {isExecuting && <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin ml-2" />}
           </div>

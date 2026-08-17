@@ -1,17 +1,52 @@
+# Reference systemd unit for the VPSGUI agent.
+#
+# `bash agent/install.sh` generates this file with a real token and the correct node path; this copy
+# exists for operators who prefer to install by hand. Adjust the paths, set AGENT_TOKEN, then:
+#   install -m 0600 agent/vpsgui-agent.service /etc/systemd/system/vpsgui-agent.service
+#   systemctl daemon-reload && systemctl enable --now vpsgui-agent
+#
+# The unit file must be mode 0600: it embeds a token that grants root-equivalent control of the host.
+
 [Unit]
 Description=VPSGUI Linux Infrastructure Telemetry Agent
+Documentation=https://github.com/NotGamerPratham/vpsgui
 After=network.target docker.service
 
 [Service]
 Type=simple
+# The agent inspects systemd units, installs apt packages, and executes shell commands, so it needs
+# root. Everything it exposes is gated behind AGENT_TOKEN — treat that token as a root password.
 User=root
-WorkingDirectory=/var/www/vpsgui/agent
-ExecStart=/usr/bin/node /var/www/vpsgui/agent/server.js
+WorkingDirectory=/opt/vpsgui/agent
+ExecStart=/usr/bin/node /opt/vpsgui/agent/server.js
 Restart=always
 RestartSec=3s
+
 Environment=PORT=46509
-# Set a fixed shared secret here (or let the agent auto-generate/persist one to agent/.agent-token).
+# Loopback only. The bundled nginx config proxies to 127.0.0.1:46509 and terminates TLS.
+# Change to 0.0.0.0 ONLY if you front the agent with TLS and a firewall.
+Environment=AGENT_HOST=127.0.0.1
+# REQUIRED: a random secret of at least 16 characters (the agent refuses to start with less).
+# Leave unset to have the agent generate one and persist it to /opt/vpsgui/agent/.agent-token (0600).
 # Environment=AGENT_TOKEN=replace-with-a-long-random-value
+# Directories the file manager may browse. Narrow this list to reduce blast radius.
+Environment=AGENT_FILE_ROOTS=/etc,/var/www,/var/log,/home,/opt,/srv
+# Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
+Environment=AGENT_ENABLE_SHELL=1
+# Comma-separated browser origins allowed to call the agent cross-origin. Leave unset when the UI
+# is served same-origin through nginx, which is the supported deployment.
+# Environment=AGENT_ALLOWED_ORIGINS=https://vps.example.com
+
+# Hardening. The agent still runs as root, but these limit what a compromise can reach.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Archive, Plus, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Archive, Plus, RotateCcw } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';

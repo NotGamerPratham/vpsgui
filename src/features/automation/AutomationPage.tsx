@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Workflow, Plus, Play, Clock, CheckCircle2, Zap, AlertCircle } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Workflow, Plus, Play, Clock, CheckCircle2 } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { apiClient } from '../../api/client';

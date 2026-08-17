@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Plus, Trash2, ShieldCheck, Copy, Check } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Key, Plus, Trash2 } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { apiClient } from '../../api/client';

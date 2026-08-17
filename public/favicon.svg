@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="VPSGUI">
+  <rect width="32" height="32" rx="7" fill="#0b1120"/>
+  <rect x="1" y="1" width="30" height="30" rx="6" fill="none" stroke="#38bdf8" stroke-opacity="0.35"/>
+  <!-- Stacked server nodes -->
+  <rect x="7" y="7.5" width="18" height="5.5" rx="1.5" fill="none" stroke="#38bdf8" stroke-width="1.6"/>
+  <rect x="7" y="19" width="18" height="5.5" rx="1.5" fill="none" stroke="#38bdf8" stroke-width="1.6"/>
+  <circle cx="10.5" cy="10.25" r="1.05" fill="#4ade80"/>
+  <circle cx="10.5" cy="21.75" r="1.05" fill="#4ade80"/>
+  <!-- Activity bolt linking the nodes -->
+  <path d="M18.5 13.2 L14.6 17.4 H17.4 L15.6 20.4" fill="none" stroke="#facc15" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Radio, ShieldCheck, Activity } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Globe, Radio } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
 import { apiClient } from '../../api/client';

@@ -19,12 +19,16 @@ interface ServerState {
   addNode: (payload: AddNodePayload) => Promise<NodeSpec>;
   verifyNodeConnection: (id: string) => Promise<boolean>;
   removeNode: (id: string) => void;
-  rebootNode: (id: string) => void;
+  rebootNode: (id: string) => Promise<{ success: boolean; message: string }>;
 }
 
+// Read the persisted inventory once. Calling getNodes() per field re-parsed localStorage and could
+// re-persist the defaults twice on first load.
+const initialNodes = serverService.getNodes();
+
 export const useServerStore = create<ServerState>((set, get) => ({
-  nodes: serverService.getNodes(),
-  selectedNodeId: serverService.getNodes()[0]?.id || 'node-host-primary',
+  nodes: initialNodes,
+  selectedNodeId: initialNodes[0]?.id ?? null,
   searchQuery: '',
   selectedTypeFilter: null,
   selectedStatusFilter: null,
@@ -53,14 +57,14 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
   },
 
-  addNode: async (payload) => {
-    const newNode = await serverService.createNode(payload);
-    set((state) => ({
-      nodes: [newNode, ...state.nodes],
-      selectedNodeId: newNode.id,
-    }));
-    return newNode;
-  },
+  /**
+   * Not supported — see serverService.createNode.
+   *
+   * This used to optimistically prepend the returned node, but saveNodes() truncates the inventory
+   * to one entry, so the "added" node disappeared on the next load. It now surfaces the real
+   * limitation instead of half-working.
+   */
+  addNode: async (payload) => serverService.createNode(payload),
 
   verifyNodeConnection: async (id) => {
     const updated = await serverService.verifyNodeConnection(id);
@@ -81,18 +85,24 @@ export const useServerStore = create<ServerState>((set, get) => ({
       };
     }),
 
-  rebootNode: (id) =>
-    set((state) => {
-      const updatedNodes = state.nodes.map((node) =>
-        node.id === id
-          ? {
-              ...node,
-              status: 'maintenance' as const,
-              os: { ...node.os, uptimeSeconds: 5 },
-            }
-          : node
-      );
-      serverService.saveNodes(updatedNodes);
-      return { nodes: updatedNodes };
-    }),
+  /**
+   * Reboot the host for real, via the agent.
+   *
+   * This previously only rewrote local state — status to 'maintenance', uptime to 5 seconds — so
+   * the UI reported a reboot that never happened and the fake uptime persisted to localStorage.
+   * Callers must confirm with the user first; this issues an actual `systemctl reboot`.
+   */
+  rebootNode: async (id) => {
+    const node = get().nodes.find((n) => n.id === id);
+    if (!node) return { success: false, message: 'Unknown node' };
+
+    const result = await serverService.rebootNode();
+    if (result.success) {
+      // The host is going down; mark it so until the next successful telemetry poll.
+      set((state) => ({
+        nodes: state.nodes.map((n) => (n.id === id ? { ...n, status: 'maintenance' as const } : n)),
+      }));
+    }
+    return result;
+  },
 }));

@@ -1,4 +1,13 @@
-version: '3.8'
+# VPSGUI web UI.
+#
+# The vpsgui-agent daemon is NOT containerised here: it exists to observe and control the host
+# (systemd units, apt, the process table, host filesystem), which a container cannot meaningfully
+# do. Install it on the host with `bash agent/install.sh` and run this compose file for the web UI.
+#
+# The previous version of this file referenced `image: vpsgui/backend:latest` — an image that does
+# not exist and was never published — on port 8080, while the real agent listens on 46509. It also
+# passed VITE_* values as runtime `environment:` entries, which Vite ignores because it inlines
+# them at build time.
 
 services:
   vpsgui-web:
@@ -6,22 +15,27 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: vpsgui_web
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - VITE_API_BASE_URL=http://vpsgui-backend:8080/api/v1
-      - VITE_WS_URL=ws://vpsgui-backend:8080/ws
-    depends_on:
-      - vpsgui-backend
+    restart: unless-stopped
 
-  vpsgui-backend:
-    image: vpsgui/backend:latest
-    container_name: vpsgui_backend
-    restart: always
-    ports:
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/vpsgui:/etc/vpsgui
+    # nginx.conf proxies /api/v1/ to 127.0.0.1:46509. Host networking makes that loopback address
+    # the host's, so the container reaches the agent running on the host.
+    # On Docker Desktop (macOS/Windows) host networking is limited; use the `ports` + `extra_hosts`
+    # variant below instead and change nginx.conf's proxy_pass to http://host.docker.internal:46509.
+    network_mode: host
+
+    # --- Alternative for Docker Desktop -------------------------------------
+    # network_mode is mutually exclusive with ports/extra_hosts; use one block or the other.
+    # ports:
+    #   - "80:80"
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    # nginx needs to bind port 80 and write its own temp dirs; it drops to the `nginx` user itself.
+    security_opt:
+      - no-new-privileges:true

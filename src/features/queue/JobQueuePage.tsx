@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ListTodo, RotateCw, CheckCircle2, Clock } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { ListTodo } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';

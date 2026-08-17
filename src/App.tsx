@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LinuxOnlyGuard } from './components/common/LinuxOnlyGuard';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { MainLayout } from './layouts/MainLayout';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -40,19 +40,11 @@ import { LandingPage } from './features/landing/LandingPage';
 import { PackagesPage } from './features/system/PackagesPage';
 import { ServicesPage } from './features/system/ServicesPage';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
-
+// The QueryClient lives in main.tsx. A second provider here shadowed it with a conflicting config,
+// so components resolved against a different cache than the one the app was configured with.
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <LinuxOnlyGuard>
+    <LinuxOnlyGuard>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -98,10 +90,12 @@ export function App() {
                 <Route path="/docs" element={<DocsPage />} />
               </Route>
             </Route>
+
+            {/* Catch-all: unknown URLs previously rendered a blank page. */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
-      </LinuxOnlyGuard>
-    </QueryClientProvider>
+    </LinuxOnlyGuard>
   );
 }
 

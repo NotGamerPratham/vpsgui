@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Bell, AlertTriangle, CheckCircle2, Info, ShieldAlert, Cpu, Trash2 } from 'lucide-react';
+import { X, Bell, AlertTriangle, CheckCircle2, Info, ShieldAlert, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { useNotificationStore } from '../../store/useNotificationStore';
 import { Button } from '../ui/button';
@@ -68,7 +68,9 @@ export function NotificationsDrawer() {
                       <Icon className={`h-4 w-4 ${iconColor}`} />
                       <span className="font-semibold text-xs text-foreground">{n.title}</span>
                     </div>
-                    <span className="text-[10px] font-mono text-muted-foreground">{n.timestamp}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground" title={n.timestamp}>
+                      {new Date(n.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{n.message}</p>
                 </div>

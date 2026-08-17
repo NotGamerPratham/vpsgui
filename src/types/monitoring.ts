@@ -8,18 +8,38 @@ export interface TelemetryPoint {
   netTxKbps: number;
   iowaitPercent: number;
   gpuPercent?: number;
-  tempC?: number;
-  powerWatts?: number;
+  /** null when the host exposes no thermal zone — the agent reports null rather than a fake 0. */
+  tempC?: number | null;
+  /** null: no power telemetry source is implemented. */
+  powerWatts?: number | null;
+
+  // Host facts the agent bundles with each sample.
+  cpuCores?: number;
+  cpuModel?: string;
+  memoryTotalBytes?: number;
+  memoryUsedBytes?: number;
+  memoryFreeBytes?: number;
+  swapTotalBytes?: number;
+  diskTotalBytes?: number;
+  diskUsedBytes?: number;
+  loadAverage?: number[];
+  uptimeSeconds?: number;
+  osName?: string;
+  osPlatform?: string;
+  osArch?: string;
+  hostname?: string;
 }
 
 export interface ProcessItem {
   pid: number;
   user: string;
-  cpuPercent: number;
+  /** null on Windows: tasklist does not report per-process CPU. */
+  cpuPercent: number | null;
   memoryPercent: number;
   memoryMb: number;
   command: string;
-  threads: number;
+  /** null when the platform does not report a thread count. */
+  threads: number | null;
   state: string;
   ppid?: number;
 }

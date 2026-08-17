@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Download, Star, Search, Check } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Box, Download, Star, Search } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';

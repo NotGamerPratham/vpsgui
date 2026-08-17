@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, GitBranch, CheckCircle2, RotateCw } from 'lucide-react';
+import { Layers, GitBranch } from 'lucide-react';
 import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
+
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
 import { apiClient } from '../../api/client';

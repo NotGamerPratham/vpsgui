@@ -1,5 +1,6 @@
 export type NodeType = 'linux' | 'windows' | 'docker_host' | 'vm' | 'k8s_cluster' | 'bare_metal' | 'raspberry_pi' | 'nas' | 'edge';
-export type NodeStatus = 'online' | 'offline' | 'degraded' | 'maintenance' | 'provisioning';
+/** 'unknown' covers the window before the agent has answered — it is not a claim about the host. */
+export type NodeStatus = 'online' | 'offline' | 'degraded' | 'maintenance' | 'provisioning' | 'unknown';
 
 export interface NodeHardware {
   cpuCores: number;
@@ -7,14 +8,20 @@ export interface NodeHardware {
   ramGb: number;
   swapGb: number;
   diskGb: number;
-  diskType: 'NVMe' | 'SSD' | 'HDD';
+  /** '' when undetermined. The agent cannot identify the physical medium, so it does not guess. */
+  diskType: 'NVMe' | 'SSD' | 'HDD' | '';
   architecture: string;
   gpus?: { model: string; memoryGb: number; usagePercent: number; tempC: number }[];
 }
 
 export interface NodeOS {
   name: string;
-  family: 'ubuntu' | 'debian' | 'centos' | 'alpine' | 'arch' | 'windows' | 'custom';
+  /**
+   * Raw platform identifier as reported by the host (e.g. 'linux', 'win32', 'darwin'), or '' when
+   * unknown. This was a closed enum of distro names, which the agent has no way to determine —
+   * it reports the platform, not the distribution.
+   */
+  family: string;
   version: string;
   kernel: string;
   uptimeSeconds: number;
@@ -48,7 +55,8 @@ export interface NodeSpec {
   os: NodeOS;
   network: NodeNetwork;
   agentVersion: string;
-  agentStatus: 'healthy' | 'outdated' | 'unreachable';
+  /** 'unknown' before the agent has been reached. */
+  agentStatus: 'healthy' | 'outdated' | 'unreachable' | 'unknown';
   lastHeartbeat: string;
   isFavorite: boolean;
   createdAt: string;

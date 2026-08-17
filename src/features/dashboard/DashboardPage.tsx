@@ -78,11 +78,14 @@ export function DashboardPage() {
     return () => {
       unsubscribe();
     };
-  }, []);
+    // fetchNodesFromApi is a zustand action with a stable identity, so listing it cannot loop.
+  }, [fetchNodesFromApi]);
 
   const hostNode = nodes[0];
-  const totalCpuCores = hostNode?.hardware?.cpuCores || 4;
-  const totalRamGb = hostNode?.hardware?.ramGb || 16;
+  // 0 means "not reported yet" and renders as a dash. These used to default to 4 cores / 16 GB,
+  // which the tiles displayed as though they were the host's real specs.
+  const totalCpuCores = hostNode?.hardware?.cpuCores ?? 0;
+  const totalRamGb = hostNode?.hardware?.ramGb ?? 0;
   const isOnline = hostNode?.status === 'online';
 
   const currentCpu = latestData?.cpuPercent ?? (telemetry.length > 0 ? telemetry[telemetry.length - 1].cpuPercent : 0);
@@ -155,7 +158,7 @@ export function DashboardPage() {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">vCPU Cores</p>
                 <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  {totalCpuCores} <span className="text-xs font-normal text-muted-foreground">Cores</span>
+                  {totalCpuCores || '—'} <span className="text-xs font-normal text-muted-foreground">Cores</span>
                 </h3>
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
@@ -183,7 +186,7 @@ export function DashboardPage() {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Host Memory</p>
                 <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  {totalRamGb} <span className="text-xs font-normal text-muted-foreground">GB RAM</span>
+                  {totalRamGb || '—'} <span className="text-xs font-normal text-muted-foreground">GB RAM</span>
                 </h3>
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">

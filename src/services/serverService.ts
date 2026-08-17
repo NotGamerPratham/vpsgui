@@ -6,56 +6,63 @@
  */
 
 import { NodeSpec, AddNodePayload } from '../types/node';
-import { apiClient } from '../api/client';
+import { apiClient, ApiError } from '../api/client';
 import { diagnosticsService } from './diagnosticsService';
 
 const STORAGE_KEY = 'vpsgui_nodes_inventory';
 
 class ServerService {
-  // Returns fallback host node spec if agent query is connecting
+  /**
+   * Placeholder node used before the agent has answered.
+   *
+   * Every hardware and OS figure is zero/empty rather than invented. The previous version returned
+   * a plausible-looking machine — "vps128", 4 cores, 16 GB RAM, 80 GB NVMe, "QEMU Virtual CPU",
+   * "Ubuntu Linux VPS" — which the dashboard then displayed as though it were the real host. On a
+   * 16-core / 32 GB machine it silently reported 4 cores and 16 GB.
+   */
   getDefaultHostNode(): NodeSpec {
     const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
 
     return {
       id: 'node-host-primary',
-      name: 'vps128',
-      alias: 'Current Host Linux VPS',
-      tags: ['linux-vps', 'host-system'],
+      name: hostIp,
+      alias: 'Awaiting agent',
+      tags: ['host-system'],
       type: 'linux',
-      status: 'online',
+      status: 'unknown',
       location: {
-        city: 'Local VPS',
-        country: 'Linux Host',
-        countryCode: 'VPS',
+        city: '',
+        country: '',
+        countryCode: '',
         flagIcon: 'Globe',
-        provider: 'Host Machine',
+        provider: '',
       },
       hardware: {
-        cpuCores: 4,
-        cpuModel: 'QEMU Virtual CPU',
-        ramGb: 16,
+        cpuCores: 0,
+        cpuModel: '',
+        ramGb: 0,
         swapGb: 0,
-        diskGb: 80,
-        diskType: 'NVMe',
-        architecture: 'x86_64',
+        diskGb: 0,
+        diskType: '',
+        architecture: '',
       },
       os: {
-        name: 'Ubuntu Linux VPS',
-        family: 'ubuntu',
-        version: 'Active Agent v1.4.2',
-        kernel: 'Linux Daemon',
-        uptimeSeconds: 3600,
+        name: '',
+        family: '',
+        version: '',
+        kernel: '',
+        uptimeSeconds: 0,
       },
       network: {
         ipAddress: hostIp,
         publicIp: hostIp,
-        hostname: 'vps128',
+        hostname: hostIp,
         sshPort: 22,
         bandwidthUsageGb: 0,
-        monthlyLimitGb: 2000,
+        monthlyLimitGb: 0,
       },
-      agentVersion: 'v1.4.2',
-      agentStatus: 'healthy',
+      agentVersion: '',
+      agentStatus: 'unknown',
       lastHeartbeat: new Date().toISOString(),
       isFavorite: true,
       createdAt: new Date().toISOString(),
@@ -96,56 +103,65 @@ class ServerService {
     return this.autoDiscoverHostNode();
   }
 
-  // Auto-discover the host Linux VPS running vpsgui-agent
+  /**
+   * Discover the host running vpsgui-agent.
+   *
+   * Reports exactly what the agent returns. When the agent is unreachable it returns the
+   * awaiting-agent placeholder rather than filling the gaps with invented specs — a dashboard that
+   * confidently states "4 cores / 16 GB" for a machine it never reached is worse than a blank one.
+   */
   async autoDiscoverHostNode(): Promise<NodeSpec[]> {
     const hostIp = typeof window !== 'undefined' ? window.location.hostname || '127.0.0.1' : '127.0.0.1';
-
-    const geo = await diagnosticsService.getIpInfo(hostIp);
     const agentData = await this.queryAgent(hostIp);
+
+    if (!agentData?.hardware) {
+      const placeholder = this.getDefaultHostNode();
+      this.saveNodes([placeholder]);
+      return [placeholder];
+    }
+
+    // Geolocation is a best-effort enrichment of the public IP and must never substitute for
+    // agent-reported facts.
+    const geo = await diagnosticsService.getIpInfo(agentData.network?.publicIp || undefined);
 
     const hostNode: NodeSpec = {
       id: 'node-host-primary',
-      name: agentData?.name || 'vps128',
-      alias: 'Current Host Linux VPS',
-      tags: ['linux-vps', 'host-system'],
+      name: agentData.name || hostIp,
+      alias: 'Host system',
+      tags: agentData.tags?.length ? agentData.tags : ['host-system'],
       type: 'linux',
       status: 'online',
       location: {
-        city: geo.city || agentData?.location?.city || 'Local VPS',
-        country: geo.country || agentData?.location?.country || 'Linux Host',
-        countryCode: geo.countryCode || 'VPS',
+        city: geo.city || '',
+        country: geo.country || '',
+        countryCode: geo.countryCode || '',
         flagIcon: 'Globe',
-        provider: geo.org || agentData?.location?.provider || 'Host Machine',
+        provider: geo.org || '',
       },
       hardware: {
-        cpuCores: agentData?.hardware?.cpuCores || 4,
-        cpuModel: agentData?.hardware?.cpuModel || 'QEMU Virtual CPU',
-        ramGb: agentData?.hardware?.ramGb || 16,
-        swapGb: agentData?.hardware?.swapGb || 0,
-        diskGb: agentData?.hardware?.diskGb || 80,
-        diskType: 'NVMe',
-        architecture: agentData?.hardware?.architecture || 'x86_64',
+        cpuCores: agentData.hardware.cpuCores ?? 0,
+        cpuModel: agentData.hardware.cpuModel ?? '',
+        ramGb: agentData.hardware.ramGb ?? 0,
+        swapGb: agentData.hardware.swapGb ?? 0,
+        diskGb: agentData.hardware.diskGb ?? 0,
+        // The agent cannot determine the physical disk type; empty rather than a guessed "NVMe".
+        diskType: agentData.hardware.diskType ?? '',
+        architecture: agentData.hardware.architecture ?? '',
       },
-      os: (agentData?.os as any) || {
-        name: 'Ubuntu Linux VPS',
-        family: 'ubuntu',
-        version: 'Active Agent v1.4.2',
-        kernel: 'Linux Daemon',
-        uptimeSeconds: 3600,
-      },
+      os: agentData.os ?? { name: '', family: '', version: '', kernel: '', uptimeSeconds: 0 },
       network: {
-        ipAddress: hostIp,
-        publicIp: hostIp,
-        hostname: agentData?.name || 'vps128',
-        sshPort: 22,
+        ipAddress: agentData.network?.ipAddress || hostIp,
+        publicIp: agentData.network?.publicIp || geo.ip || hostIp,
+        hostname: agentData.network?.hostname || agentData.name || hostIp,
+        sshPort: agentData.network?.sshPort ?? 22,
         bandwidthUsageGb: 0,
-        monthlyLimitGb: 2000,
+        monthlyLimitGb: 0,
       },
-      agentVersion: 'v1.4.2',
+      agentVersion: agentData.agentVersion || '',
       agentStatus: 'healthy',
       lastHeartbeat: new Date().toISOString(),
       isFavorite: true,
-      createdAt: new Date().toISOString(),
+      createdAt: agentData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -153,47 +169,74 @@ class ServerService {
     return [hostNode];
   }
 
-  // Ping agent endpoints with port 46509 fallback
-  async queryAgent(ipAddress: string): Promise<Partial<NodeSpec> | null> {
-    const cleanIp = ipAddress.replace(/^https?:\/\//, '').split('/')[0];
-    const urls = [
-      `/api/v1/node`,
-      `/api/v1/nodes`,
-      `http://${cleanIp}:46509/api/v1/node`,
-      `http://${cleanIp}:46509/api/v1/nodes`,
-      `http://${cleanIp}/api/v1/node`,
-    ];
-
-    for (const url of urls) {
+  /**
+   * Fetch the node payload from the agent.
+   *
+   * Goes through apiClient so the agent token is attached — /node now requires authentication, and
+   * a bare fetch() would 401 and silently fall back to placeholder hardware.
+   */
+  async queryAgent(_ipAddress?: string): Promise<Partial<NodeSpec> | null> {
+    for (const endpoint of ['/node', '/nodes']) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          const nodeObj = Array.isArray(data) ? data[0] : data;
-          if (nodeObj && nodeObj.hardware && typeof nodeObj.hardware.cpuCores === 'number') {
-            // Found real agent data :)
-            return nodeObj;
-          }
+        const data = await apiClient.get<unknown>(endpoint, 5000);
+        const nodeObj = (Array.isArray(data) ? data[0] : data) as Partial<NodeSpec> | undefined;
+        if (nodeObj?.hardware && typeof nodeObj.hardware.cpuCores === 'number') {
+          return nodeObj;
         }
       } catch (e) {
-        // Try next URL fallback
+        // Try the next endpoint; a 401 here means no agent token is configured yet.
       }
     }
-    // Agent endpoint unreachable :/
     return null;
   }
 
-  async createNode(_payload: AddNodePayload): Promise<NodeSpec> {
-    return this.getDefaultHostNode();
+  /**
+   * Not supported.
+   *
+   * VPSGUI manages exactly one host — the machine running the agent — and getNodes()/saveNodes()
+   * both truncate the inventory to a single entry. This used to return the default host node while
+   * ignoring the payload entirely, so "add node" appeared to succeed, showed a node with the wrong
+   * name, and then silently lost it on the next reload.
+   */
+  async createNode(_payload: AddNodePayload): Promise<never> {
+    throw new Error(
+      'Adding additional nodes is not supported: VPSGUI manages the single host running the agent. ' +
+        'Deploy a separate VPSGUI instance on each host.'
+    );
   }
 
   async verifyNodeConnection(_nodeId: string): Promise<NodeSpec | null> {
     const nodes = await this.autoDiscoverHostNode();
     return nodes[0] || null;
+  }
+
+  /** Issue a real reboot on the host via the agent's shell endpoint. */
+  async rebootNode(): Promise<{ success: boolean; message: string }> {
+    try {
+      // `systemctl reboot` returns before the host goes down; a dropped connection mid-request is
+      // itself a sign the reboot took effect, so treat a network error as a likely success.
+      const res = await apiClient.post<{ success: boolean; output: string }>(
+        '/terminal/exec',
+        { command: 'systemctl reboot' },
+        10000
+      );
+      return res?.success
+        ? { success: true, message: 'Reboot issued. The host will be unreachable while it restarts.' }
+        : { success: false, message: res?.output || 'Reboot command failed' };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 0) {
+        return { success: true, message: 'Connection dropped — the host is most likely rebooting.' };
+      }
+      return {
+        success: false,
+        message:
+          e instanceof ApiError && e.status === 401
+            ? 'Unauthorized — set a valid Agent Token under Settings.'
+            : e instanceof Error
+            ? e.message
+            : 'Reboot failed',
+      };
+    }
   }
 }
 

@@ -1,23 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Cpu,
-  Play,
-  Square,
-  RotateCw,
-  Search,
-  RefreshCw,
-  CheckCircle,
-  AlertCircle,
-  Radio,
-  FileText,
-  Layers,
-} from 'lucide-react';
+import { Cpu, Play, Square, RotateCw, Search, RefreshCw, AlertCircle, Radio, Layers } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 
 interface ServiceItem {
   id: string;
@@ -25,7 +13,8 @@ interface ServiceItem {
   alias: string;
   status: 'active' | 'inactive' | 'failed';
   subState: string;
-  enabled: boolean;
+  /** null when the agent could not determine boot-time enablement. */
+  enabled: boolean | null;
   category: string;
 }
 
@@ -34,6 +23,8 @@ export function ServicesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionServiceId, setActionServiceId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadServices();
@@ -41,52 +32,48 @@ export function ServicesPage() {
 
   const loadServices = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await apiClient.get<ServiceItem[]>('/system/services');
-      if (res && Array.isArray(res) && res.length > 0) {
-        setServices(res);
-      } else {
-        setServices(getDefaultServices());
-      }
+      // Report the host's real unit list, or nothing. The previous fallback presented seven
+      // invented units (nginx, docker, postgresql, redis...) as "active" whenever the agent was
+      // unreachable, so a bare host looked like a fully provisioned one.
+      setServices(Array.isArray(res) ? res : []);
     } catch (e) {
-      setServices(getDefaultServices());
+      setServices([]);
+      setLoadError(
+        e instanceof ApiError && e.status === 401
+          ? 'Unauthorized — set a valid Agent Token under Settings to list systemd units.'
+          : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
+      );
     }
     setLoading(false);
   };
 
-  const getDefaultServices = (): ServiceItem[] => [
-    { id: 'svc-nginx', name: 'nginx.service', alias: 'Nginx Web Server & Reverse Proxy', status: 'active', subState: 'running', enabled: true, category: 'web' },
-    { id: 'svc-docker', name: 'docker.service', alias: 'Docker Application Container Engine', status: 'active', subState: 'running', enabled: true, category: 'container' },
-    { id: 'svc-ssh', name: 'sshd.service', alias: 'OpenSSH Server Daemon', status: 'active', subState: 'running', enabled: true, category: 'security' },
-    { id: 'svc-postgres', name: 'postgresql.service', alias: 'PostgreSQL Relational Database Engine', status: 'active', subState: 'running', enabled: true, category: 'database' },
-    { id: 'svc-redis', name: 'redis-server.service', alias: 'Redis In-Memory Data Structure Store', status: 'active', subState: 'running', enabled: true, category: 'database' },
-    { id: 'svc-ufw', name: 'ufw.service', alias: 'Uncomplicated Firewall Service', status: 'active', subState: 'exited', enabled: true, category: 'security' },
-    { id: 'svc-cron', name: 'cron.service', alias: 'Regular Background Scheduler Daemon', status: 'active', subState: 'running', enabled: true, category: 'system' },
-  ];
-
   const handleAction = async (svc: ServiceItem, action: 'start' | 'stop' | 'restart') => {
     setActionServiceId(svc.id);
+    setActionError(null);
     try {
-      // Actually runs `systemctl <action> <name>` on the host via the agent (requires an Agent Token
-      // configured under Settings). The agent's GET /system/services list is still a static mock, so
-      // we reflect the result optimistically here rather than refetching and clobbering this update.
-      await apiClient.post<{ success: boolean; output: string }>('/system/services/action', {
-        name: svc.name,
-        action,
-      });
+      // Runs `systemctl <action> <name>` on the host via the agent (requires an Agent Token under
+      // Settings). The result is honoured: previously the row flipped to the requested state even
+      // when the call failed, so a service that refused to stop still showed as stopped.
+      const res = await apiClient.post<{ success: boolean; output: string }>(
+        '/system/services/action',
+        { name: svc.name, action },
+        60000
+      );
+      if (!res?.success) {
+        setActionError(`${action} ${svc.name} failed: ${(res?.output || 'unknown error').slice(0, 300)}`);
+      }
     } catch (e) {
-      // Agent unreachable or missing/invalid token; still reflect the requested state optimistically
+      setActionError(
+        `${action} ${svc.name} failed: ${e instanceof Error ? e.message : 'agent unreachable'}`
+      );
+    } finally {
+      setActionServiceId(null);
     }
-    setServices((prev) =>
-      prev.map((s) => {
-        if (s.id === svc.id) {
-          if (action === 'stop') return { ...s, status: 'inactive', subState: 'stopped' };
-          return { ...s, status: 'active', subState: 'running' };
-        }
-        return s;
-      })
-    );
-    setActionServiceId(null);
+    // Re-read the real unit state instead of guessing it from the requested action.
+    await loadServices();
   };
 
   const filteredServices = services.filter(
@@ -115,6 +102,20 @@ export function ServicesPage() {
         </div>
       </div>
 
+      {actionError && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span className="break-words">{actionError}</span>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>{loadError}</span>
+        </div>
+      )}
+
       {/* Filter Bar */}
       <div className="flex items-center justify-between gap-4">
         <div className="relative w-full max-w-sm">
@@ -132,6 +133,12 @@ export function ServicesPage() {
         </div>
       </div>
 
+      {!loading && !loadError && services.length === 0 && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+          No systemd units reported. systemd is only available on Linux hosts.
+        </div>
+      )}
+
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredServices.map((svc) => (
@@ -148,17 +155,37 @@ export function ServicesPage() {
                   </div>
                 </div>
 
-                <Badge variant={svc.status === 'active' ? 'success' : 'outline'} className="text-[10px] px-1.5 py-0 font-mono">
+                <Badge
+                  variant={svc.status === 'active' ? 'success' : svc.status === 'failed' ? 'destructive' : 'outline'}
+                  className="text-[10px] px-1.5 py-0 font-mono"
+                >
                   {svc.status.toUpperCase()} ({svc.subState})
                 </Badge>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-3 pt-0 flex-1 flex flex-col justify-between">
+              {/* Colour follows the real unit state; this row used to render green with a live
+                  "pinging" indicator even for stopped and failed units. */}
               <div className="flex items-center justify-between text-[11px] border-t border-border/40 pt-2 text-muted-foreground">
                 <span>Unit Status:</span>
-                <span className="font-mono text-emerald-400 font-semibold flex items-center gap-1">
-                  <Radio className="h-3 w-3 animate-ping text-emerald-400" /> {svc.subState}
+                <span
+                  className={`font-mono font-semibold flex items-center gap-1 ${
+                    svc.status === 'active'
+                      ? 'text-emerald-400'
+                      : svc.status === 'failed'
+                      ? 'text-rose-400'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  <Radio className={`h-3 w-3 ${svc.status === 'active' ? 'animate-ping' : ''}`} /> {svc.subState}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Start on boot:</span>
+                <span className="font-mono">
+                  {svc.enabled === null ? 'unknown' : svc.enabled ? 'enabled' : 'disabled'}
                 </span>
               </div>
 

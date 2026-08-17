@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, Terminal, ShieldCheck, Cpu, Copy, Check, Download, RefreshCw, Zap } from 'lucide-react';
+import { Bot, Terminal, Copy, Check, RefreshCw, Zap } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';

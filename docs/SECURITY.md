@@ -1,16 +1,72 @@
-# Security Policy & RBAC Permissions Matrix
+# Security Model
 
-VPSGUI takes infrastructure security seriously.
+## Threat model in one sentence
 
-## Role-Based Access Control (RBAC)
+The `vpsgui-agent` daemon can execute arbitrary shell commands, install packages, control systemd
+units and Docker containers, and read and write files on the host — so **the agent token is
+equivalent to a root password**, and anyone who can reach the agent with that token owns the machine.
 
-| Role | Nodes & Server Access | Docker Control | Secrets Management | System Preferences |
-| :--- | :--- | :--- | :--- | :--- |
-| **Owner** | Full Access | Full Access | Full Access | Full Access |
-| **Admin** | Full Access | Full Access | Full Access | View Only |
-| **DevOps Engineer** | Manage Nodes | Manage Containers | Read Secrets | Restricted |
-| **Viewer** | View Telemetry | View Containers | No Access | Restricted |
+## What actually protects the deployment
 
-## Reporting Security Vulnerabilities
+There is exactly one authentication control in VPSGUI: the **agent token**.
 
-Please report security issues to `security@vpsgui.dev`.
+| Control | Status | Notes |
+| :--- | :--- | :--- |
+| Agent bearer token | **Enforced** | Verified by the agent on every endpoint except `/health`. Constant-time comparison; 10 failed attempts locks an IP out for 5 minutes. |
+| Loopback binding | **Default** | The agent binds `127.0.0.1` unless `AGENT_HOST` is changed. Reach it through the nginx reverse proxy. |
+| File-root confinement | **Enforced** | File browsing and writing are restricted to `AGENT_FILE_ROOTS`, resolved through `realpath` so symlinks cannot escape. |
+| Credential-file deny list | **Enforced** | `shadow`, `gshadow`, `sudoers`, SSH private keys, `*.pem`/`*.key`, and the agent's own token file are refused even inside an allowed root. Override with `AGENT_ALLOW_SENSITIVE_FILES=1`. |
+| Input validation | **Enforced** | Package names, container ids, service names, and action verbs are validated against strict patterns. Child processes are spawned with `execFile` (no shell) except the explicit Terminal endpoint. |
+| Request body limits | **Enforced** | 8 MiB for file writes, 64 KiB for commands; oversized bodies get a 413. |
+| CORS | **Deny by default** | Cross-origin requests are refused unless the origin is listed in `AGENT_ALLOWED_ORIGINS`. |
+| Shell execution kill switch | **Available** | `AGENT_ENABLE_SHELL=0` disables `/terminal/exec` entirely. |
+| TLS | **Your responsibility** | Not configured by default. See below. |
+
+## What does NOT exist
+
+Be explicit about this, because earlier revisions of this document claimed otherwise:
+
+- **There is no RBAC.** No roles, permissions, or per-user access control are implemented or
+  enforced anywhere in the codebase. A `role` field exists on the local profile object and is never
+  checked. Do not rely on it.
+- **There is no user authentication.** The login page creates a local browser profile and checks no
+  password. It keeps a casual visitor off the dashboard routes; it is not a security boundary and
+  can be bypassed from browser devtools in seconds.
+- **There is no MFA, SSO, or session management.**
+- **There is no audit log.** The audit page renders whatever the agent returns from an endpoint the
+  agent does not implement, so it is always empty.
+
+If you need multi-user access control, put it in front of VPSGUI — nginx `auth_basic`, an
+authenticating proxy (oauth2-proxy, Authelia, Cloudflare Access), or a VPN.
+
+## Deployment requirements
+
+1. **Serve over HTTPS.** The agent token is sent as a bearer header on every request. Over plain
+   HTTP anything on the network path can read it and take over the host.
+   ```bash
+   certbot --nginx -d your-domain.example
+   ```
+2. **Do not expose the agent port directly.** Keep `AGENT_HOST=127.0.0.1` and let nginx proxy it.
+   Firewall port 46509 from the outside regardless.
+3. **Restrict who can reach the web UI.** A VPN, an nginx `allow`/`deny` block, or an
+   authenticating proxy — the token is the only thing between the open internet and a root shell.
+4. **Narrow the file roots.** `AGENT_FILE_ROOTS` defaults to `/etc,/var/www,/var/log,/home,/opt,/srv`.
+   Trim it to what you actually browse.
+5. **Disable shell execution if unused.** Set `AGENT_ENABLE_SHELL=0`.
+6. **Protect the token at rest.** `install.sh` writes the systemd unit `0600` because it embeds the
+   token; an auto-generated token goes to `agent/.agent-token` (also `0600`, and gitignored). If a
+   token leaks, generate a new one and restart the agent.
+
+## Token handling in the browser
+
+The token is stored in `localStorage` so it survives reloads. Consequences worth knowing:
+
+- Any XSS in the app can read it. The bundled CSP disallows inline scripts to reduce that risk.
+- It is cleared on sign-out, so a shared browser does not hand the next person root access.
+- API responses are sent with `no-store` and the service worker never caches `/api/*`, so host
+  telemetry and file contents are not written to disk by the browser.
+
+## Reporting security vulnerabilities
+
+Please report security issues to `security@vpsgui.dev`. Do not open a public issue for anything that
+would let an unauthenticated caller reach the agent.

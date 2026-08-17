@@ -1,7 +1,7 @@
 import React from 'react';
-import { User, ShieldCheck, Key, Lock } from 'lucide-react';
+import { User } from 'lucide-react';
 import { Card } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
+
 import { Badge } from '../../components/ui/badge';
 import { useAuthStore } from '../../store/useAuthStore';
 

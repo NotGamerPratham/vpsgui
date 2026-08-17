@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { FileCode, Terminal, BookOpen, ShieldCheck, Cpu, Copy, Check, Server, Network } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { FileCode, Terminal, BookOpen, ShieldCheck, Copy, Check, Network } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 

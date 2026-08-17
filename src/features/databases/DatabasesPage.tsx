@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Plus, CheckCircle2, HardDrive } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Database, Plus } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { apiClient } from '../../api/client';

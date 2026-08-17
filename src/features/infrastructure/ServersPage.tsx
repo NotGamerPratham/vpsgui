@@ -21,6 +21,8 @@ export function ServersPage() {
   const { nodes, toggleFavorite, rebootNode, verifyNodeConnection } = useServerStore();
   const [search, setSearch] = useState('');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [rebootingId, setRebootingId] = useState<string | null>(null);
+  const [rebootMessage, setRebootMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const filteredNodes = nodes.filter(
     (n) =>
@@ -33,6 +35,19 @@ export function ServersPage() {
     setVerifyingId(id);
     await verifyNodeConnection(id);
     setVerifyingId(null);
+  };
+
+  // Rebooting drops every service on the host, so it must be confirmed and its outcome reported —
+  // the button used to silently fake the reboot in local state only.
+  const handleReboot = async (id: string, name: string) => {
+    if (!window.confirm(`Reboot ${name}? This restarts the host and interrupts every service on it.`)) {
+      return;
+    }
+    setRebootingId(id);
+    setRebootMessage(null);
+    const result = await rebootNode(id);
+    setRebootMessage({ ok: result.success, text: result.message });
+    setRebootingId(null);
   };
 
   return (
@@ -54,6 +69,18 @@ export function ServersPage() {
           <span>Single Host System Locked</span>
         </Badge>
       </div>
+
+      {rebootMessage && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-xs ${
+            rebootMessage.ok
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+          }`}
+        >
+          {rebootMessage.text}
+        </div>
+      )}
 
       {/* Filter & Search Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -149,8 +176,15 @@ export function ServersPage() {
                       <span>Verify</span>
                     </Button>
 
-                    <Button size="sm" variant="ghost" title="Reboot Node" onClick={() => rebootNode(node.id)} className="h-7 w-7 p-0">
-                      <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Reboot host"
+                      onClick={() => handleReboot(node.id, node.name)}
+                      disabled={rebootingId === node.id}
+                      className="h-7 w-7 p-0"
+                    >
+                      <RotateCw className={`h-3.5 w-3.5 text-muted-foreground ${rebootingId === node.id ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </div>

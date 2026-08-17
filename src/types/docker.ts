@@ -12,36 +12,52 @@ export interface ContainerVolume {
   mode: 'ro' | 'rw';
 }
 
+/**
+ * Shape returned by the agent's GET /docker/containers.
+ *
+ * Fields the agent does not (yet) collect are optional rather than required: declaring them as
+ * required made TypeScript vouch for values that were always `undefined` at runtime, which is how
+ * "undefined MB" and similar strings reached the UI.
+ */
 export interface ContainerItem {
   id: string;
-  nodeId: string;
   name: string;
   image: string;
-  imageId: string;
   state: ContainerState;
   status: string;
   ports: PortMapping[];
-  volumes: ContainerVolume[];
   cpuPercent: number;
   memoryUsageMb: number;
-  memoryLimitMb: number;
-  networkRxKb: number;
-  networkTxKb: number;
-  uptime: string;
-  createdAt: string;
-  command: string;
-  environment: Record<string, string>;
+  /** ISO-8601, or null when docker's CreatedAt could not be parsed. */
+  created: string | null;
+
+  // Not currently reported by the agent.
+  nodeId?: string;
+  imageId?: string;
+  volumes?: ContainerVolume[];
+  memoryLimitMb?: number;
+  networkRxKb?: number;
+  networkTxKb?: number;
+  uptime?: string;
+  command?: string;
+  environment?: Record<string, string>;
 }
 
+/** Shape returned by the agent's GET /docker/images. */
 export interface DockerImageItem {
   id: string;
-  nodeId: string;
   repository: string;
   tag: string;
+  /** Human-readable size as docker reports it (e.g. "142MB"). */
+  size: string;
   sizeMb: number;
-  created: string;
-  containersCount: number;
-  digest: string;
+  digest: string | null;
+  /** ISO-8601, or null when docker's CreatedAt could not be parsed. */
+  created: string | null;
+
+  // Not currently reported by the agent.
+  nodeId?: string;
+  containersCount?: number;
 }
 
 export interface DockerNetworkItem {

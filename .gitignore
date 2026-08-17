@@ -43,3 +43,14 @@ Thumbs.db
 .vite
 .tmp
 *.tmp
+coverage
+
+# Secrets
+# The agent writes its bearer token here when AGENT_TOKEN is not supplied via the environment.
+# That token grants root-equivalent control of the host — it must never be committed.
+agent/.agent-token
+.agent-token
+
+# Local env overrides (Vite convention). The committed .env* files hold non-secret defaults only.
+.env.local
+.env.*.local

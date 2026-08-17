@@ -45,39 +45,53 @@ class DiagnosticsService {
   }
 
   /**
-   * Real Ping Latency measurement for VPS host / IP
+   * HTTP reachability probe with round-trip timing.
+   *
+   * This is not ICMP ping — browsers cannot send ICMP. It measures how long an HTTP request to the
+   * target takes, which is the closest honest approximation available from a web page. A failure is
+   * reported as a failure; the previous version returned status 'ok' with the message "verified"
+   * whenever the target merely *looked* like a hostname, so unreachable hosts appeared healthy.
    */
-  async pingHost(hostOrIp: string): Promise<{ latencyMs: number; status: 'ok' | 'error'; message: string }> {
+  async probeHttp(
+    hostOrIp: string,
+    { port, scheme = 'http', timeoutMs = 3000 }: { port?: number; scheme?: 'http' | 'https'; timeoutMs?: number } = {}
+  ): Promise<{ latencyMs: number; status: 'ok' | 'error'; message: string }> {
     const cleanHost = hostOrIp.replace(/^https?:\/\//, '').split('/')[0];
+    const target = `${scheme}://${cleanHost}${port ? `:${port}` : ''}/`;
     const startTime = performance.now();
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      await fetch(`http://${cleanHost}:46509/api/v1/health`, {
-        method: 'GET',
-        mode: 'no-cors',
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-
-      const endTime = performance.now();
-      const latencyMs = Math.max(1, Math.round(endTime - startTime));
+      // no-cors yields an opaque response: we cannot read the status, only whether the request
+      // completed at the network layer. That distinction is stated in the message below.
+      await fetch(target, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
       return {
         latencyMs,
         status: 'ok',
-        message: `Agent endpoint ${cleanHost}:46509 responded in ${latencyMs}ms`,
+        message: `${target} accepted a connection in ${latencyMs}ms (opaque response; status code not readable from the browser)`,
       };
-    } catch {
-      const endTime = performance.now();
-      const latencyMs = Math.max(1, Math.round(endTime - startTime));
-
-      const isIpOrHost = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$|localhost|127\.0\.0\.1$/.test(cleanHost);
+    } catch (e) {
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+      const timedOut = e instanceof DOMException && e.name === 'AbortError';
       return {
         latencyMs,
-        status: isIpOrHost ? 'ok' : 'error',
-        message: `Host ${cleanHost} verified in ${latencyMs}ms`,
+        status: 'error',
+        message: timedOut
+          ? `${target} did not respond within ${timeoutMs}ms`
+          : `${target} is unreachable from this browser (DNS failure, connection refused, or blocked)`,
       };
+    } finally {
+      // Without this the abort timer stays pending after a fast response, keeping a reference to
+      // the controller alive for the full timeout on every probe.
+      clearTimeout(timeoutId);
     }
+  }
+
+  /** Probe the vpsgui-agent health endpoint on a host. */
+  async pingHost(hostOrIp: string): Promise<{ latencyMs: number; status: 'ok' | 'error'; message: string }> {
+    return this.probeHttp(hostOrIp, { port: 46509 });
   }
 
   /**

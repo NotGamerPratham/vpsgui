@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HeartPulse, CheckCircle2, AlertTriangle, XCircle, RotateCw, Activity } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { apiClient } from '../../api/client';

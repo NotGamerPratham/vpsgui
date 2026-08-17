@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Grid2X2, Server, Cpu, HardDrive, Zap, RotateCw, Terminal, CheckCircle2, Play, AlertCircle } from 'lucide-react';
+import { Grid2X2, Server, Cpu, HardDrive, Terminal, Play } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Progress } from '../../components/ui/progress';
 import { globalEventBus } from '../../event-bus';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 import { TelemetryPoint } from '../../types/monitoring';
 
 export function MultiVPSPage() {
@@ -14,13 +14,16 @@ export function MultiVPSPage() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [batchCommand, setBatchCommand] = useState('systemctl status nginx');
   const [executionLog, setExecutionLog] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
   const [liveTelemetry, setLiveTelemetry] = useState<Record<string, TelemetryPoint>>({});
 
   useEffect(() => {
+    // Seed the selection once. The `length === 0` guard means re-running on selection changes
+    // cannot loop, so the dependency is safe to declare honestly.
     if (nodes.length > 0 && selectedNodeIds.length === 0) {
       setSelectedNodeIds(nodes.slice(0, 4).map((n) => n.id));
     }
-  }, [nodes]);
+  }, [nodes, selectedNodeIds.length]);
 
   useEffect(() => {
     const unsubscribe = globalEventBus.on('telemetry_tick', (data: any) => {
@@ -48,31 +51,40 @@ export function MultiVPSPage() {
   const activeNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
 
   const runBatchCommand = async () => {
-    if (activeNodes.length === 0) return;
-    setExecutionLog(`[EXEC] Dispatching batch command "${batchCommand}" to ${activeNodes.length} VPS nodes...\n`);
+    const command = batchCommand.trim();
+    if (activeNodes.length === 0 || !command || isRunning) return;
 
-    try {
-      const res = await apiClient.post<any>('/nodes/batch-exec', {
-        command: batchCommand,
-        nodeIds: activeNodes.map((n) => n.id),
-      });
+    setIsRunning(true);
+    setExecutionLog(`[EXEC] Running "${command}" on ${activeNodes.length} node(s)...\n`);
 
-      if (res && res.log) {
-        setExecutionLog((prev) => (prev || '') + res.log);
-      } else {
-        setExecutionLog(
-          (prev) =>
-            (prev || '') +
-            activeNodes.map((n) => `[HOST: ${n.name} (${n.network.publicIp})] Command dispatched to vpsgui-agent.`).join('\n')
-        );
-      }
-    } catch (e) {
-      setExecutionLog(
-        (prev) =>
-          (prev || '') +
-          `[NOTICE] Agent endpoint unattached. Commands require active vpsgui-agent daemon on target VPS.`
-      );
-    }
+    // Fan out over the agent's real /terminal/exec endpoint. The previous implementation POSTed to
+    // /nodes/batch-exec, which the agent has never implemented: every call 404'd and the catch
+    // branch printed "Command dispatched to vpsgui-agent", so nothing ever ran but the log implied
+    // it had.
+    const results = await Promise.all(
+      activeNodes.map(async (node) => {
+        try {
+          const res = await apiClient.post<{ success: boolean; output: string }>(
+            '/terminal/exec',
+            { command },
+            30000
+          );
+          const status = res?.success ? 'OK' : 'FAILED';
+          return `[${node.name} — ${status}]\n${res?.output?.trim() || '(no output)'}`;
+        } catch (e) {
+          const message =
+            e instanceof ApiError && e.status === 401
+              ? 'Unauthorized — set a valid Agent Token under Settings.'
+              : e instanceof Error
+              ? e.message
+              : 'agent unreachable';
+          return `[${node.name} — ERROR]\n${message}`;
+        }
+      })
+    );
+
+    setExecutionLog((prev) => `${prev || ''}\n${results.join('\n\n')}`);
+    setIsRunning(false);
   };
 
   return (
@@ -122,9 +134,14 @@ export function MultiVPSPage() {
                 className="flex-1 rounded-md border border-input bg-muted/40 px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
 
-              <Button size="sm" onClick={runBatchCommand} className="gap-1.5 text-xs bg-primary shrink-0 font-bold">
+              <Button
+                size="sm"
+                onClick={runBatchCommand}
+                disabled={isRunning || activeNodes.length === 0 || !batchCommand.trim()}
+                className="gap-1.5 text-xs bg-primary shrink-0 font-bold"
+              >
                 <Play className="h-3.5 w-3.5" />
-                <span>Run on {activeNodes.length} Nodes</span>
+                <span>{isRunning ? 'Running...' : `Run on ${activeNodes.length} Node${activeNodes.length === 1 ? '' : 's'}`}</span>
               </Button>
             </div>
 

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Settings, Palette, Globe, Bell, Shield, Key } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Settings, Palette, Globe, Key } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useUIStore } from '../../store/useUIStore';
-import { themeCatalog, ThemeName } from '../../design-system/tokens';
-import { i18nTranslations, LanguageCode } from '../../i18n';
+import { themeCatalog } from '../../design-system/tokens';
+import { LanguageCode } from '../../i18n';
 
 const AGENT_TOKEN_KEY = 'vpsgui_auth_token';
 

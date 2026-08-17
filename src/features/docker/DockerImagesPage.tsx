@@ -1,22 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon, Download, Trash2, Search, Plus } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Image as ImageIcon, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
+
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
 import { dockerService } from '../../services/dockerService';
 import { DockerImageItem } from '../../types/docker';
 
 export function DockerImagesPage() {
   const [images, setImages] = useState<DockerImageItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    dockerService.fetchImages().then((res) => {
-      setImages(res);
-      setLoading(false);
-    });
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const { images: list, error: fetchError } = await dockerService.fetchImages();
+    setImages(list);
+    setError(fetchError);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return (
     <div className="space-y-6">
@@ -32,11 +38,20 @@ export function DockerImagesPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
-          <Download className="h-4 w-4" />
-          <span>Pull Image</span>
+        {/* "Pull Image" had no handler and the agent exposes no image-pull endpoint; use the
+            Terminal page (`docker pull <image>`) until one exists. */}
+        <Button onClick={refresh} disabled={loading} className="gap-1.5 text-xs bg-primary">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </Button>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span className="break-words">{error}</span>
+        </div>
+      )}
 
       <Card className="bg-card/70 border-border/70 overflow-hidden">
         {images.length === 0 ? (
@@ -67,10 +82,20 @@ export function DockerImagesPage() {
                 <TableRow key={img.id}>
                   <TableCell className="font-bold text-xs text-foreground font-mono">{img.repository}</TableCell>
                   <TableCell className="font-mono text-xs text-primary">{img.tag}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{img.sizeMb} MB</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{img.created}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{img.size || `${img.sizeMb} MB`}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {img.created ? new Date(img.created).toLocaleString() : 'unknown'}
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-rose-400">
+                    {/* The delete control had no handler and the agent exposes no image-remove
+                        endpoint, so it is shown as unavailable rather than as a working button. */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled
+                      title="Image removal is not supported by the agent — run `docker rmi` from the Terminal page"
+                      className="h-7 w-7 p-0"
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

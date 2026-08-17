@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Server, Container, FolderTree, Database, Key, Box } from 'lucide-react';
+import { Search, Server, Container, FolderTree, Database } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 

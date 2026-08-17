@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Play, Square, RotateCw, Trash2, Terminal, Eye, Search, Plus, AlertCircle } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Container, Play, Square, RotateCw, Trash2, Terminal, Eye, Search, RefreshCw, AlertCircle } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
@@ -15,23 +15,33 @@ export function DockerContainersPage() {
   const [search, setSearch] = useState('');
   const [selectedLogs, setSelectedLogs] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    dockerService.fetchContainers().then((res) => {
-      setContainers(res);
-      setLoading(false);
-    });
+  const refresh = useCallback(async () => {
+    const { containers: list, error: fetchError } = await dockerService.fetchContainers();
+    setContainers(list);
+    setError(fetchError);
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
   const handleContainerAction = async (id: string, action: 'start' | 'stop' | 'restart' | 'remove') => {
-    setActioningId(id);
-    try {
-      await dockerService.controlContainer(id, action);
-    } finally {
-      const refreshed = await dockerService.fetchContainers();
-      setContainers(refreshed);
-      setActioningId(null);
+    if (action === 'remove' && !window.confirm('Force-remove this container? This cannot be undone.')) {
+      return;
     }
+    setActioningId(id);
+    setError(null);
+    // Surface the agent's result. This used to discard it entirely, so a refused action looked
+    // identical to a successful one.
+    const result = await dockerService.controlContainer(id, action);
+    if (!result.success) {
+      setError(`Container ${action} failed: ${(result.output || 'unknown error').slice(0, 300)}`);
+    }
+    await refresh();
+    setActioningId(null);
   };
 
   const filtered = containers.filter(
@@ -52,11 +62,20 @@ export function DockerContainersPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
-          <Plus className="h-4 w-4" />
-          <span>Launch Container</span>
+        {/* "Launch Container" was a dead button: it had no handler and the agent exposes no
+            container-create endpoint. Refresh is a real action against a real endpoint. */}
+        <Button onClick={refresh} disabled={loading} className="gap-1.5 text-xs bg-primary">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </Button>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span className="break-words">{error}</span>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex items-center justify-between">

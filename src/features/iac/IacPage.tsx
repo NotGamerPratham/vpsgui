@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Layers, FileCode, Copy, Check, Download, Play } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Layers, Copy, Check } from 'lucide-react';
+import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 
 export function IacPage() {

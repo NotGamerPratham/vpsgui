@@ -13,13 +13,21 @@ interface AuthPageProps {
 export function AuthPage({ mode = 'login' }: AuthPageProps) {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  const [email, setEmail] = useState('admin@vpsgui.dev');
-  const [password, setPassword] = useState('password123');
+  // Never pre-fill credentials. These fields shipped populated with admin@vpsgui.dev / password123,
+  // which reads as a working default account and invites operators to keep it.
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login(email);
-    navigate('/dashboard');
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Enter an email address to identify this local profile.');
+      return;
+    }
+    setError(null);
+    login(trimmed);
+    navigate('/dashboard', { replace: true });
   };
 
   return (
@@ -35,31 +43,37 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
           </p>
         </div>
 
+        {/* Being explicit beats a password field that is silently discarded: the previous form
+            collected a password and never checked it, which implied an authentication step that
+            does not exist. The agent token is the credential that actually gates host access. */}
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-300 leading-relaxed">
+          <span className="font-bold">This is a local profile, not an account.</span> VPSGUI ships no
+          user database, so no password is checked here — this only labels the session on this
+          browser. Host access is gated by the <span className="font-semibold">Agent Token</span> you
+          set under Settings. Put VPSGUI behind HTTPS and a firewall or VPN.
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-foreground">Work Email</label>
+            <label htmlFor="vpsgui-email" className="text-xs font-semibold text-foreground">
+              Email (profile label)
+            </label>
             <Input
+              id="vpsgui-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
               required
               className="text-xs mt-1"
             />
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-foreground">Password</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="text-xs mt-1"
-            />
-          </div>
+          {error && <p className="text-[11px] text-rose-400">{error}</p>}
 
           <Button type="submit" className="w-full text-xs bg-primary font-bold">
-            {mode === 'register' ? 'Register VPSGUI Workspace' : 'Sign In to VPSGUI Workspace'}
+            {mode === 'register' ? 'Create Local Profile' : 'Continue to Workspace'}
           </Button>
         </form>
       </Card>

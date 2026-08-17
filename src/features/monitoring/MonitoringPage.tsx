@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, HardDrive, Zap, Thermometer, ShieldCheck } from 'lucide-react';
+import { Activity, Zap, Thermometer } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
@@ -107,7 +107,10 @@ export function MonitoringPage() {
                   <TableRow key={proc.pid}>
                     <TableCell className="font-mono text-xs text-foreground">{proc.pid}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{proc.user}</TableCell>
-                    <TableCell className="font-mono text-xs text-primary font-bold">{proc.cpuPercent}%</TableCell>
+                    {/* Windows hosts report no per-process CPU; show that rather than "null%". */}
+                    <TableCell className="font-mono text-xs text-primary font-bold">
+                      {proc.cpuPercent === null ? 'n/a' : `${proc.cpuPercent}%`}
+                    </TableCell>
                     <TableCell className="font-mono text-xs text-violet-400">{proc.memoryPercent}%</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{proc.memoryMb} MB</TableCell>
                     <TableCell className="font-mono text-xs text-foreground">{proc.command}</TableCell>

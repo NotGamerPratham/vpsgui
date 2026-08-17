@@ -1,30 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Package,
-  Terminal,
-  CheckCircle,
-  Download,
-  Code,
-  Layers,
-  Search,
-  Sparkles,
-  RefreshCw,
-  Copy,
-  Check,
-  AlertCircle,
-} from 'lucide-react';
+import { Package, Terminal, CheckCircle, Download, Code, Layers, Search, RefreshCw, Copy, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 
 interface PackageItem {
   name: string;
   category: string;
   installed: boolean;
-  version: string;
+  /** null when the binary is present but did not report a parseable version. */
+  version: string | null;
   description: string;
 }
 
@@ -32,7 +20,7 @@ interface LanguageItem {
   name: string;
   category: string;
   installed: boolean;
-  version: string;
+  version: string | null;
   binary: string;
   description: string;
 }
@@ -57,6 +45,7 @@ export function PackagesPage() {
   const [search, setSearch] = useState('');
   const [installingItem, setInstallingItem] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,39 +54,22 @@ export function PackagesPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await apiClient.get<{ packages: PackageItem[]; languages: LanguageItem[] }>('/system/packages');
-      if (res && res.packages) {
-        setPackages(res.packages);
-        setLanguages(res.languages);
-      }
+      setPackages(Array.isArray(res?.packages) ? res.packages : []);
+      setLanguages(Array.isArray(res?.languages) ? res.languages : []);
     } catch (e) {
-      // Fallback defaults
-      setPackages([
-        { name: 'curl', category: 'cli', installed: true, version: '7.81.0', description: 'Command line tool for transferring data with URLs' },
-        { name: 'git', category: 'cli', installed: true, version: '2.34.1', description: 'Distributed version control system' },
-        { name: 'htop', category: 'cli', installed: true, version: '3.0.5', description: 'Interactive process viewer for Unix' },
-        { name: 'ufw', category: 'security', installed: true, version: '0.36.1', description: 'Uncomplicated Firewall for Linux' },
-        { name: 'certbot', category: 'security', installed: true, version: '1.21.0', description: 'Automated Let\'s Encrypt SSL certificate tool' },
-        { name: 'nginx', category: 'server', installed: true, version: '1.18.0', description: 'High performance HTTP server and reverse proxy' },
-        { name: 'rsync', category: 'cli', installed: true, version: '3.2.3', description: 'Fast incremental file transfer utility' },
-        { name: 'unzip', category: 'cli', installed: true, version: '6.00', description: 'Extraction utility for ZIP archives' },
-        { name: 'tree', category: 'cli', installed: true, version: '2.0.2', description: 'Recursive directory listing program' },
-        { name: 'jq', category: 'cli', installed: true, version: '1.6', description: 'Command-line JSON processor' },
-        { name: 'net-tools', category: 'network', installed: true, version: '2.10', description: 'Linux networking utilities (ifconfig, netstat)' },
-        { name: 'build-essential', category: 'developer', installed: true, version: '12.9', description: 'Debian meta-package for compiling software (gcc, g++, make)' },
-      ]);
-
-      setLanguages([
-        { name: 'Node.js', category: 'runtime', installed: true, version: 'v20.12.2', binary: 'node', description: 'JavaScript runtime built on V8 engine' },
-        { name: 'Python', category: 'runtime', installed: true, version: '3.10.12', binary: 'python3', description: 'High-level general purpose programming language' },
-        { name: 'Go (Golang)', category: 'runtime', installed: true, version: '1.22.2', binary: 'go', description: 'Fast compiled language built by Google' },
-        { name: 'Rust', category: 'runtime', installed: true, version: '1.77.0', binary: 'rustc', description: 'Reliable and memory-safe systems programming language' },
-        { name: 'PHP', category: 'runtime', installed: false, version: '8.3.4', binary: 'php', description: 'Popular general-purpose web scripting language' },
-        { name: 'OpenJDK (Java)', category: 'runtime', installed: false, version: '21.0.2', binary: 'java', description: 'Open-source implementation of Java Platform' },
-        { name: 'Bun', category: 'runtime', installed: false, version: '1.1.0', binary: 'bun', description: 'Incredibly fast all-in-one JavaScript toolkit' },
-        { name: 'Deno', category: 'runtime', installed: false, version: '1.42.0', binary: 'deno', description: 'Modern runtime for JavaScript and TypeScript' },
-      ]);
+      // Show nothing rather than a plausible-looking fiction. The previous fallback hard-coded
+      // twelve packages and four runtimes as "INSTALLED" with invented version numbers, so an
+      // unreachable agent looked exactly like a fully provisioned host.
+      setPackages([]);
+      setLanguages([]);
+      setLoadError(
+        e instanceof ApiError && e.status === 401
+          ? 'Unauthorized — set a valid Agent Token under Settings to read installed packages.'
+          : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
+      );
     }
     setLoading(false);
   };
@@ -131,11 +103,22 @@ export function PackagesPage() {
     }
   };
 
-  const copyInstallCmd = (cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedCmd(cmd);
-    setTimeout(() => setCopiedCmd(null), 2000);
+  const copyInstallCmd = async (cmd: string) => {
+    try {
+      // navigator.clipboard is undefined on insecure origins (plain-HTTP VPS deployments), where
+      // this previously threw an unhandled TypeError and the button silently did nothing.
+      if (!navigator.clipboard?.writeText) throw new Error('unavailable');
+      await navigator.clipboard.writeText(cmd);
+      setCopiedCmd(cmd);
+      setTimeout(() => setCopiedCmd(null), 2000);
+    } catch (e) {
+      setInstallError('Clipboard access is unavailable (requires HTTPS or localhost). Copy the command manually.');
+      setTimeout(() => setInstallError(null), 4000);
+    }
   };
+
+  /** The apt package name, which is often not the binary name (node -> nodejs, java -> default-jdk). */
+  const aptNameFor = (lang: LanguageItem): string | null => LANGUAGE_APT_PACKAGE[lang.name] ?? null;
 
   const filteredPackages = packages.filter(
     (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.description.toLowerCase().includes(search.toLowerCase())
@@ -174,6 +157,19 @@ export function PackagesPage() {
         </div>
       )}
 
+      {loadError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>{loadError}</span>
+        </div>
+      )}
+
+      {!loading && !loadError && packages.length === 0 && languages.length === 0 && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+          The agent reported no packages or runtimes for this host.
+        </div>
+      )}
+
       {/* Filter Bar */}
       <div className="flex items-center justify-between gap-4">
         <div className="relative w-full max-w-sm">
@@ -196,7 +192,12 @@ export function PackagesPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {filteredLanguages.map((lang) => {
-            const installCmd = `sudo apt update && sudo apt install -y ${lang.binary}`;
+            const aptName = aptNameFor(lang);
+            // `apt install node` fails — the Debian package is `nodejs`. Fall back to a pointer to
+            // the upstream installer for runtimes with no apt package at all (Bun, Deno).
+            const installCmd = aptName
+              ? `sudo apt update && sudo apt install -y ${aptName}`
+              : `# ${lang.name} has no apt package — see the official installer for ${lang.name}`;
             return (
               <motion.div key={lang.name} whileHover={{ y: -3 }} transition={{ duration: 0.15 }}>
                 <Card className="bg-card/80 border-border/70 hover:border-cyan-500/40 transition-all flex flex-col justify-between h-full">
@@ -208,7 +209,9 @@ export function PackagesPage() {
                         </div>
                         <div>
                           <h3 className="font-bold text-xs text-foreground">{lang.name}</h3>
-                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{lang.version}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate max-w-[140px]" title={lang.version ?? ''}>
+                            {lang.version ?? (lang.installed ? 'version unknown' : 'not installed')}
+                          </p>
                         </div>
                       </div>
 
@@ -274,7 +277,9 @@ export function PackagesPage() {
                       </div>
                       <div>
                         <h3 className="font-bold text-xs text-foreground font-mono">{pkg.name}</h3>
-                        <p className="text-[10px] text-muted-foreground font-mono">v{pkg.version}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[160px]" title={pkg.version ?? ''}>
+                          {pkg.version ?? (pkg.installed ? 'version unknown' : 'not installed')}
+                        </p>
                       </div>
                     </div>
 

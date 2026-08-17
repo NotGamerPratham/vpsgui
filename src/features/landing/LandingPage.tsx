@@ -1,41 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import {
-  Server,
-  Activity,
-  Shield,
-  Zap,
-  Terminal,
-  Cpu,
-  Globe,
-  Github,
-  Heart,
-  ExternalLink,
-  Copy,
-  Check,
-  ArrowRight,
-  Code2,
-  Package,
-  Workflow,
-  Layers,
-  Lock,
-  BookOpen,
-  Download,
-  Star,
-  GitFork,
-  Box,
-  Container,
-  Map,
-  HardDrive,
-  Layout,
-  Radio,
-  CheckCircle2,
-  AlertCircle,
-  Sparkles,
-} from 'lucide-react';
+import { Server, Activity, Terminal, Github, Heart, ExternalLink, Copy, Check, ArrowRight, Code2, Lock, BookOpen, Star, GitFork, Box, Container, Map, Layout, Radio, Sparkles } from 'lucide-react';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
+import { Card } from '../../components/ui/card';
+
 
 export function LandingPage() {
   const navigate = useNavigate();
@@ -211,9 +179,12 @@ export function LandingPage() {
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
                 <Terminal className="h-5 w-5" />
               </div>
-              <h3 className="font-bold text-sm text-foreground">SSH Workbench Terminal</h3>
+              <h3 className="font-bold text-sm text-foreground">Host Terminal</h3>
+              {/* Describes what actually ships: token-authenticated command execution over the
+                  agent's HTTP API. There is no SSH client and no "AES256 encrypted key auth". */}
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Interactive web SSH terminal workbench with tab management, saved snippets, and AES256 encrypted key auth.
+                Run shell commands on the host through the token-authenticated agent, with saved
+                snippets and command history. Serve it over HTTPS.
               </p>
             </Card>
 

@@ -1,93 +1,95 @@
 /**
  * VPSGUI Open Infrastructure Workspace Service Worker
- * Provides offline caching, network-first API strategies, and push notification listener.
+ *
+ * Caches the static app shell for offline loads. API responses are deliberately NEVER cached:
+ * they carry live host telemetry, process lists, and file contents, and serving a stale copy would
+ * both leak that data into persistent browser storage and present old readings as current.
  */
 
-const CACHE_NAME = 'vpsgui-cache-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/robots.txt',
-  '/manifest.json',
-];
+const CACHE_NAME = 'vpsgui-cache-v2';
 
-// Install Event - Cache Core Assets
+// Only assets that are guaranteed to exist. cache.addAll() rejects atomically if any single entry
+// 404s, which previously aborted installation entirely (the list referenced /manifest.json, which
+// this project does not ship) and left the service worker permanently inactive.
+const STATIC_ASSETS = ['/', '/index.html'];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) =>
+        // Cache entries individually so one missing asset cannot fail the whole install.
+        Promise.all(
+          STATIC_ASSETS.map((asset) =>
+            cache.add(asset).catch((err) => console.warn('[SW] Skipped caching', asset, err))
+          )
+        )
+      )
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activate Event - Clean Up Old Caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch Event - Stale-While-Revalidate for Static Assets, Network-First for API
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  const url = new URL(request.url);
 
-  // Skip non-GET requests and WebSocket connections
-  if (request.method !== 'GET' || url.protocol === 'ws:' || url.protocol === 'wss:') {
+  // Only same-origin GETs are eligible; cross-origin requests (fonts, ipapi.co) pass through.
+  if (request.method !== 'GET') return;
+
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (e) {
     return;
   }
+  if (url.origin !== self.location.origin) return;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
-  // Network-First for API endpoints
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
+  // Never cache, never serve from cache: privileged host data must always come from the agent.
+  // A cached telemetry or file-read response would otherwise persist on disk and could be replayed
+  // after logout or by anyone with local access to the profile.
+  if (url.pathname.startsWith('/api/')) return;
 
-  // Stale-While-Revalidate for UI Assets
+  // Stale-while-revalidate for the app shell and build assets.
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      const fetchPromise = fetch(request).then((networkResponse) => {
-        if (networkResponse.ok) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
-        }
-        return networkResponse;
-      }).catch(() => cachedResponse);
+      const fetchPromise = fetch(request)
+        .then((networkResponse) => {
+          // Only store complete, same-origin basic responses; opaque ones poison the cache.
+          if (networkResponse.ok && networkResponse.type === 'basic') {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => cachedResponse);
 
       return cachedResponse || fetchPromise;
     })
   );
 });
 
-// Push Notification Event Handler
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
   try {
     const payload = event.data.json();
-    const options = {
-      body: payload.body || 'Infrastructure alert received',
-      icon: '/icon-192.png',
-      badge: '/badge.png',
-      data: payload.data || {},
-      actions: payload.actions || [],
-    };
-
     event.waitUntil(
-      self.registration.showNotification(payload.title || 'VPSGUI Alert', options)
+      self.registration.showNotification(payload.title || 'VPSGUI Alert', {
+        body: payload.body || 'Infrastructure alert received',
+        data: payload.data || {},
+        // icon/badge are omitted rather than pointing at /icon-192.png and /badge.png, which this
+        // project does not ship; a missing icon path makes some browsers drop the notification.
+        tag: payload.tag || 'vpsgui-alert',
+      })
     );
   } catch (e) {
     console.error('Service Worker push parse error:', e);
