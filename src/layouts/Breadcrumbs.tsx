@@ -1,4 +1,5 @@
 import React from 'react';
+import { copyToClipboard } from '../lib/clipboard';
 import { useLocation, Link } from 'react-router-dom';
 import { ChevronRight, Home, Server, Copy, Check } from 'lucide-react';
 import { useServerStore } from '../store/useServerStore';
@@ -12,12 +13,15 @@ export function Breadcrumbs() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0];
   const pathNames = location.pathname.split('/').filter((x) => x);
 
-  const copySshCommand = () => {
-    if (selectedNode && selectedNode.network) {
-      navigator.clipboard.writeText(`ssh root@${selectedNode.network.publicIp || '127.0.0.1'} -p ${selectedNode.network.sshPort || 22}`);
+  const copySshCommand = async () => {
+    if (!selectedNode?.network) return;
+    const cmd = `ssh root@${selectedNode.network.publicIp || '127.0.0.1'} -p ${selectedNode.network.sshPort || 22}`;
+    if ((await copyToClipboard(cmd)) === 'copied') {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      return;
     }
+    window.prompt('Copy the SSH command:', cmd);
   };
 
   return (

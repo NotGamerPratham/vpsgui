@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyToClipboard } from '../../lib/clipboard';
 import { useNavigate, Link } from 'react-router-dom';
 import { Server, Activity, Terminal, Github, Heart, ExternalLink, Copy, Check, ArrowRight, Code2, Lock, BookOpen, Star, GitFork, Box, Container, Map, Layout, Radio, Sparkles } from 'lucide-react';
 import { Button } from '../../components/ui/button';
@@ -13,16 +14,22 @@ export function LandingPage() {
 
   const installScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
-  const copyScript = () => {
-    navigator.clipboard.writeText(installScript);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyScript = async () => {
+    if ((await copyToClipboard(installScript)) === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      return;
+    }
+    window.prompt('Copy the install script:', installScript);
   };
 
-  const copySdkCmd = (cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedSdk(true);
-    setTimeout(() => setCopiedSdk(false), 2000);
+  const copySdkCmd = async (cmd: string) => {
+    if ((await copyToClipboard(cmd)) === 'copied') {
+      setCopiedSdk(true);
+      setTimeout(() => setCopiedSdk(false), 2000);
+      return;
+    }
+    window.prompt('Copy the command:', cmd);
   };
 
   return (

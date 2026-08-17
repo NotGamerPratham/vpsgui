@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyToClipboard } from '../../lib/clipboard';
 import { Layers, Copy, Check } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -58,10 +59,13 @@ runcmd:
   - curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | bash`,
   };
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(snippets[selectedFormat]);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyCode = async () => {
+    if ((await copyToClipboard(snippets[selectedFormat])) === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      return;
+    }
+    window.prompt('Copy the snippet:', snippets[selectedFormat]);
   };
 
   return (

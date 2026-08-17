@@ -404,10 +404,26 @@ describe('agent: input validation', () => {
     expect((await res.json()).output).toContain('same-origin-write');
   });
 
-  it('rejects a cross-origin write even when the port differs from the host', async () => {
+  it('allows a same-host write when a proxy rewrote the port out of the Host header', async () => {
+    // nginx's `$host` drops the port while the browser's Origin keeps it. Comparing host:port
+    // rejected every write on any deployment not served on the default port.
     const res = await fetch(`${BASE}/api/v1/terminal/exec`, {
       method: 'POST',
-      headers: { ...AUTH, 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT + 1}` },
+      headers: {
+        ...AUTH,
+        'Content-Type': 'application/json',
+        Host: '127.0.0.1',
+        Origin: 'http://127.0.0.1:8443',
+      },
+      body: JSON.stringify({ command: 'echo proxied-write' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still rejects a write from a different host entirely', async () => {
+    const res = await fetch(`${BASE}/api/v1/terminal/exec`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json', Origin: 'https://evil.example' },
       body: JSON.stringify({ command: 'echo nope' }),
     });
     expect(res.status).toBe(403);

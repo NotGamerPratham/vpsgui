@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { apiClient, ApiError } from '../../api/client';
+import { copyToClipboard } from '../../lib/clipboard';
 
 interface PackageItem {
   name: string;
@@ -104,17 +105,15 @@ export function PackagesPage() {
   };
 
   const copyInstallCmd = async (cmd: string) => {
-    try {
-      // navigator.clipboard is undefined on insecure origins (plain-HTTP VPS deployments), where
-      // this previously threw an unhandled TypeError and the button silently did nothing.
-      if (!navigator.clipboard?.writeText) throw new Error('unavailable');
-      await navigator.clipboard.writeText(cmd);
+    // copyToClipboard falls back to execCommand, so this works over plain HTTP where
+    // navigator.clipboard does not exist at all.
+    if ((await copyToClipboard(cmd)) === 'copied') {
       setCopiedCmd(cmd);
       setTimeout(() => setCopiedCmd(null), 2000);
-    } catch (e) {
-      setInstallError('Clipboard access is unavailable (requires HTTPS or localhost). Copy the command manually.');
-      setTimeout(() => setInstallError(null), 4000);
+      return;
     }
+    // Last resort: show the command so it can be selected, rather than only saying "copy manually".
+    window.prompt('Copy the install command:', cmd);
   };
 
   /** The apt package name, which is often not the binary name (node -> nodejs, java -> default-jdk). */

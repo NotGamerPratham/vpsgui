@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyToClipboard } from '../../lib/clipboard';
 import { FileCode, Terminal, BookOpen, ShieldCheck, Copy, Check, Network } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -10,10 +11,13 @@ export function DocsPage() {
 
   const installScript = `curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash`;
 
-  const copyScript = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyScript = async (text: string) => {
+    if ((await copyToClipboard(text)) === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      return;
+    }
+    window.prompt('Copy the command:', text);
   };
 
   return (

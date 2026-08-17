@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { catalogService } from '../../services/catalogService';
 import { CatalogItem, CatalogCategory } from '../../types/catalog';
+import { copyToClipboard } from '../../lib/clipboard';
 
 export function CatalogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
@@ -26,15 +27,13 @@ export function CatalogPage() {
       .join(' ');
     const cmd = ['docker run -d --name', item.id, ports, env, item.image].filter(Boolean).join(' ');
 
-    try {
-      // Undefined on insecure origins, where this would otherwise throw silently.
-      if (!navigator.clipboard?.writeText) throw new Error('unavailable');
-      await navigator.clipboard.writeText(cmd);
+    // Falls back to execCommand, so this works over plain HTTP too.
+    if ((await copyToClipboard(cmd)) === 'copied') {
       setCopiedId(item.id);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch (e) {
-      window.prompt('Clipboard unavailable (requires HTTPS or localhost). Copy manually:', cmd);
+      return;
     }
+    window.prompt('Copy the run command:', cmd);
   };
 
   const categories: { id: CatalogCategory | 'all'; label: string }[] = [

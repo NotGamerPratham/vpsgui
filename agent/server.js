@@ -1309,10 +1309,19 @@ function applyCors(req, res) {
   // Browsers attach Origin to same-origin POST/PUT/DELETE (but not same-origin GET). Treating a
   // bare Origin as cross-origin therefore rejected every write from the app's own page while all
   // reads succeeded. Compare against the Host the request arrived on before deciding.
+  //
+  // Compare HOSTNAMES, not host:port. Behind a reverse proxy the two ports need not agree: nginx's
+  // `$host` drops the port while the browser's Origin keeps it, so a deployment on any non-default
+  // port would otherwise 403 every write. The bearer token remains the actual access control here;
+  // set AGENT_ALLOWED_ORIGINS if you need strict per-origin matching.
   const host = req.headers.host;
   if (host) {
     try {
-      if (new URL(origin).host === host) return true;
+      const originHost = new URL(origin).hostname;
+      // `host` may or may not carry a port; strip it, handling bracketed IPv6 literals.
+      const bare = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0];
+      const hostname = bare.replace(/^\[|\]$/g, '');
+      if (originHost && originHost === hostname) return true;
     } catch (e) {
       // Malformed Origin header; fall through to the allowlist check.
     }
