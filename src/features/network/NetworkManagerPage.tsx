@@ -3,27 +3,66 @@ import { Globe, Radio } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 
+/** Matches the agent's GET /network/interfaces payload. */
 interface NetworkInterface {
   name: string;
   mac: string;
   ipv4: string;
-  type: string;
-  rx: string;
-  tx: string;
-  status: string;
+  ipv6: string;
+  type: 'ethernet' | 'wireless' | 'virtual' | 'loopback';
+  /** Cumulative counters since boot (0 on platforms without /proc/net/dev). */
+  rxBytes: number;
+  txBytes: number;
+  /** Live throughput, sampled by the agent every 2s. */
+  rxSpeedMbps: number;
+  txSpeedMbps: number;
+  status: 'up' | 'down';
+}
+
+/** Format a byte counter for display. The agent sends numbers, not pre-formatted strings. */
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${Math.round((bytes / 1024 ** i) * 10) / 10} ${units[i]}`;
 }
 
 export function NetworkManagerPage() {
   const [interfaces, setInterfaces] = useState<NetworkInterface[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiClient.get<NetworkInterface[]>('/network/interfaces')
-      .then((data) => setInterfaces(Array.isArray(data) ? data : []))
-      .catch(() => setInterfaces([]))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const data = await apiClient.get<NetworkInterface[]>('/network/interfaces');
+        if (cancelled) return;
+        setInterfaces(Array.isArray(data) ? data : []);
+        setError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setInterfaces([]);
+        setError(
+          e instanceof ApiError && e.status === 401
+            ? 'Unauthorized — set a valid Agent Token under Settings.'
+            : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    // Throughput is a live reading, so refresh it rather than showing one frozen sample.
+    const timer = setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -62,7 +101,8 @@ export function NetworkManagerPage() {
                 <TableHead className="text-xs">IPv4 Address</TableHead>
                 <TableHead className="text-xs">MAC Address</TableHead>
                 <TableHead className="text-xs">Type</TableHead>
-                <TableHead className="text-xs">Traffic (RX / TX)</TableHead>
+                <TableHead className="text-xs">Total (RX / TX)</TableHead>
+                <TableHead className="text-xs">Live (RX / TX)</TableHead>
                 <TableHead className="text-xs">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -76,9 +116,20 @@ export function NetworkManagerPage() {
                   <TableCell className="font-mono text-xs text-primary">{iface.ipv4}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{iface.mac}</TableCell>
                   <TableCell className="text-xs text-muted-foreground uppercase">{iface.type}</TableCell>
-                  <TableCell className="font-mono text-xs text-emerald-400">{iface.rx} / {iface.tx}</TableCell>
+                  {/* The agent sends numeric counters; these were rendered as `iface.rx`/`iface.tx`
+                      which never existed on the payload and printed "undefined / undefined". */}
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {formatBytes(iface.rxBytes)} / {formatBytes(iface.txBytes)}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-emerald-400">
+                    {iface.rxSpeedMbps} / {iface.txSpeedMbps} Mbps
+                  </TableCell>
                   <TableCell>
-                    <Badge variant="success" className="text-[10px] px-2 py-0.5 uppercase font-mono">
+                    {/* Was hardcoded to the green "success" variant regardless of actual status. */}
+                    <Badge
+                      variant={iface.status === 'up' ? 'success' : 'outline'}
+                      className="text-[10px] px-2 py-0.5 uppercase font-mono"
+                    >
                       {iface.status}
                     </Badge>
                   </TableCell>

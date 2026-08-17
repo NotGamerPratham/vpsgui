@@ -1,7 +1,8 @@
 export interface FirewallRule {
   id: string;
   nodeId: string;
-  action: 'allow' | 'deny' | 'reject';
+  /** 'limit' is ufw's rate-limiting action; it was missing from this union. */
+  action: 'allow' | 'deny' | 'reject' | 'limit';
   direction: 'inbound' | 'outbound';
   protocol: 'tcp' | 'udp' | 'icmp' | 'any';
   port: string;

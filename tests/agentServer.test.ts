@@ -109,6 +109,49 @@ describe('agent: authentication', () => {
   });
 });
 
+describe('agent: host inventory endpoints', () => {
+  // These four backed pages that previously 404'd on every load, so the UI could only ever show
+  // an empty state. They must return arrays (possibly empty on platforms lacking the tool) — not 404.
+  it.each(['/storage/partitions', '/network/interfaces', '/security/firewall', '/security/ssh-keys'])(
+    'implements %s and returns an array',
+    async (endpoint) => {
+      const res = await fetch(`${BASE}/api/v1${endpoint}`, { headers: AUTH });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(await res.json())).toBe(true);
+    }
+  );
+
+  it('reports at least one network interface with a MAC and a stable shape', async () => {
+    const res = await fetch(`${BASE}/api/v1/network/interfaces`, { headers: AUTH });
+    const interfaces = await res.json();
+    expect(interfaces.length).toBeGreaterThan(0);
+
+    for (const iface of interfaces) {
+      expect(typeof iface.name).toBe('string');
+      expect(['ethernet', 'wireless', 'virtual', 'loopback']).toContain(iface.type);
+      expect(typeof iface.rxSpeedMbps).toBe('number');
+      expect(iface.rxSpeedMbps).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('never reports a fabricated SMART verdict', async () => {
+    const res = await fetch(`${BASE}/api/v1/storage/partitions`, { headers: AUTH });
+    for (const part of await res.json()) {
+      // SMART needs smartctl and raw device access; claiming "passed" without checking is a lie.
+      expect(part.smartHealth).toBeNull();
+      expect(part.usagePercent).toBeGreaterThanOrEqual(0);
+      expect(part.usagePercent).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('requires a token for the inventory endpoints too', async () => {
+    for (const endpoint of ['/storage/partitions', '/network/interfaces', '/security/ssh-keys']) {
+      const res = await fetch(`${BASE}/api/v1${endpoint}`);
+      expect(res.status, `${endpoint} must require a token`).toBe(401);
+    }
+  });
+});
+
 describe('agent: filesystem confinement', () => {
   it('lists a directory inside an allowed root', async () => {
     const res = await fetch(`${BASE}/api/v1/files?path=${encodeURIComponent(sandboxRoot)}`, { headers: AUTH });
@@ -123,6 +166,18 @@ describe('agent: filesystem confinement', () => {
     const items = await res.json();
     for (const item of items) {
       expect(item).not.toHaveProperty('content');
+    }
+  });
+
+  it('does not treat a sibling directory as inside the root', async () => {
+    // "/etc" must not match "/etcetera" — the separator in the prefix check guards against this.
+    const sibling = `${sandboxRoot}-sibling`;
+    await fs.mkdir(sibling, { recursive: true });
+    try {
+      const res = await fetch(`${BASE}/api/v1/files?path=${encodeURIComponent(sibling)}`, { headers: AUTH });
+      expect(res.status).toBe(403);
+    } finally {
+      await fs.rm(sibling, { recursive: true, force: true });
     }
   });
 
@@ -181,6 +236,57 @@ describe('agent: filesystem confinement', () => {
     });
     expect(res.status).toBe(403);
     await expect(fs.access(outside)).rejects.toBeTruthy();
+  });
+});
+
+describe('agent: filesystem-root configuration', () => {
+  const ROOT_PORT = 46578;
+  const ROOT_BASE = `http://127.0.0.1:${ROOT_PORT}`;
+  let rootChild: ChildProcess;
+
+  beforeAll(async () => {
+    // AGENT_FILE_ROOTS set to the filesystem root is a legitimate (if wide-open) configuration.
+    // It used to reject every path because the containment prefix became "//".
+    const fsRoot = path.parse(process.cwd()).root;
+    rootChild = spawn(process.execPath, [SERVER_PATH], {
+      env: {
+        ...process.env,
+        PORT: String(ROOT_PORT),
+        AGENT_HOST: '127.0.0.1',
+        AGENT_TOKEN: TOKEN,
+        AGENT_FILE_ROOTS: fsRoot,
+      },
+      stdio: 'ignore',
+    });
+
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        if ((await fetch(`${ROOT_BASE}/api/v1/health`)).ok) return;
+      } catch {
+        /* not up yet */
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new Error('Agent with filesystem root did not start');
+  }, 30000);
+
+  afterAll(() => rootChild?.kill());
+
+  it('allows browsing below the filesystem root when configured that way', async () => {
+    const res = await fetch(`${ROOT_BASE}/api/v1/files?path=${encodeURIComponent(process.cwd())}`, {
+      headers: AUTH,
+    });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it('still blocks credential files even with the filesystem root configured', async () => {
+    const secret = path.join(process.cwd(), 'agent', '.agent-token');
+    const res = await fetch(`${ROOT_BASE}/api/v1/files/read?path=${encodeURIComponent(secret)}`, {
+      headers: AUTH,
+    });
+    expect(res.status).toBe(403);
   });
 });
 

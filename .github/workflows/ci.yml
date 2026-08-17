@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch instead of queueing them.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # `npm ci` requires package-lock.json to be in sync with package.json, which also catches
+      # dependency drift in PRs.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (src and tests)
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # The agent suite boots the real daemon on a loopback port and exercises authentication,
+      # path confinement, and input validation.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  agent-smoke:
+    name: Agent starts and gates access
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Guards the deployment path that actually broke in production: the agent failing to start,
+      # or serving privileged endpoints without a token.
+      - name: Start agent
+        env:
+          AGENT_TOKEN: ci-token-0123456789abcdef
+          AGENT_HOST: 127.0.0.1
+          PORT: '46509'
+        run: |
+          node agent/server.js &
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:46509/api/v1/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Agent failed to become healthy" >&2
+          exit 1
+
+      - name: Privileged endpoints must reject an unauthenticated caller
+        run: |
+          for endpoint in system/telemetry system/processes docker/containers node files; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:46509/api/v1/$endpoint")
+            if [ "$code" != "401" ]; then
+              echo "FAIL: /$endpoint returned $code, expected 401" >&2
+              exit 1
+            fi
+          done
+          echo "All privileged endpoints correctly returned 401."
+
+      - name: Authenticated caller receives real telemetry
+        run: |
+          curl -fsS -H 'Authorization: Bearer ci-token-0123456789abcdef' \
+            http://127.0.0.1:46509/api/v1/system/telemetry | grep -q '"cpuPercent"'

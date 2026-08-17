@@ -7,12 +7,12 @@
 <p align="center">
   <a href="https://github.com/NotGamerPratham/vpsgui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-10B981?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>
   <a href="https://github.com/NotGamerPratham/vpsgui"><img src="https://img.shields.io/github/v/release/NotGamerPratham/vpsgui?style=flat-square&color=3B82F6" alt="Release" /></a>
-  <a href="https://github.com/NotGamerPratham/vpsgui/actions"><img src="https://img.shields.io/badge/Build-Passing-10B981?style=flat-square&logo=github&logoColor=white" alt="Build Status" /></a>
+  <a href="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml"><img src="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://vitejs.dev"><img src="https://img.shields.io/badge/Vite-5.4-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /></a>
   <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-3.4-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" /></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go_Agent-1.22-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Agent" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node_Agent-18%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js Agent" /></a>
   <a href="https://notgamerpratham.com"><img src="https://img.shields.io/badge/Author-NotGamerPratham-FF4655?style=flat-square&logo=github&logoColor=white" alt="NotGamerPratham" /></a>
 </p>
 
@@ -24,19 +24,47 @@ Repository: **[https://github.com/NotGamerPratham/vpsgui](https://github.com/Not
 
 ---
 
-## 1-Click Setup & Execution
+## ⚠️ Before you deploy
 
-Run the setup script to install dependencies, build assets, and launch VPSGUI:
+VPSGUI's `vpsgui-agent` daemon executes shell commands, installs packages, controls systemd units
+and Docker containers, and reads and writes files on the host. **The agent token is equivalent to a
+root password.** Anyone who can reach the agent with that token owns the machine.
+
+- Serve VPSGUI over **HTTPS**. The token is sent as a bearer header; over plain HTTP anything on the
+  network path can capture it.
+- Keep the agent on **loopback** (the default) behind the bundled nginx reverse proxy. Do not expose
+  port 46509 to the internet.
+- Put the UI behind a **VPN, firewall, or authenticating proxy**. The sign-in page is a local profile
+  gate, not authentication — VPSGUI ships no user database, roles, or permissions.
+
+See [docs/SECURITY.md](docs/SECURITY.md) for the full model and the hardening knobs.
+
+---
+
+## Setup
+
+Requires **Node.js 18+**. Clone, then run the deploy script as root — it installs dependencies,
+builds the frontend, publishes it to `/var/www/vpsgui/dist`, installs the agent as a systemd
+service, and configures nginx:
 
 ```bash
-chmod +x run.sh && ./run.sh
+git clone https://github.com/NotGamerPratham/vpsgui.git && cd vpsgui && sudo ./run.sh
 ```
 
-Or deploy `vpsgui-agent` to any Linux VPS (`Ubuntu`, `Debian`, `CentOS`, `Alpine`, `Arch`):
+To install only the agent on an additional Linux host, download and **read the script before running
+it as root** — piping a remote script straight into `sudo bash` executes whatever the URL returns at
+that moment, with no chance to inspect it:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh | sudo bash
+curl -fsSLO https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh
 ```
+
+```bash
+less install.sh && sudo bash install.sh
+```
+
+The installer prints an agent token on completion. Paste it into the web UI under
+**Settings → Agent Token**; without it every privileged endpoint returns `401`.
 
 ---
 
@@ -151,11 +179,11 @@ telemetry = client.system.telemetry()
 
 ## Technical Documentation
 
-- [Architecture Overview](file:///docs/ARCHITECTURE.md)
-- [Linux Agent Installation](file:///docs/AGENT_INSTALLATION.md)
-- [REST & WebSocket API Reference](file:///docs/API_REFERENCE.md)
-- [Developer Contribution Guide](file:///docs/DEVELOPMENT.md)
-- [Security & RBAC Policy](file:///docs/SECURITY.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Linux Agent Installation](docs/AGENT_INSTALLATION.md)
+- [REST API Reference](docs/API_REFERENCE.md)
+- [Developer Guide](docs/DEVELOPMENT.md)
+- [Security Model](docs/SECURITY.md)
 
 ---
 
@@ -163,4 +191,4 @@ telemetry = client.system.telemetry()
 
 Developed by **[NotGamerPratham](https://notgamerpratham.com)**.
 
-VPSGUI is open-source software released under the [MIT License](file:///LICENSE).
+VPSGUI is open-source software released under the [MIT License](LICENSE).

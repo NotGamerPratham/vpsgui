@@ -27,6 +27,15 @@ fi
 
 NODE_BIN="$(command -v node)"
 
+# The agent uses fs/promises and logical-assignment syntax. On an older Node it dies with a syntax
+# error at startup, which surfaces only as an unexplained 502 from nginx — fail loudly here instead.
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+if [ "${NODE_MAJOR}" -lt 18 ]; then
+  echo "Error: Node.js 18+ is required (found $(node -v 2>/dev/null || echo 'none'))." >&2
+  echo "  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs" >&2
+  exit 1
+fi
+
 if [ ! -f "${SCRIPT_DIR}/server.js" ]; then
   echo "Error: ${SCRIPT_DIR}/server.js not found. Run this script from the cloned repository." >&2
   exit 1

@@ -30,7 +30,7 @@ Environment=AGENT_HOST=127.0.0.1
 # Leave unset to have the agent generate one and persist it to /opt/vpsgui/agent/.agent-token (0600).
 # Environment=AGENT_TOKEN=replace-with-a-long-random-value
 # Directories the file manager may browse. Narrow this list to reduce blast radius.
-Environment=AGENT_FILE_ROOTS=/etc,/var/www,/var/log,/home,/opt,/srv
+Environment=AGENT_FILE_ROOTS=/etc,/var/www,/var/log,/home,/opt,/srv,/
 # Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
 Environment=AGENT_ENABLE_SHELL=1
 # Comma-separated browser origins allowed to call the agent cross-origin. Leave unset when the UI

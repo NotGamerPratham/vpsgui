@@ -68,7 +68,8 @@ const CORS_ORIGINS = (process.env.AGENT_ALLOWED_ORIGINS || '')
 // Shared-secret bearer token gating every privileged endpoint. Read from AGENT_TOKEN if set (e.g. by
 // install.sh), otherwise generated once and persisted 0600 so it survives restarts. Paste this value
 // into the VPSGUI web UI under Settings -> Agent Token.
-function getOrCreateAgentToken() {
+function getOrCreateAgentToken()
+{
   const fromEnv = (process.env.AGENT_TOKEN || '').trim();
   if (fromEnv) {
     if (fromEnv.length < 16) {
@@ -102,11 +103,13 @@ const AGENT_TOKEN_DIGEST = crypto.createHash('sha256').update(AGENT_TOKEN).diges
 
 const authFailures = new Map(); // ip -> { count, lockedUntil }
 
-function clientIp(req) {
+function clientIp(req)
+{
   return req.socket.remoteAddress || 'unknown';
 }
 
-function isLockedOut(ip) {
+function isLockedOut(ip)
+{
   const entry = authFailures.get(ip);
   if (!entry) return false;
   if (entry.lockedUntil && entry.lockedUntil > Date.now()) return true;
@@ -114,7 +117,8 @@ function isLockedOut(ip) {
   return false;
 }
 
-function recordAuthFailure(ip) {
+function recordAuthFailure(ip)
+{
   const entry = authFailures.get(ip) || { count: 0, lockedUntil: 0 };
   entry.count += 1;
   if (entry.count >= AUTH_MAX_FAILURES) {
@@ -125,7 +129,8 @@ function recordAuthFailure(ip) {
   authFailures.set(ip, entry);
 }
 
-function isAuthorized(req) {
+function isAuthorized(req)
+{
   const header = req.headers['authorization'] || '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
   if (!match) return false;
@@ -134,7 +139,8 @@ function isAuthorized(req) {
 }
 
 // Drop lockout entries that have expired so the map cannot grow without bound.
-setInterval(() => {
+setInterval(() =>
+{
   const now = Date.now();
   for (const [ip, entry] of authFailures) {
     if (!entry.lockedUntil || entry.lockedUntil <= now) authFailures.delete(ip);
@@ -145,7 +151,8 @@ setInterval(() => {
 // Command execution helpers (async: execSync would block every other request)
 // ---------------------------------------------------------------------------
 
-async function run(file, args, opts = {}) {
+async function run(file, args, opts = {})
+{
   const { stdout } = await execFileAsync(file, args, {
     encoding: 'utf-8',
     timeout: opts.timeout || EXEC_TIMEOUT_MS,
@@ -156,13 +163,15 @@ async function run(file, args, opts = {}) {
 }
 
 // Only for the explicit user-driven terminal, which is shell-by-design.
-async function runShell(command, opts = {}) {
+async function runShell(command, opts = {})
+{
   const shell = os.platform() === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh';
   const args = os.platform() === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
   return run(shell, args, opts);
 }
 
-async function tryRun(file, args, opts) {
+async function tryRun(file, args, opts)
+{
   try {
     return await run(file, args, opts);
   } catch (e) {
@@ -174,7 +183,8 @@ async function tryRun(file, args, opts) {
 // Telemetry sampling
 // ---------------------------------------------------------------------------
 
-function cpuTimesSnapshot() {
+function cpuTimesSnapshot()
+{
   let idle = 0;
   let total = 0;
   for (const cpu of os.cpus()) {
@@ -184,24 +194,67 @@ function cpuTimesSnapshot() {
   return { idle, total };
 }
 
-function netBytesSnapshot() {
+/** Per-interface cumulative byte counters from /proc/net/dev (Linux only). */
+function perInterfaceBytes() {
   if (os.platform() !== 'linux') return null;
   try {
     const data = fs.readFileSync('/proc/net/dev', 'utf-8');
-    let rx = 0;
-    let tx = 0;
+    const byIface = Object.create(null);
     for (const line of data.split('\n').slice(2)) {
       const [iface, rest] = line.split(':');
       if (!rest) continue;
-      if (iface.trim() === 'lo') continue; // loopback is not real throughput
       const cols = rest.trim().split(/\s+/);
-      rx += Number.parseInt(cols[0], 10) || 0;
-      tx += Number.parseInt(cols[8], 10) || 0;
+      byIface[iface.trim()] = {
+        rx: Number.parseInt(cols[0], 10) || 0,
+        tx: Number.parseInt(cols[8], 10) || 0,
+      };
     }
-    return { rx, tx };
+    return byIface;
   } catch (e) {
     return null;
   }
+}
+
+function netBytesSnapshot() {
+  const byIface = perInterfaceBytes();
+  if (!byIface) return null;
+  let rx = 0;
+  let tx = 0;
+  for (const [name, counters] of Object.entries(byIface)) {
+    if (name === 'lo') continue; // loopback is not real throughput
+    rx += counters.rx;
+    tx += counters.tx;
+  }
+  return { rx, tx };
+}
+
+// Per-interface throughput, sampled on the same timer as the aggregate counters.
+let lastIfaceBytes = perInterfaceBytes();
+let lastIfaceSampleAt = Date.now();
+let ifaceSpeeds = Object.create(null);
+
+function sampleInterfaceSpeeds() {
+  const current = perInterfaceBytes();
+  if (!current) return;
+  const now = Date.now();
+  const elapsedSec = Math.max((now - lastIfaceSampleAt) / 1000, 0.001);
+
+  if (lastIfaceBytes) {
+    const next = Object.create(null);
+    for (const [name, counters] of Object.entries(current)) {
+      const prev = lastIfaceBytes[name];
+      if (!prev) continue;
+      next[name] = {
+        // Bytes/s -> megabits/s.
+        rxSpeedMbps: Math.max(0, Math.round((((counters.rx - prev.rx) / elapsedSec) * 8) / 1e6 * 100) / 100),
+        txSpeedMbps: Math.max(0, Math.round((((counters.tx - prev.tx) / elapsedSec) * 8) / 1e6 * 100) / 100),
+      };
+    }
+    ifaceSpeeds = next;
+  }
+
+  lastIfaceBytes = current;
+  lastIfaceSampleAt = now;
 }
 
 // CPU and network utilisation are rates, not absolute readings. Sampling deltas on a timer gives the
@@ -213,7 +266,8 @@ let currentCpuPercent = 0;
 let currentNetRxKbps = 0;
 let currentNetTxKbps = 0;
 
-function sample() {
+function sample()
+{
   const now = Date.now();
   const elapsedSec = Math.max((now - lastSampleAt) / 1000, 0.001);
 
@@ -235,10 +289,14 @@ function sample() {
   lastSampleAt = now;
 }
 
-setInterval(sample, 2000).unref();
+setInterval(() => {
+  sample();
+  sampleInterfaceSpeeds();
+}, 2000).unref();
 
 // Real swap usage percent from /proc/meminfo (Linux only; 0 elsewhere)
-function getSwapInfo() {
+function getSwapInfo()
+{
   if (os.platform() !== 'linux') return { percent: 0, totalBytes: 0 };
   try {
     const meminfo = fs.readFileSync('/proc/meminfo', 'utf-8');
@@ -255,7 +313,8 @@ function getSwapInfo() {
 }
 
 // Real root filesystem usage via df (Linux/macOS only)
-async function getDiskInfo() {
+async function getDiskInfo()
+{
   if (os.platform() === 'win32') return { percent: 0, totalBytes: 0, usedBytes: 0 };
   const output = await tryRun('df', ['-k', '/'], { timeout: 5000 });
   if (!output) return { percent: 0, totalBytes: 0, usedBytes: 0 };
@@ -273,7 +332,8 @@ async function getDiskInfo() {
 
 // Real CPU package temperature where the kernel exposes it; null when unavailable rather than a
 // fabricated reading.
-function getCpuTempC() {
+function getCpuTempC()
+{
   if (os.platform() !== 'linux') return null;
   try {
     const base = '/sys/class/thermal';
@@ -289,7 +349,8 @@ function getCpuTempC() {
   return null;
 }
 
-async function getRealTelemetry() {
+async function getRealTelemetry()
+{
   const cpus = os.cpus();
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
@@ -328,7 +389,8 @@ async function getRealTelemetry() {
 }
 
 // Fetch active system processes via ps on Linux/macOS or tasklist on Windows
-async function getRealProcesses() {
+async function getRealProcesses()
+{
   const totalMemMb = os.totalmem() / (1024 * 1024);
   if (os.platform() === 'win32') {
     const output = await tryRun('tasklist', ['/FO', 'CSV', '/NH']);
@@ -337,7 +399,8 @@ async function getRealProcesses() {
       .trim()
       .split(/\r?\n/)
       .slice(0, 35)
-      .map((line, idx) => {
+      .map((line, idx) =>
+      {
         const parts = line.split('","').map((p) => p.replace(/"/g, ''));
         const memoryKb = Number.parseInt((parts[4] || '0').replace(/[^0-9]/g, ''), 10) || 0;
         const memoryMb = Math.round((memoryKb / 1024) * 10) / 10;
@@ -361,7 +424,8 @@ async function getRealProcesses() {
     .trim()
     .split('\n')
     .slice(1, 36)
-    .map((line) => {
+    .map((line) =>
+    {
       const cols = line.trim().split(/\s+/);
       const memoryPercent = Number.parseFloat(cols[3]) || 0;
       return {
@@ -382,13 +446,15 @@ async function getRealProcesses() {
 // ---------------------------------------------------------------------------
 
 // Parse docker's "0.0.0.0:8080->80/tcp, 443/tcp" port format into structured mappings
-function parseDockerPorts(portsStr) {
+function parseDockerPorts(portsStr)
+{
   if (!portsStr) return [];
   return portsStr
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
-    .map((entry) => {
+    .map((entry) =>
+    {
       const typeMatch = /\/(tcp|udp)$/i.exec(entry);
       const type = typeMatch ? typeMatch[1].toLowerCase() : 'tcp';
       const withoutType = entry.replace(/\/(tcp|udp)$/i, '');
@@ -399,7 +465,8 @@ function parseDockerPorts(portsStr) {
     });
 }
 
-function parseByteSize(raw) {
+function parseByteSize(raw)
+{
   const match = /([\d.]+)\s*(GiB|MiB|KiB|GB|MB|KB|B)/i.exec(raw || '');
   if (!match) return 0;
   const value = Number.parseFloat(match[1]);
@@ -411,7 +478,8 @@ function parseByteSize(raw) {
 }
 
 // Best-effort live CPU/mem per container via `docker stats`; empty map if unavailable
-async function getDockerStatsById() {
+async function getDockerStatsById()
+{
   const statsById = Object.create(null);
   const output = await tryRun('docker', ['stats', '--no-stream', '--format', '{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}'], {
     timeout: 15000,
@@ -427,7 +495,8 @@ async function getDockerStatsById() {
   return statsById;
 }
 
-async function getRealDockerContainers() {
+async function getRealDockerContainers()
+{
   const output = await tryRun('docker', [
     'ps',
     '-a',
@@ -440,7 +509,8 @@ async function getRealDockerContainers() {
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line) => {
+    .map((line) =>
+    {
       const [id, name, image, status, ports, createdAt, state] = line.split('|');
       const stats = statsById[id] || { cpuPercent: 0, memoryUsageMb: 0 };
       const createdDate = new Date(createdAt);
@@ -459,7 +529,8 @@ async function getRealDockerContainers() {
     });
 }
 
-async function getRealDockerImages() {
+async function getRealDockerImages()
+{
   const output = await tryRun('docker', [
     'images',
     '--format',
@@ -470,7 +541,8 @@ async function getRealDockerImages() {
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line) => {
+    .map((line) =>
+    {
       const [id, repository, tag, size, createdAt, digest] = line.split('|');
       const createdDate = new Date(createdAt);
       return {
@@ -489,7 +561,8 @@ async function getRealDockerImages() {
 // Confined filesystem access
 // ---------------------------------------------------------------------------
 
-function defaultFileRoots() {
+function defaultFileRoots()
+{
   if (os.platform() === 'win32') return [process.cwd()];
   return ['/etc', '/var/www', '/var/log', '/home', '/opt', '/srv'];
 }
@@ -509,13 +582,22 @@ const SENSITIVE_PATTERNS = [
   /\.(pem|key|pfx|p12)$/i,
 ];
 
-function isSensitivePath(resolved) {
+function isSensitivePath(resolved)
+{
   if (ALLOW_SENSITIVE_FILES) return false;
   return SENSITIVE_PATTERNS.some((re) => re.test(resolved));
 }
 
 function isInsideRoot(resolved) {
-  return FILE_ROOTS.some((root) => resolved === root || resolved.startsWith(root + path.sep));
+  return FILE_ROOTS.some((root) => {
+    if (resolved === root) return true;
+    // A root that is already a directory root ("/" on POSIX, "C:\" on Windows) ends in a separator.
+    // Appending another produced "//", which matched nothing — configuring AGENT_FILE_ROOTS=/
+    // rejected every path except "/" itself. The separator is still required for non-root entries so
+    // that "/etc" does not also match a sibling like "/etcetera".
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    return resolved.startsWith(prefix);
+  });
 }
 
 /**
@@ -524,7 +606,8 @@ function isInsideRoot(resolved) {
  * Uses realpath on the nearest existing ancestor so that symlinks pointing outside a root (the
  * classic escape from a naive `startsWith` check) are rejected too.
  */
-async function resolveSafePath(requestedPath, { mustExist = true } = {}) {
+async function resolveSafePath(requestedPath, { mustExist = true } = {})
+{
   if (typeof requestedPath !== 'string' || !requestedPath.trim()) {
     return { error: 'A path is required', status: 400 };
   }
@@ -572,7 +655,8 @@ async function resolveSafePath(requestedPath, { mustExist = true } = {}) {
 // Read host directory entries. Deliberately does NOT include file contents: embedding a truncated
 // copy of every file in a listing leaks data, is slow, and previously caused the editor to write the
 // truncated copy back over the real file.
-async function getRealDirectoryContents(targetDir) {
+async function getRealDirectoryContents(targetDir)
+{
   const items = await fsp.readdir(targetDir, { withFileTypes: true });
   const results = [];
   for (const item of items) {
@@ -599,7 +683,8 @@ async function getRealDirectoryContents(targetDir) {
       readable: !isSensitivePath(fullPath),
     });
   }
-  results.sort((a, b) => {
+  results.sort((a, b) =>
+  {
     if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
@@ -610,7 +695,8 @@ async function getRealDirectoryContents(targetDir) {
 // Packages & services
 // ---------------------------------------------------------------------------
 
-async function probeBinary(bin, versionFlag) {
+async function probeBinary(bin, versionFlag)
+{
   const locator = os.platform() === 'win32' ? 'where' : 'which';
   const found = await tryRun(locator, [bin], { timeout: 3000 });
   if (!found) return { installed: false, version: null };
@@ -647,16 +733,19 @@ const LANGUAGE_DEFS = [
 
 // Real installed-state detection by probing PATH. Probes run concurrently; serially they took
 // several seconds and blocked the request.
-async function getRealPackages() {
+async function getRealPackages()
+{
   const [packages, languages] = await Promise.all([
     Promise.all(
-      PACKAGE_DEFS.map(async (def) => {
+      PACKAGE_DEFS.map(async (def) =>
+      {
         const probe = await probeBinary(def.bin);
         return { name: def.name, category: def.category, installed: probe.installed, version: probe.version, description: def.description };
       })
     ),
     Promise.all(
-      LANGUAGE_DEFS.map(async (def) => {
+      LANGUAGE_DEFS.map(async (def) =>
+      {
         const probe = await probeBinary(def.bin, def.versionFlag);
         return {
           name: def.name,
@@ -673,7 +762,8 @@ async function getRealPackages() {
 }
 
 // Real systemd service units, including genuine boot-time enablement (Linux only).
-async function getRealServices() {
+async function getRealServices()
+{
   if (os.platform() !== 'linux') return [];
   const output = await tryRun('systemctl', ['list-units', '--type=service', '--all', '--no-legend', '--no-pager', '--plain']);
   if (!output) return [];
@@ -683,7 +773,8 @@ async function getRealServices() {
     .split('\n')
     .filter(Boolean)
     .slice(0, 80)
-    .map((line) => {
+    .map((line) =>
+    {
       const cols = line.trim().split(/\s+/);
       const name = cols[0] || 'unknown.service';
       const active = cols[2] || 'unknown';
@@ -712,10 +803,188 @@ async function getRealServices() {
 }
 
 // ---------------------------------------------------------------------------
+// Storage, network, and security inventory
+// ---------------------------------------------------------------------------
+
+const BYTES_PER_GB = 1024 ** 3;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Mounted filesystems via `df -PT -B1`.
+ *
+ * Pseudo-filesystems (tmpfs, devtmpfs, overlay, squashfs...) are filtered out — they are not disks
+ * and listing them as storage is misleading.
+ */
+const PSEUDO_FS = new Set([
+  'tmpfs', 'devtmpfs', 'squashfs', 'overlay', 'proc', 'sysfs', 'cgroup', 'cgroup2',
+  'devpts', 'securityfs', 'debugfs', 'tracefs', 'pstore', 'efivarfs', 'configfs',
+  'fusectl', 'bpf', 'ramfs', 'mqueue', 'hugetlbfs', 'autofs', 'binfmt_misc', 'nsfs',
+]);
+
+async function getStoragePartitions() {
+  if (os.platform() === 'win32') return [];
+  // -P forces one line per filesystem; -T adds the fs type; -B1 gives exact bytes.
+  const output = await tryRun('df', ['-PT', '-B1'], { timeout: 8000 });
+  if (!output) return [];
+
+  return output
+    .trim()
+    .split('\n')
+    .slice(1)
+    .map((line) => {
+      const cols = line.trim().split(/\s+/);
+      if (cols.length < 7) return null;
+      // Mount points can contain spaces; everything from column 7 onward is the path.
+      const [device, fsType, totalRaw, usedRaw, freeRaw, pctRaw] = cols;
+      const mountPoint = cols.slice(6).join(' ');
+      const totalBytes = Number.parseInt(totalRaw, 10) || 0;
+      if (!totalBytes || PSEUDO_FS.has(fsType)) return null;
+
+      const usedBytes = Number.parseInt(usedRaw, 10) || 0;
+      const freeBytes = Number.parseInt(freeRaw, 10) || 0;
+      const usagePercent = Number.parseInt((pctRaw || '').replace('%', ''), 10);
+
+      return {
+        device,
+        mountPoint,
+        fsType,
+        totalGb: round2(totalBytes / BYTES_PER_GB),
+        usedGb: round2(usedBytes / BYTES_PER_GB),
+        freeGb: round2(freeBytes / BYTES_PER_GB),
+        totalBytes,
+        usedBytes,
+        freeBytes,
+        usagePercent: Number.isFinite(usagePercent) ? usagePercent : 0,
+        // SMART needs `smartctl` plus raw device access; null rather than a fabricated "passed".
+        smartHealth: null,
+      };
+    })
+    .filter(Boolean);
+}
+
+/** Network interfaces from the OS, enriched with live throughput where /proc/net/dev exists. */
+function getNetworkInterfaces() {
+  const results = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    if (!addrs || addrs.length === 0) continue;
+    const ipv4 = addrs.find((a) => a.family === 'IPv4');
+    const ipv6 = addrs.find((a) => a.family === 'IPv6');
+    const isLoopback = addrs.every((a) => a.internal);
+    const speeds = ifaceSpeeds[name] || { rxSpeedMbps: 0, txSpeedMbps: 0 };
+    const counters = lastIfaceBytes?.[name];
+
+    results.push({
+      name,
+      mac: ipv4?.mac || ipv6?.mac || '',
+      ipv4: ipv4?.address || '',
+      ipv6: ipv6?.address || '',
+      // The OS does not expose the physical medium portably; classify only what is certain.
+      type: isLoopback ? 'loopback' : /^(veth|docker|br-|virbr|tun|tap)/.test(name) ? 'virtual' : 'ethernet',
+      rxBytes: counters?.rx ?? 0,
+      txBytes: counters?.tx ?? 0,
+      rxSpeedMbps: speeds.rxSpeedMbps,
+      txSpeedMbps: speeds.txSpeedMbps,
+      // An interface with an assigned address is up; os.networkInterfaces() omits down ones.
+      status: 'up',
+    });
+  }
+  return results;
+}
+
+/** ufw rules, parsed from `ufw status numbered`. Empty when ufw is absent or inactive. */
+async function getFirewallRules() {
+  if (os.platform() !== 'linux') return [];
+  const output = await tryRun('ufw', ['status', 'numbered'], { timeout: 8000 });
+  if (!output) return [];
+
+  // `Status: inactive` means the rules exist but are not being enforced.
+  const active = /^Status:\s*active/im.test(output);
+
+  const rules = [];
+  for (const line of output.split('\n')) {
+    // e.g. "[ 1] 22/tcp                     ALLOW IN    Anywhere"
+    const match = /^\[\s*(\d+)\]\s+(.+?)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(IN|OUT)\s*(.*)$/.exec(line.trim());
+    if (!match) continue;
+    const [, index, target, action, direction, source] = match;
+    const portProto = /^([0-9:,]+)\/(tcp|udp)$/i.exec(target.trim());
+    rules.push({
+      id: `ufw-${index}`,
+      nodeId: '',
+      port: portProto ? portProto[1] : target.trim(),
+      protocol: portProto ? portProto[2].toLowerCase() : 'any',
+      action: action.toLowerCase(),
+      direction: direction.toUpperCase() === 'IN' ? 'inbound' : 'outbound',
+      sourceIp: source.trim() || 'Anywhere',
+      comment: `ufw rule ${index}`,
+      status: active ? 'active' : 'disabled',
+    });
+  }
+  return rules;
+}
+
+/**
+ * Authorised SSH public keys for the users whose home directories are readable.
+ *
+ * Only ever reads authorized_keys (public material). Private keys stay behind the
+ * credential-file deny list.
+ */
+async function getSshKeys() {
+  if (os.platform() !== 'linux') return [];
+
+  const candidates = [{ user: 'root', home: '/root' }];
+  try {
+    for (const entry of await fsp.readdir('/home', { withFileTypes: true })) {
+      if (entry.isDirectory()) candidates.push({ user: entry.name, home: path.join('/home', entry.name) });
+    }
+  } catch (e) {
+    /* /home unreadable or absent */
+  }
+
+  const keys = [];
+  for (const { user, home } of candidates) {
+    const keyFile = path.join(home, '.ssh', 'authorized_keys');
+    let content;
+    try {
+      content = await fsp.readFile(keyFile, 'utf-8');
+    } catch (e) {
+      continue;
+    }
+    content.split('\n').forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 2) return;
+      const [algorithm, keyBody, ...commentParts] = parts;
+      // Fingerprint the key the same way `ssh-keygen -lf` does: base64 sha256 of the raw blob.
+      let fingerprint = '';
+      try {
+        fingerprint = `SHA256:${crypto
+          .createHash('sha256')
+          .update(Buffer.from(keyBody, 'base64'))
+          .digest('base64')
+          .replace(/=+$/, '')}`;
+      } catch (e) {
+        /* malformed key body */
+      }
+      keys.push({
+        id: `${user}-${idx}`,
+        user,
+        label: commentParts.join(' ') || `${user} key ${idx + 1}`,
+        algorithm,
+        fingerprint,
+        path: keyFile,
+      });
+    });
+  }
+  return keys;
+}
+
+// ---------------------------------------------------------------------------
 // Node payload
 // ---------------------------------------------------------------------------
 
-function primaryIpAddress() {
+function primaryIpAddress()
+{
   for (const addrs of Object.values(os.networkInterfaces())) {
     for (const addr of addrs || []) {
       if (addr.family === 'IPv4' && !addr.internal) return addr.address;
@@ -724,7 +993,8 @@ function primaryIpAddress() {
   return '127.0.0.1';
 }
 
-async function getNodePayload() {
+async function getNodePayload()
+{
   const telemetry = await getRealTelemetry();
   return {
     id: `node-${os.hostname()}`,
@@ -774,19 +1044,23 @@ async function getNodePayload() {
 // ---------------------------------------------------------------------------
 
 // Read a JSON body with a hard size cap, so a client cannot exhaust agent memory.
-function parseJsonBody(req, limit = MAX_JSON_BODY_BYTES) {
-  return new Promise((resolve) => {
+function parseJsonBody(req, limit = MAX_JSON_BODY_BYTES)
+{
+  return new Promise((resolve) =>
+  {
     let size = 0;
     const chunks = [];
     let settled = false;
 
-    const finish = (value) => {
+    const finish = (value) =>
+    {
       if (settled) return;
       settled = true;
       resolve(value);
     };
 
-    req.on('data', (chunk) => {
+    req.on('data', (chunk) =>
+    {
       size += chunk.length;
       if (size > limit) {
         // Stop buffering, but leave the socket writable so the caller still gets a real 413
@@ -798,7 +1072,8 @@ function parseJsonBody(req, limit = MAX_JSON_BODY_BYTES) {
       }
       chunks.push(chunk);
     });
-    req.on('end', () => {
+    req.on('end', () =>
+    {
       try {
         finish({ body: JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}') });
       } catch (e) {
@@ -809,7 +1084,8 @@ function parseJsonBody(req, limit = MAX_JSON_BODY_BYTES) {
   });
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload)
+{
   if (res.writableEnded) return;
   // 413 means we stopped reading mid-body; close rather than trying to resync the connection.
   if (status === 413) res.setHeader('Connection', 'close');
@@ -824,7 +1100,8 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function applyCors(req, res) {
+function applyCors(req, res)
+{
   const origin = req.headers.origin;
   if (!origin) return true; // same-origin / non-browser client
   if (!CORS_ORIGINS.includes(origin)) {
@@ -849,7 +1126,8 @@ const DOCKER_VERBS = Object.assign(Object.create(null), {
 });
 const SERVICE_ACTIONS = Object.assign(Object.create(null), { start: 1, stop: 1, restart: 1, reload: 1 });
 
-function execErrorPayload(e) {
+function execErrorPayload(e)
+{
   if (e && e.killed) return 'Command timed out';
   return (e && (e.stderr || e.stdout || e.message)) || 'Command failed';
 }
@@ -858,7 +1136,8 @@ function execErrorPayload(e) {
 // Router
 // ---------------------------------------------------------------------------
 
-async function handleRequest(req, res) {
+async function handleRequest(req, res)
+{
   if (!applyCors(req, res)) {
     sendJson(res, 403, { error: 'Origin not allowed' });
     return;
@@ -929,6 +1208,22 @@ async function handleRequest(req, res) {
   }
   if (method === 'GET' && pathname === '/api/v1/nodes') {
     sendJson(res, 200, [await getNodePayload()]);
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/storage/partitions') {
+    sendJson(res, 200, await getStoragePartitions());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/network/interfaces') {
+    sendJson(res, 200, getNetworkInterfaces());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/security/firewall') {
+    sendJson(res, 200, await getFirewallRules());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/security/ssh-keys') {
+    sendJson(res, 200, await getSshKeys());
     return;
   }
   if (method === 'GET' && pathname === '/api/v1/agent/info') {
@@ -1136,8 +1431,10 @@ async function handleRequest(req, res) {
   sendJson(res, 404, { error: 'Endpoint not found' });
 }
 
-const server = http.createServer((req, res) => {
-  handleRequest(req, res).catch((err) => {
+const server = http.createServer((req, res) =>
+{
+  handleRequest(req, res).catch((err) =>
+  {
     console.error('[VPSGUI Agent] Unhandled request error:', err);
     // Never echo the raw error to the client: stack traces disclose host paths.
     sendJson(res, 500, { error: 'Internal agent error' });
@@ -1149,19 +1446,23 @@ server.headersTimeout = 20000;
 server.requestTimeout = 60000;
 server.keepAliveTimeout = 10000;
 
-server.on('clientError', (err, socket) => {
+server.on('clientError', (err, socket) =>
+{
   if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
 });
 
 // A daemon that dies on one bad request takes host monitoring down with it.
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', (err) =>
+{
   console.error('[VPSGUI Agent] Uncaught exception:', err);
 });
-process.on('unhandledRejection', (err) => {
+process.on('unhandledRejection', (err) =>
+{
   console.error('[VPSGUI Agent] Unhandled rejection:', err);
 });
 
-function shutdown(signal) {
+function shutdown(signal)
+{
   console.log(`[VPSGUI Agent] Received ${signal}, shutting down.`);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
@@ -1169,7 +1470,8 @@ function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, () =>
+{
   console.log(`[VPSGUI Agent Server] v${AGENT_VERSION} listening on http://${HOST}:${PORT}`);
   console.log(`[VPSGUI Agent Server] File roots: ${FILE_ROOTS.join(', ') || '(none)'}`);
   console.log(`[VPSGUI Agent Server] Shell execution: ${SHELL_ENABLED ? 'enabled' : 'disabled'}`);

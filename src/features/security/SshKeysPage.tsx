@@ -1,29 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { Key, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Key, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { apiClient } from '../../api/client';
+import { apiClient, ApiError } from '../../api/client';
 
+/** Matches the agent's GET /security/ssh-keys payload (public keys from authorized_keys only). */
 interface SshKeyItem {
   id: string;
-  name: string;
+  /** Host user whose authorized_keys the entry came from. */
+  user: string;
+  /** The key's trailing comment, or a generated label when it has none. */
+  label: string;
+  algorithm: string;
   fingerprint: string;
-  type: string;
-  added: string;
-  nodes: number;
+  path: string;
 }
 
 export function SshKeysPage() {
   const [keys, setKeys] = useState<SshKeyItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    apiClient.get<SshKeyItem[]>('/security/ssh-keys')
-      .then((data) => setKeys(Array.isArray(data) ? data : []))
-      .catch(() => setKeys([]))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.get<SshKeyItem[]>('/security/ssh-keys');
+      setKeys(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setKeys([]);
+      setError(
+        e instanceof ApiError && e.status === 401
+          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
+      );
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="space-y-6">
@@ -34,15 +52,25 @@ export function SshKeysPage() {
             <span>SSH Public Keys Manager</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage public SSH keys deployed to VPS node root / authorized_keys files.
+            Public keys found in <code className="font-mono">authorized_keys</code> for root and each
+            readable home directory. Private keys are never read.
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
-          <Plus className="h-4 w-4" />
-          <span>Add SSH Key</span>
+        {/* "Add SSH Key" had no handler and the agent exposes no write endpoint for authorized_keys.
+            Edit the file directly from the File Manager or Terminal page. */}
+        <Button onClick={load} disabled={loading} className="gap-1.5 text-xs bg-primary">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
         </Button>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span className="break-words">{error}</span>
+        </div>
+      )}
 
       {keys.length === 0 ? (
         <Card className="bg-card/70 border-border/70 p-12">
@@ -62,23 +90,26 @@ export function SshKeysPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {keys.map((k) => (
             <Card key={k.id} className="bg-card/70 border-border/70 p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Key className="h-4 w-4 text-primary" />
-                  <h3 className="font-bold text-sm text-foreground">{k.name}</h3>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <Key className="h-4 w-4 text-primary shrink-0" />
+                  <h3 className="font-bold text-sm text-foreground truncate" title={k.label}>{k.label}</h3>
                 </div>
-                <Badge variant="outline" className="font-mono text-[10px]">{k.type}</Badge>
+                <Badge variant="outline" className="font-mono text-[10px] shrink-0">{k.algorithm}</Badge>
               </div>
 
-              <div className="bg-muted/40 p-2.5 rounded border border-border/40 font-mono text-[11px] text-muted-foreground truncate">
+              <div
+                className="bg-muted/40 p-2.5 rounded border border-border/40 font-mono text-[11px] text-muted-foreground truncate"
+                title={k.fingerprint}
+              >
                 {k.fingerprint}
               </div>
 
-              <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-2">
-                <span>Deployed to {k.nodes} Nodes</span>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-rose-400">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+              {/* Shows the real source of the key. "Deployed to {n} Nodes" was a field the agent
+                  never sent, so every card read "Deployed to undefined Nodes". */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-2 gap-2">
+                <span className="font-mono truncate" title={k.path}>{k.user}</span>
+                <span className="font-mono text-[10px] shrink-0 truncate max-w-[55%]" title={k.path}>{k.path}</span>
               </div>
             </Card>
           ))}
