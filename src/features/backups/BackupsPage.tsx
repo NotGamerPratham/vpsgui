@@ -52,9 +52,12 @@ export function BackupsPage() {
               <Archive className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Backups or Snapshots Found</h3>
+              {/* Said backups could be "configured through the VPSGUI agent"; the agent implements
+                  no backup scheduling, snapshotting, or S3 upload at all. */}
+              <h3 className="font-bold text-sm text-foreground">Backups are not implemented</h3>
               <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Configure automated backup schedules through the VPSGUI agent to create volume snapshots and offsite S3 backups.
+                The vpsgui-agent has no backup scheduler or storage integration. Use a dedicated tool
+                such as restic, borg, or your provider's snapshots.
               </p>
             </div>
           </div>

@@ -144,6 +144,42 @@ describe('agent: host inventory endpoints', () => {
     }
   });
 
+  it.each([
+    '/proxy/rules',
+    '/databases',
+    '/catalog',
+    '/deployments',
+    '/backups',
+    '/security/secrets',
+  ])('answers %s with 200 and an array instead of 404', async (endpoint) => {
+    // These six 404'd on every page load. Even the ones with no backing implementation return an
+    // empty list, so the UI renders an explained empty state rather than logging console errors.
+    const res = await fetch(`${BASE}/api/v1${endpoint}`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it('serves a catalog whose entries carry a usable image reference', async () => {
+    const res = await fetch(`${BASE}/api/v1/catalog`, { headers: AUTH });
+    const items = await res.json();
+    expect(items.length).toBeGreaterThan(0);
+
+    for (const item of items) {
+      expect(typeof item.id).toBe('string');
+      expect(typeof item.image).toBe('string');
+      // Popularity metrics would need a registry the agent does not query. The UI called
+      // .toLocaleString() on downloadsCount, so an invented number here would hide a real crash.
+      expect(item.downloadsCount).toBeNull();
+      expect(item.rating).toBeNull();
+    }
+  });
+
+  it('advertises which features have no implementation', async () => {
+    const res = await fetch(`${BASE}/api/v1/agent/info`, { headers: AUTH });
+    const info = await res.json();
+    expect(info.unimplementedFeatures).toEqual(expect.arrayContaining(['deployments', 'backups', 'secrets']));
+  });
+
   it('requires a token for the inventory endpoints too', async () => {
     for (const endpoint of ['/storage/partitions', '/network/interfaces', '/security/ssh-keys']) {
       const res = await fetch(`${BASE}/api/v1${endpoint}`);
@@ -352,6 +388,27 @@ describe('agent: input validation', () => {
   it('rejects a cross-origin request from an origin that is not allowlisted', async () => {
     const res = await fetch(`${BASE}/api/v1/system/telemetry`, {
       headers: { ...AUTH, Origin: 'https://evil.example' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows a same-origin write that carries an Origin header', async () => {
+    // Browsers attach Origin to same-origin POSTs but not same-origin GETs. Rejecting on the mere
+    // presence of Origin made every write from the app's own page fail with 403 while reads worked.
+    const res = await fetch(`${BASE}/api/v1/terminal/exec`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT}` },
+      body: JSON.stringify({ command: 'echo same-origin-write' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).output).toContain('same-origin-write');
+  });
+
+  it('rejects a cross-origin write even when the port differs from the host', async () => {
+    const res = await fetch(`${BASE}/api/v1/terminal/exec`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT + 1}` },
+      body: JSON.stringify({ command: 'echo nope' }),
     });
     expect(res.status).toBe(403);
   });

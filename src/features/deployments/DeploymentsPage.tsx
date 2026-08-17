@@ -48,9 +48,12 @@ export function DeploymentsPage() {
               <Layers className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Deployments Recorded</h3>
+              {/* Said "Configure Git webhooks to enable push-to-deploy pipelines", implying the
+                  capability exists and merely needs setup. No such pipeline is implemented. */}
+              <h3 className="font-bold text-sm text-foreground">Deployment tracking is not implemented</h3>
               <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Deployment history is tracked by the VPSGUI agent. Configure Git webhooks to enable push-to-deploy pipelines.
+                The vpsgui-agent has no build or deployment pipeline, so there is no deployment
+                history to show. Use the Terminal page to run your own deploy commands.
               </p>
             </div>
           </div>

@@ -9,9 +9,16 @@ export interface CatalogItem {
   iconName: string; // Lucide icon identifier
   publisher: string;
   official: boolean;
-  downloadsCount: number;
-  rating: number;
+  /**
+   * null: these would have to come from a registry the agent does not query. They were typed as
+   * required numbers, so the UI called .toLocaleString() on them and would throw once the agent
+   * started returning honest nulls instead of invented popularity figures.
+   */
+  downloadsCount: number | null;
+  rating: number | null;
   tags: string[];
+  /** Container image reference, for items deployable via Docker. */
+  image?: string;
   readmeMarkdown?: string;
   defaultPorts?: number[];
   defaultEnv?: Record<string, string>;

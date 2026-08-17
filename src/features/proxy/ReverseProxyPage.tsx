@@ -75,7 +75,25 @@ export function ReverseProxyPage() {
                   <TableCell className="font-bold text-xs font-mono text-foreground">{p.domain}</TableCell>
                   <TableCell className="font-mono text-xs text-primary">{p.upstream}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{p.ssl}</TableCell>
-                  <TableCell className="font-mono text-xs text-emerald-400">{p.expires}</TableCell>
+                  {/* The agent sends the certificate's notAfter as ISO-8601, or '' when the vhost
+                      has no certificate. Colour by proximity instead of an unconditional green. */}
+                  <TableCell className="font-mono text-xs">
+                    {(() => {
+                      if (!p.expires) return <span className="text-muted-foreground">—</span>;
+                      const expiry = new Date(p.expires);
+                      if (Number.isNaN(expiry.getTime())) {
+                        return <span className="text-muted-foreground">{p.expires}</span>;
+                      }
+                      const daysLeft = Math.round((expiry.getTime() - Date.now()) / 86400000);
+                      const tone =
+                        daysLeft < 0 ? 'text-rose-400' : daysLeft < 14 ? 'text-amber-400' : 'text-emerald-400';
+                      return (
+                        <span className={tone} title={expiry.toISOString()}>
+                          {expiry.toLocaleDateString()} ({daysLeft < 0 ? 'expired' : `${daysLeft}d`})
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="success" className="text-[10px] uppercase font-mono">{p.status}</Badge>
                   </TableCell>

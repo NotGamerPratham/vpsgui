@@ -980,6 +980,208 @@ async function getSshKeys() {
 }
 
 // ---------------------------------------------------------------------------
+// Reverse proxy, databases, catalog
+// ---------------------------------------------------------------------------
+
+/**
+ * Split an nginx config dump into top-level `server { ... }` blocks by brace depth.
+ * A regex cannot do this correctly because blocks nest (server > location > if).
+ */
+function extractServerBlocks(config) {
+  const blocks = [];
+  const re = /\bserver\s*\{/g;
+  let match;
+  while ((match = re.exec(config)) !== null) {
+    let depth = 1;
+    let i = re.lastIndex;
+    while (i < config.length && depth > 0) {
+      if (config[i] === '{') depth += 1;
+      else if (config[i] === '}') depth -= 1;
+      i += 1;
+    }
+    if (depth === 0) blocks.push(config.slice(re.lastIndex, i - 1));
+  }
+  return blocks;
+}
+
+/** Read a certificate's expiry via openssl. null when unreadable. */
+async function certExpiry(certPath) {
+  const out = await tryRun('openssl', ['x509', '-enddate', '-noout', '-in', certPath], { timeout: 5000 });
+  if (!out) return null;
+  const match = /notAfter=(.+)/.exec(out.trim());
+  if (!match) return null;
+  const date = new Date(match[1]);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/**
+ * Reverse-proxy rules, read from the live nginx configuration via `nginx -T`.
+ *
+ * This reports what nginx is actually serving rather than a separate list the agent would have to
+ * keep in sync. Empty when nginx is absent or the config cannot be dumped.
+ */
+async function getProxyRules() {
+  if (os.platform() === 'win32') return [];
+  const config = await tryRun('nginx', ['-T'], { timeout: 10000 });
+  if (!config) return [];
+
+  const rules = [];
+  let index = 0;
+
+  for (const block of extractServerBlocks(config)) {
+    // Strip comments so a commented-out proxy_pass is not reported as live.
+    const clean = block.replace(/#[^\n]*/g, '');
+
+    const serverName = (/\bserver_name\s+([^;]+);/.exec(clean) || [])[1]?.trim();
+    const proxyPass = (/\bproxy_pass\s+([^;]+);/.exec(clean) || [])[1]?.trim();
+    if (!proxyPass) continue; // a plain static-file vhost is not a proxy rule
+
+    const listens = [...clean.matchAll(/\blisten\s+([^;]+);/g)].map((m) => m[1]);
+    const ssl = listens.some((l) => /\bssl\b/.test(l)) || /\bssl_certificate\s/.test(clean);
+    const certPath = (/\bssl_certificate\s+([^;]+);/.exec(clean) || [])[1]?.trim();
+
+    index += 1;
+    rules.push({
+      id: `nginx-${index}`,
+      // `server_name _;` is nginx's catch-all placeholder, not a real domain.
+      domain: !serverName || serverName === '_' ? '(default server)' : serverName.split(/\s+/)[0],
+      upstream: proxyPass,
+      ssl: ssl ? 'enabled' : 'disabled',
+      expires: certPath ? (await certExpiry(certPath)) ?? 'unknown' : '',
+      status: 'active',
+    });
+  }
+  return rules;
+}
+
+// Database engines detectable from listening sockets. Reporting row/key counts would require
+// credentials for each engine, which the agent deliberately does not hold.
+const DB_ENGINES = [
+  { engine: 'PostgreSQL', port: 5432 },
+  { engine: 'MySQL / MariaDB', port: 3306 },
+  { engine: 'Redis', port: 6379 },
+  { engine: 'MongoDB', port: 27017 },
+  { engine: 'Microsoft SQL Server', port: 1433 },
+  { engine: 'CouchDB', port: 5984 },
+  { engine: 'Memcached', port: 11211 },
+];
+
+/** Database servers detected by their listening TCP ports. */
+async function getDatabases() {
+  if (os.platform() === 'win32') return [];
+  // -H omits the header; without it the "State" column would be parsed as a port.
+  const output = await tryRun('ss', ['-tlnH'], { timeout: 8000 });
+  if (!output) return [];
+
+  const listeningPorts = new Set();
+  for (const line of output.trim().split('\n')) {
+    const cols = line.trim().split(/\s+/);
+    // Local address is column 4 for `ss -tlnH`, formatted host:port (IPv6 uses [::]:port).
+    const local = cols[3];
+    if (!local) continue;
+    const port = Number.parseInt(local.slice(local.lastIndexOf(':') + 1), 10);
+    if (Number.isFinite(port)) listeningPorts.add(port);
+  }
+
+  return DB_ENGINES.filter((db) => listeningPorts.has(db.port)).map((db) => ({
+    name: db.engine,
+    engine: db.engine,
+    port: db.port,
+    // Size and table/key counts need an authenticated connection per engine; null, not invented.
+    size: null,
+    tables: null,
+    keys: null,
+    status: 'running',
+  }));
+}
+
+/**
+ * Curated catalog of self-hostable applications.
+ *
+ * Unlike the other endpoints this is reference data, not host state, so serving a static list is
+ * accurate rather than fabricated: it describes what *can* be deployed, not what is installed.
+ */
+const CATALOG_ITEMS = [
+  {
+    id: 'nginx', name: 'Nginx', category: 'docker_images', version: 'stable-alpine',
+    description: 'High performance HTTP server and reverse proxy.',
+    iconName: 'Globe', publisher: 'nginx', official: true, tags: ['web', 'proxy'],
+    image: 'nginx:stable-alpine', defaultPorts: [80, 443],
+  },
+  {
+    id: 'postgres', name: 'PostgreSQL', category: 'docker_images', version: '16-alpine',
+    description: 'Object-relational database system.',
+    iconName: 'Database', publisher: 'postgres', official: true, tags: ['database', 'sql'],
+    image: 'postgres:16-alpine', defaultPorts: [5432],
+    defaultEnv: { POSTGRES_PASSWORD: 'change-me' },
+  },
+  {
+    id: 'redis', name: 'Redis', category: 'docker_images', version: '7-alpine',
+    description: 'In-memory data structure store, cache and message broker.',
+    iconName: 'Zap', publisher: 'redis', official: true, tags: ['database', 'cache'],
+    image: 'redis:7-alpine', defaultPorts: [6379],
+  },
+  {
+    id: 'mariadb', name: 'MariaDB', category: 'docker_images', version: '11',
+    description: 'Community-developed fork of MySQL.',
+    iconName: 'Database', publisher: 'mariadb', official: true, tags: ['database', 'sql'],
+    image: 'mariadb:11', defaultPorts: [3306],
+    defaultEnv: { MARIADB_ROOT_PASSWORD: 'change-me' },
+  },
+  {
+    id: 'portainer', name: 'Portainer CE', category: 'applications', version: 'latest',
+    description: 'Container management UI for Docker.',
+    iconName: 'Container', publisher: 'portainer', official: true, tags: ['docker', 'management'],
+    image: 'portainer/portainer-ce:latest', defaultPorts: [9443],
+  },
+  {
+    id: 'uptime-kuma', name: 'Uptime Kuma', category: 'applications', version: '1',
+    description: 'Self-hosted uptime monitoring with status pages and alerting.',
+    iconName: 'Activity', publisher: 'louislam', official: false, tags: ['monitoring'],
+    image: 'louislam/uptime-kuma:1', defaultPorts: [3001],
+  },
+  {
+    id: 'gitea', name: 'Gitea', category: 'applications', version: '1',
+    description: 'Lightweight self-hosted Git service.',
+    iconName: 'GitBranch', publisher: 'gitea', official: true, tags: ['git', 'devops'],
+    image: 'gitea/gitea:1', defaultPorts: [3000, 222],
+  },
+  {
+    id: 'nextcloud', name: 'Nextcloud', category: 'applications', version: 'stable',
+    description: 'Self-hosted file sync, sharing, and collaboration platform.',
+    iconName: 'Cloud', publisher: 'nextcloud', official: true, tags: ['storage', 'files'],
+    image: 'nextcloud:stable', defaultPorts: [8080],
+  },
+  {
+    id: 'grafana', name: 'Grafana', category: 'applications', version: 'latest',
+    description: 'Dashboards and visualisation for metrics and logs.',
+    iconName: 'BarChart3', publisher: 'grafana', official: true, tags: ['monitoring', 'metrics'],
+    image: 'grafana/grafana:latest', defaultPorts: [3000],
+  },
+  {
+    id: 'vaultwarden', name: 'Vaultwarden', category: 'applications', version: 'latest',
+    description: 'Lightweight Bitwarden-compatible password manager server.',
+    iconName: 'KeyRound', publisher: 'dani-garcia', official: false, tags: ['security'],
+    image: 'vaultwarden/server:latest', defaultPorts: [80],
+  },
+].map((item) => ({
+  // Download counts and star ratings would have to come from a registry the agent does not query;
+  // omitting them beats printing an invented "4.8 / 12k downloads".
+  downloadsCount: null,
+  rating: null,
+  ...item,
+}));
+
+/**
+ * Features that need persistent state or an orchestration backend the agent does not have.
+ *
+ * They return an empty list with 200 rather than 404 so the UI renders a clean, explained empty
+ * state instead of spraying console errors on every page load. `/agent/info` advertises them as
+ * unsupported so the frontend can say why.
+ */
+const UNIMPLEMENTED_FEATURES = ['deployments', 'backups', 'secrets'];
+
+// ---------------------------------------------------------------------------
 // Node payload
 // ---------------------------------------------------------------------------
 
@@ -1100,13 +1302,25 @@ function sendJson(res, status, payload)
   res.end(JSON.stringify(payload));
 }
 
-function applyCors(req, res)
-{
+function applyCors(req, res) {
   const origin = req.headers.origin;
-  if (!origin) return true; // same-origin / non-browser client
+  if (!origin) return true; // non-browser client, or a same-origin GET
+
+  // Browsers attach Origin to same-origin POST/PUT/DELETE (but not same-origin GET). Treating a
+  // bare Origin as cross-origin therefore rejected every write from the app's own page while all
+  // reads succeeded. Compare against the Host the request arrived on before deciding.
+  const host = req.headers.host;
+  if (host) {
+    try {
+      if (new URL(origin).host === host) return true;
+    } catch (e) {
+      // Malformed Origin header; fall through to the allowlist check.
+    }
+  }
+
   if (!CORS_ORIGINS.includes(origin)) {
-    // No wildcard: the agent serves privileged host data behind a bearer token, so cross-origin
-    // reads are opt-in via AGENT_ALLOWED_ORIGINS only.
+    // No wildcard: the agent serves privileged host data behind a bearer token, so genuinely
+    // cross-origin access is opt-in via AGENT_ALLOWED_ORIGINS only.
     return false;
   }
   res.setHeader('Access-Control-Allow-Origin', origin);
@@ -1226,12 +1440,37 @@ async function handleRequest(req, res)
     sendJson(res, 200, await getSshKeys());
     return;
   }
+  if (method === 'GET' && pathname === '/api/v1/proxy/rules') {
+    sendJson(res, 200, await getProxyRules());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/databases') {
+    sendJson(res, 200, await getDatabases());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/catalog') {
+    sendJson(res, 200, CATALOG_ITEMS);
+    return;
+  }
+
+  // Features with no backing implementation. 200 + empty list keeps the console clean and lets the
+  // UI explain itself; see UNIMPLEMENTED_FEATURES.
+  if (
+    method === 'GET' &&
+    ['/api/v1/deployments', '/api/v1/backups', '/api/v1/security/secrets'].includes(pathname)
+  ) {
+    sendJson(res, 200, []);
+    return;
+  }
+
   if (method === 'GET' && pathname === '/api/v1/agent/info') {
     sendJson(res, 200, {
       version: AGENT_VERSION,
       shellEnabled: SHELL_ENABLED,
       fileRoots: FILE_ROOTS,
       platform: os.platform(),
+      // Lets the UI explain an empty page instead of implying the host simply has none.
+      unimplementedFeatures: UNIMPLEMENTED_FEATURES,
     });
     return;
   }

@@ -5,12 +5,20 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { apiClient } from '../../api/client';
 
+/**
+ * Matches the agent's GET /databases payload.
+ *
+ * The agent detects engines by their listening TCP port. Reporting on-disk size or table/key counts
+ * would require credentials for each engine, which the agent deliberately does not hold — those
+ * fields are null rather than invented.
+ */
 interface DatabaseInstance {
   name: string;
   engine: string;
-  size: string;
-  tables?: number;
-  keys?: number;
+  port: number;
+  size: string | null;
+  tables: number | null;
+  keys: number | null;
   status: string;
 }
 
@@ -71,7 +79,10 @@ export function DatabasesPage() {
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-foreground font-mono bg-muted/30 p-2.5 rounded border border-border/40">
-                <span>Size: {db.size}</span>
+                {/* size/tables/keys need an authenticated connection per engine, which the agent
+                    does not hold; they arrive null and render as a dash rather than "Size: null". */}
+                <span>Port: {db.port ?? '--'}</span>
+                <span>Size: {db.size ?? '--'}</span>
                 <span>{db.tables ? `${db.tables} Tables` : db.keys ? `${db.keys} Active Keys` : '--'}</span>
               </div>
             </Card>

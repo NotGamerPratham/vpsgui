@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Download, Star, Search } from 'lucide-react';
+import { Box, Search, ShieldCheck, Copy, Check } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -11,12 +11,31 @@ export function CatalogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<CatalogCategory | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    catalogService.fetchCatalog().then((res) => {
-      setCatalogItems(res);
-    });
+    catalogService.fetchCatalog().then(setCatalogItems);
   }, []);
+
+  /** Build the `docker run` line for an item, including its documented ports and env. */
+  const copyRunCommand = async (item: CatalogItem) => {
+    if (!item.image) return;
+    const ports = (item.defaultPorts || []).map((p) => `-p ${p}:${p}`).join(' ');
+    const env = Object.entries(item.defaultEnv || {})
+      .map(([k, v]) => `-e ${k}=${v}`)
+      .join(' ');
+    const cmd = ['docker run -d --name', item.id, ports, env, item.image].filter(Boolean).join(' ');
+
+    try {
+      // Undefined on insecure origins, where this would otherwise throw silently.
+      if (!navigator.clipboard?.writeText) throw new Error('unavailable');
+      await navigator.clipboard.writeText(cmd);
+      setCopiedId(item.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (e) {
+      window.prompt('Clipboard unavailable (requires HTTPS or localhost). Copy manually:', cmd);
+    }
+  };
 
   const categories: { id: CatalogCategory | 'all'; label: string }[] = [
     { id: 'all', label: 'All Catalog' },
@@ -108,17 +127,28 @@ export function CatalogPage() {
               </div>
             </div>
 
-            <div className="border-t border-border/60 pt-3 flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-[11px] text-muted-foreground font-mono">
-                <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                <span>{item.rating}</span>
-                <span>•</span>
-                <span>{item.downloadsCount.toLocaleString()} deploys</span>
+            <div className="border-t border-border/60 pt-3 flex items-center justify-between gap-2">
+              {/* Shows the publisher and image reference — facts the catalog actually carries.
+                  Star ratings and deploy counts would need a registry the agent does not query,
+                  and `downloadsCount.toLocaleString()` threw outright once they became null. */}
+              <div className="flex items-center space-x-1.5 text-[11px] text-muted-foreground font-mono min-w-0">
+                {item.official && <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
+                <span className="truncate" title={item.image || item.publisher}>
+                  {item.image || item.publisher}
+                </span>
               </div>
 
-              <Button size="sm" className="gap-1.5 text-xs bg-primary">
-                <Download className="h-3.5 w-3.5" />
-                <span>Deploy to VPS</span>
+              {/* Copies the exact command instead of a "Deploy" button that never had a handler
+                  and no agent endpoint behind it. */}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!item.image}
+                onClick={() => item.image && copyRunCommand(item)}
+                className="gap-1.5 text-xs shrink-0"
+              >
+                {copiedId === item.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copiedId === item.id ? 'Copied' : 'Copy run cmd'}</span>
               </Button>
             </div>
           </Card>

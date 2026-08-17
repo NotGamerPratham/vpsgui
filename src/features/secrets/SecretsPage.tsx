@@ -44,9 +44,13 @@ export function SecretsPage() {
               <Lock className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Encrypted Secrets Stored</h3>
+              {/* Said "No Encrypted Secrets Stored", implying an encrypted store exists. None does —
+                  and shipping a plaintext-on-disk secret store into an infrastructure tool would be
+                  worse than shipping nothing, so this stays unimplemented deliberately. */}
+              <h3 className="font-bold text-sm text-foreground">Secrets management is not implemented</h3>
               <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Store environment variables, API tokens, and deployment SSH keys securely.
+                The vpsgui-agent provides no encrypted secret storage. Use a dedicated secret manager
+                (Vault, SOPS, or your platform's secret store) rather than keeping secrets here.
               </p>
             </div>
           </div>
