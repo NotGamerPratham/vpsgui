@@ -99,18 +99,33 @@ export function SettingsPage() {
             terminal command execution and Docker/service start, stop, and restart actions.
           </p>
 
-          <div className="flex items-center gap-2">
+          {/* A bare password input outside a <form> makes browsers log a DOM warning and breaks
+              password-manager association; the field also had no label and no submit-on-Enter. */}
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveToken();
+            }}
+          >
+            <label htmlFor="vpsgui-agent-token" className="sr-only">
+              Agent token
+            </label>
             <Input
+              id="vpsgui-agent-token"
+              name="vpsgui-agent-token"
               type="password"
               value={agentToken}
               onChange={(e) => setAgentToken(e.target.value)}
               placeholder="Paste agent token..."
+              autoComplete="off"
+              spellCheck={false}
               className="text-xs bg-card font-mono flex-1"
             />
-            <Button size="sm" onClick={handleSaveToken} className="text-xs shrink-0">
+            <Button type="submit" size="sm" className="text-xs shrink-0">
               {tokenSaved ? 'Saved' : 'Save'}
             </Button>
-          </div>
+          </form>
         </Card>
       </div>
     </div>
