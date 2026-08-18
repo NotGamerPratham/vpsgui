@@ -101,17 +101,69 @@ fi
 # 6. nginx
 if command -v nginx >/dev/null 2>&1; then
   echo "[VPSGUI] Configuring nginx..."
-  cp "${SCRIPT_DIR}/deploy/nginx.conf" "${NGINX_SITE}"
+  NGINX_LINK="/etc/nginx/sites-enabled/vpsgui"
+  NGINX_BACKUP=""
   mkdir -p /etc/nginx/sites-enabled
-  ln -sf "${NGINX_SITE}" /etc/nginx/sites-enabled/vpsgui
-  # The stock Debian default site is also `default_server` on :80 and would collide.
-  rm -f /etc/nginx/sites-enabled/default
+
+  # Record enough state to undo everything if the config test fails. The symlink is created before
+  # `nginx -t` can run, so without a rollback a bad config stays enabled and nginx fails to start on
+  # its next restart — taking every other site on the box down with it.
+  LINK_EXISTED=0
+  [ -L "${NGINX_LINK}" ] && LINK_EXISTED=1
+  if [ -f "${NGINX_SITE}" ]; then
+    NGINX_BACKUP="${NGINX_SITE}.bak.$$"
+    cp "${NGINX_SITE}" "${NGINX_BACKUP}"
+  fi
+
+  cp "${SCRIPT_DIR}/deploy/nginx.conf" "${NGINX_SITE}"
+
+  # Only one vhost may be `default_server` per address:port; nginx rejects a duplicate outright.
+  # On a box already hosting other sites, claiming it breaks the entire nginx config, so detect an
+  # existing owner and drop the flag from OUR copy instead of failing the deploy.
+  OTHER_DEFAULT="$(grep -rlE '^[[:space:]]*listen[^;]*[[:space:]]default_server' \
+      /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
+      | grep -v -e '/vpsgui$' -e '/default$' || true)"
+
+  if [ -n "${OTHER_DEFAULT}" ]; then
+    echo "[VPSGUI] Another site already claims default_server on :80:"
+    echo "${OTHER_DEFAULT}" | sed 's/^/[VPSGUI]   /'
+    echo "[VPSGUI] Dropping default_server from the VPSGUI vhost to avoid a duplicate."
+    sed -i 's/\(^[[:space:]]*listen[^;]*\)[[:space:]]default_server;/\1;/' "${NGINX_SITE}"
+
+    if [ -n "${VPSGUI_SERVER_NAME:-}" ]; then
+      sed -i "s/^\([[:space:]]*\)server_name .*/\1server_name ${VPSGUI_SERVER_NAME};/" "${NGINX_SITE}"
+      echo "[VPSGUI] VPSGUI vhost bound to server_name ${VPSGUI_SERVER_NAME}."
+    else
+      echo "[VPSGUI] WARNING: without default_server this vhost only answers requests whose Host"
+      echo "[VPSGUI] header matches its server_name, so the site may be unreachable. Re-run as:"
+      echo "[VPSGUI]   sudo VPSGUI_SERVER_NAME=your-domain-or-ip ./run.sh"
+    fi
+  else
+    # Only claim default_server when nothing else does. The stock Debian site is also a
+    # default_server on :80 and would collide.
+    rm -f /etc/nginx/sites-enabled/default
+  fi
+
+  ln -sf "${NGINX_SITE}" "${NGINX_LINK}"
 
   if nginx -t; then
     systemctl reload nginx
     echo "[VPSGUI] nginx reloaded."
+    [ -n "${NGINX_BACKUP}" ] && rm -f "${NGINX_BACKUP}"
   else
-    echo "[VPSGUI] Error: nginx config test failed; leaving the running config untouched." >&2
+    echo "[VPSGUI] Error: nginx config test failed; rolling back the VPSGUI vhost." >&2
+    if [ "${LINK_EXISTED}" -eq 0 ]; then
+      rm -f "${NGINX_LINK}"
+    fi
+    if [ -n "${NGINX_BACKUP}" ]; then
+      mv "${NGINX_BACKUP}" "${NGINX_SITE}"
+    fi
+    if nginx -t >/dev/null 2>&1; then
+      echo "[VPSGUI] Rolled back — the previous nginx config is valid again and nginx will still start." >&2
+    else
+      echo "[VPSGUI] WARNING: nginx config is STILL invalid after rollback. Run 'nginx -t' and fix it" >&2
+      echo "[VPSGUI] before nginx is restarted, or it will fail to start." >&2
+    fi
     exit 1
   fi
 else
