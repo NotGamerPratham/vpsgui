@@ -37,12 +37,46 @@ echo "[VPSGUI] Building production web assets..."
 npm run build
 
 # 4. Publish the build.
-# The previous script printed "compiled to /var/www/vpsgui/dist" without ever copying anything there,
-# so nginx served an empty root.
+#
+# When the repository is itself checked out at /var/www/vpsgui, the build output and the web root are
+# the SAME directory. The `rm -rf` then deleted the assets that had just been built and the copy
+# found an empty source — leaving nginx serving a web root with no JS or CSS at all.
 echo "[VPSGUI] Publishing build to ${WEB_ROOT}..."
 mkdir -p "${WEB_ROOT}"
-rm -rf "${WEB_ROOT:?}/"*
-cp -r "${SCRIPT_DIR}/dist/." "${WEB_ROOT}/"
+
+SRC_DIST="${SCRIPT_DIR}/dist"
+if [ "$(readlink -f "${SRC_DIST}")" = "$(readlink -f "${WEB_ROOT}")" ]; then
+  echo "[VPSGUI] Build output already lives at ${WEB_ROOT}; nothing to copy."
+else
+  rm -rf "${WEB_ROOT:?}/"*
+  cp -r "${SRC_DIST}/." "${WEB_ROOT}/"
+fi
+
+# Publishing is pointless if the bundle is not actually there.
+if ! ls "${WEB_ROOT}"/index.html >/dev/null 2>&1; then
+  echo "[VPSGUI] Error: ${WEB_ROOT} has no index.html after publishing." >&2
+  exit 1
+fi
+if ! ls "${WEB_ROOT}"/assets/*.js >/dev/null 2>&1; then
+  echo "[VPSGUI] Error: ${WEB_ROOT}/assets contains no JavaScript bundle." >&2
+  exit 1
+fi
+
+# nginx serves as an unprivileged user (www-data/nginx), not as root. Everything it must read needs
+# world-read, and every directory on the path needs world-execute to be traversable — otherwise
+# nginx answers 403 Forbidden for the site root with no clue why.
+# `a+rX` sets execute on directories only, never on regular files.
+echo "[VPSGUI] Granting the nginx worker read access to ${WEB_ROOT}..."
+chmod -R a+rX "${WEB_ROOT}"
+
+# Walk up from the web root and make each ancestor traversable. A repository cloned as root into
+# /var/www with a restrictive umask leaves these at 0750, which blocks nginx before it ever reaches
+# the files.
+ancestor="$(dirname "${WEB_ROOT}")"
+while [ "${ancestor}" != "/" ] && [ -n "${ancestor}" ]; do
+  chmod a+x "${ancestor}" 2>/dev/null || true
+  ancestor="$(dirname "${ancestor}")"
+done
 
 # 5. Agent (listens on 127.0.0.1:46509)
 #
