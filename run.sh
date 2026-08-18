@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "[VPSGUI] Starting setup & production deployment..."
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "[VPSGUI] Error: run as root (sudo ./run.sh) — this installs a systemd service and writes to /var/www." >&2
+  echo "[VPSGUI] Error: run as root (sudo ./run.sh) — this installs a service and writes to /var/www." >&2
   exit 1
 fi
 
@@ -80,10 +80,16 @@ done
 
 # 5. Agent (listens on 127.0.0.1:46509)
 #
-# Runs BEFORE the frontend is considered done. If the agent install fails, the deployment must fail
-# loudly rather than leaving a freshly built UI talking to a stale daemon — the symptom of that is
-# new pages calling endpoints the old agent does not have, which looks like a frontend bug.
-echo "[VPSGUI] Installing the VPSGUI telemetry agent..."
+# The agent install must actually run and must actually succeed. Previously the publish step above
+# could abort under `set -e`, so this never executed and the deploy silently left a freshly built UI
+# talking to a stale daemon — which shows up as new pages 404ing on endpoints the old agent lacks.
+#
+# AGENT_PROCESS_MANAGER selects the supervisor. install.sh installs pm2 (via npm — pm2 is not an apt
+# package) when missing, and tears the other supervisor down first so they cannot race for the port.
+AGENT_PROCESS_MANAGER="${AGENT_PROCESS_MANAGER:-pm2}"
+export AGENT_PROCESS_MANAGER
+
+echo "[VPSGUI] Installing the VPSGUI telemetry agent (supervisor: ${AGENT_PROCESS_MANAGER})..."
 if ! bash "${SCRIPT_DIR}/agent/install.sh"; then
   echo "" >&2
   echo "[VPSGUI] AGENT INSTALL FAILED — the web assets were published but the agent was NOT updated." >&2
