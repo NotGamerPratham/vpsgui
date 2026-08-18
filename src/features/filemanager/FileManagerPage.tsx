@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FolderTree, FileText, Folder, Link2, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { FolderTree, FileText, Folder, Link2, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { fileService } from '../../services/fileService';
@@ -14,6 +14,11 @@ function parentPath(currentPath: string): string {
   const parent = trimmed.slice(0, idx);
   // "C:" -> "C:\" so a Windows drive root stays a valid directory.
   return /^[a-zA-Z]:$/.test(parent) ? `${parent}\\` : parent;
+}
+
+/** Join a name onto a directory path without doubling the separator. */
+function joinPath(dir: string, name: string): string {
+  return `${dir.replace(/[\\/]+$/, '')}/${name}`;
 }
 
 const DEFAULT_PATH = '/etc';
@@ -31,6 +36,7 @@ export function FileManagerPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadDirectory = useCallback(async (targetPath: string) => {
     setListLoading(true);
@@ -73,6 +79,62 @@ export function FileManagerPage() {
       setFileError(e instanceof Error ? e.message : 'Failed to read file');
     } finally {
       setFileLoading(false);
+    }
+  };
+
+  /** Create a new empty file in the current directory. */
+  const handleNewFile = async () => {
+    const name = window.prompt('New file name:');
+    if (!name?.trim()) return;
+    setActionError(null);
+    const target = joinPath(currentPath, name.trim());
+    const result = await fileService.writeFile(target, '');
+    if (result.success) await loadDirectory(currentPath);
+    else setActionError(result.error || 'Could not create the file');
+  };
+
+  /** Create a new directory in the current directory. */
+  const handleNewFolder = async () => {
+    const name = window.prompt('New folder name:');
+    if (!name?.trim()) return;
+    setActionError(null);
+    const target = joinPath(currentPath, name.trim());
+    const result = await fileService.createDirectory(target);
+    if (result.success) await loadDirectory(currentPath);
+    else setActionError(result.error || 'Could not create the folder');
+  };
+
+  const handleRename = async (item: FileItem) => {
+    const name = window.prompt(`Rename "${item.name}" to:`, item.name);
+    if (!name?.trim() || name.trim() === item.name) return;
+    setActionError(null);
+    const target = joinPath(currentPath, name.trim());
+    const result = await fileService.renamePath(item.path, target);
+    if (result.success) await loadDirectory(currentPath);
+    else setActionError(result.error || 'Could not rename');
+  };
+
+  const handleDelete = async (item: FileItem) => {
+    if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
+    setActionError(null);
+
+    let result = await fileService.deletePath(item.path, false);
+    // The agent refuses a non-empty directory unless recursion is explicitly requested, so ask
+    // rather than defaulting to a recursive wipe.
+    if (!result.success && /not empty/i.test(result.error || '')) {
+      if (!window.confirm(`"${item.name}" is not empty. Delete it and everything inside?`)) return;
+      result = await fileService.deletePath(item.path, true);
+    }
+
+    if (result.success) {
+      if (selectedFile?.path === item.path) {
+        setSelectedFile(null);
+        setFileContent('');
+        setIsDirty(false);
+      }
+      await loadDirectory(currentPath);
+    } else {
+      setActionError(result.error || 'Could not delete');
     }
   };
 
@@ -120,6 +182,14 @@ export function FileManagerPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Button size="sm" variant="outline" onClick={handleNewFile} className="gap-1.5 text-xs">
+            <FilePlus className="h-3.5 w-3.5" />
+            <span>New file</span>
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleNewFolder} className="gap-1.5 text-xs">
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span>New folder</span>
+          </Button>
           <Button size="sm" variant="outline" onClick={() => loadDirectory(currentPath)} disabled={listLoading} className="gap-1.5 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${listLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -147,10 +217,10 @@ export function FileManagerPage() {
         </div>
       </div>
 
-      {(listError || saveError || fileError) && (
+      {(listError || saveError || fileError || actionError) && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-          <span className="break-words">{listError || fileError || saveError}</span>
+          <span className="break-words">{listError || fileError || saveError || actionError}</span>
         </div>
       )}
 
@@ -192,12 +262,12 @@ export function FileManagerPage() {
               files.map((item) => {
                 const isSelected = selectedFile?.path === item.path;
                 return (
+                  <div key={item.path} className="group flex items-center gap-1">
                   <button
-                    key={item.path}
                     onClick={() => handleSelectFile(item)}
                     disabled={item.readable === false}
                     title={item.readable === false ? 'Blocked by the agent (credential file)' : item.path}
-                    className={`flex w-full items-center space-x-2 rounded px-2 py-1 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`flex flex-1 min-w-0 items-center space-x-2 rounded px-2 py-1 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       isSelected ? 'bg-primary/20 text-primary font-bold' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                   >
@@ -210,6 +280,25 @@ export function FileManagerPage() {
                     )}
                     <span className="truncate">{item.name}</span>
                   </button>
+
+                  {/* Revealed on hover so the tree stays readable; both call real agent endpoints. */}
+                  <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => handleRename(item)}
+                      title={`Rename ${item.name}`}
+                      className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item)}
+                      title={`Delete ${item.name}`}
+                      className="rounded p-1 text-muted-foreground hover:text-rose-400 hover:bg-muted/60"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </span>
+                  </div>
                 );
               })
             )}

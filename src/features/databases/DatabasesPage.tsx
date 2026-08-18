@@ -46,7 +46,7 @@ export function DatabasesPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
+        <Button disabled title="The agent detects databases but cannot provision them — install an engine from the Catalog or Terminal" className="gap-1.5 text-xs bg-primary">
           <Plus className="h-4 w-4" />
           <span>Create Database</span>
         </Button>

@@ -559,3 +559,97 @@ describe('agent: previously-404 page endpoints', () => {
     expect(host.items[0].desc).toContain(`${os.cpus().length} vCPU`);
   });
 });
+
+describe('agent: firewall rule validation', () => {
+  const post = (body: unknown) =>
+    fetch(`${BASE}/api/v1/security/firewall/action`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it.each([
+    ['shell metacharacters in port', { action: 'allow', port: '22; rm -rf /' }],
+    ['prototype-chain action', { action: 'constructor', port: '22' }],
+    ['port out of range', { action: 'allow', port: '99999' }],
+    ['injection in source', { action: 'allow', port: '22', source: '1.2.3.4; ls' }],
+    ['non-numeric rule number', { action: 'delete', ruleNumber: 'abc' }],
+    ['unknown protocol', { action: 'allow', port: '22', protocol: 'evil' }],
+  ])('rejects %s', async (_label, body) => {
+    // Validation runs before the platform check, so a malformed payload is a 400 on any host.
+    expect((await post(body)).status).toBe(400);
+  });
+
+  it('accepts a well-formed rule', async () => {
+    const res = await post({ action: 'allow', port: '8080', protocol: 'tcp', source: 'any' });
+    expect(res.status).toBe(200);
+  });
+
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/security/firewall/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'allow', port: '22' }),
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('agent: filesystem mutations', () => {
+  const post = (endpoint: string, body: unknown) =>
+    fetch(`${BASE}/api/v1/files/${endpoint}`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('creates, renames and deletes inside the sandbox', async () => {
+    const dir = path.join(sandboxRoot, 'ops');
+    expect((await post('mkdir', { path: dir })).status).toBe(200);
+
+    const file = path.join(dir, 'a.txt');
+    await post('write', { path: file, content: 'hi' });
+
+    const renamed = path.join(dir, 'b.txt');
+    expect((await post('rename', { from: file, to: renamed })).status).toBe(200);
+    expect(await fs.readFile(renamed, 'utf-8')).toBe('hi');
+
+    expect((await post('delete', { path: renamed })).status).toBe(200);
+    expect((await post('delete', { path: dir })).status).toBe(200);
+  });
+
+  it('refuses to overwrite an existing path on rename', async () => {
+    const a = path.join(sandboxRoot, 'x.txt');
+    const b = path.join(sandboxRoot, 'y.txt');
+    await post('write', { path: a, content: 'a' });
+    await post('write', { path: b, content: 'b' });
+
+    // rename() would silently clobber the destination.
+    expect((await post('rename', { from: a, to: b })).status).toBe(409);
+    expect(await fs.readFile(b, 'utf-8')).toBe('b');
+  });
+
+  it('refuses to delete a non-empty directory unless recursion is requested', async () => {
+    const dir = path.join(sandboxRoot, 'tree');
+    await post('mkdir', { path: dir });
+    await post('write', { path: path.join(dir, 'child.txt'), content: 'c' });
+
+    expect((await post('delete', { path: dir })).status).toBe(400);
+    expect((await post('delete', { path: dir, recursive: true })).status).toBe(200);
+  });
+
+  it('refuses to delete a configured file root', async () => {
+    expect((await post('delete', { path: sandboxRoot, recursive: true })).status).toBe(403);
+  });
+
+  it.each(['mkdir', 'delete'])('confines %s to the configured roots', async (endpoint) => {
+    const outside = os.platform() === 'win32' ? path.join('C:', 'Windows', 'vpsgui-nope') : '/etc/vpsgui-nope';
+    expect((await post(endpoint, { path: outside })).status).toBe(403);
+  });
+
+  it('confines both ends of a rename', async () => {
+    const inside = path.join(sandboxRoot, 'sample.txt');
+    const outside = os.platform() === 'win32' ? path.join('C:', 'Windows', 'escaped.txt') : '/etc/escaped.txt';
+    expect((await post('rename', { from: inside, to: outside })).status).toBe(403);
+  });
+});

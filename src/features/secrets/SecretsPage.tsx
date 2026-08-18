@@ -31,7 +31,7 @@ export function SecretsPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
+        <Button disabled title="The agent provides no encrypted secret storage — use Vault, SOPS, or your platform secret store" className="gap-1.5 text-xs bg-primary">
           <Plus className="h-4 w-4" />
           <span>New Secret</span>
         </Button>
@@ -79,7 +79,7 @@ export function SecretsPage() {
                   <TableCell className="font-mono text-xs text-muted-foreground">{sec.maskedValue}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{sec.updatedBy}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-rose-400">
+                    <Button size="sm" variant="ghost" disabled title="Secret storage is not implemented by the agent" className="h-7 w-7 p-0">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

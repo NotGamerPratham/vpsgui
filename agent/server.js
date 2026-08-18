@@ -1524,6 +1524,9 @@ async function getAutomationWorkflows() {
       triggerType: 'cron',
       schedule,
       stepsCount: 1,
+      // The full command, so the UI can run it on demand rather than only displaying a truncated name.
+      command,
+      source,
       // cron keeps no execution history the agent can read, so these stay absent rather than faked.
       steps: [],
     });
@@ -1545,6 +1548,154 @@ async function getAutomationWorkflows() {
   if (rootTab) rootTab.split('\n').forEach((l) => addEntry('root crontab', l));
 
   return workflows;
+}
+
+// ---------------------------------------------------------------------------
+// Firewall and filesystem mutations
+// ---------------------------------------------------------------------------
+
+/** ufw verbs the agent will run. Null-prototype so `constructor` cannot smuggle a value through. */
+const UFW_ACTIONS = Object.assign(Object.create(null), { allow: 1, deny: 1, reject: 1, limit: 1, delete: 1 });
+
+/** A single port (22), an inclusive range (6000:6010), or a comma list (80,443). */
+const PORT_SPEC = /^\d{1,5}(:\d{1,5})?(,\d{1,5}(:\d{1,5})?)*$/;
+/** IPv4/IPv6 address or CIDR, or the literal "any". */
+const SOURCE_SPEC = /^(any|[0-9a-fA-F:.]+(\/\d{1,3})?)$/;
+
+/**
+ * Build the ufw argument vector for a rule change.
+ *
+ * Returns { args } or { error }. Every component is validated against a strict pattern and passed
+ * as a separate argv entry — nothing is interpolated into a shell string.
+ */
+function buildUfwArgs({ action, port, protocol, source, ruleNumber }) {
+  if (typeof action !== 'string' || !UFW_ACTIONS[action]) {
+    return { error: 'Invalid firewall action' };
+  }
+
+  if (action === 'delete') {
+    // ufw deletes by rule number, which is what `ufw status numbered` reports.
+    const num = Number.parseInt(ruleNumber, 10);
+    if (!Number.isInteger(num) || num < 1 || num > 1000) {
+      return { error: 'delete requires a valid rule number' };
+    }
+    // --force skips the interactive "Proceed (y|n)?" prompt, which would otherwise hang.
+    return { args: ['--force', 'delete', String(num)] };
+  }
+
+  if (typeof port !== 'string' || !PORT_SPEC.test(port)) {
+    return { error: 'Invalid port specification' };
+  }
+  for (const p of port.split(/[,:]/)) {
+    const n = Number.parseInt(p, 10);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) return { error: `Port out of range: ${p}` };
+  }
+
+  const proto = typeof protocol === 'string' ? protocol.toLowerCase() : 'tcp';
+  if (proto !== 'tcp' && proto !== 'udp' && proto !== 'any') {
+    return { error: 'Protocol must be tcp, udp, or any' };
+  }
+
+  const src = typeof source === 'string' && source.trim() ? source.trim() : 'any';
+  if (!SOURCE_SPEC.test(src)) return { error: 'Invalid source address' };
+
+  // `ufw allow from <src> to any port <port> proto <proto>` is the general form; the short form
+  // `ufw allow <port>/<proto>` cannot express a source restriction.
+  const args = [action, 'from', src, 'to', 'any', 'port', port];
+  if (proto !== 'any') args.push('proto', proto);
+  return { args };
+}
+
+/** Apply a ufw rule change. */
+async function applyFirewallAction(body) {
+  // Validate BEFORE the platform check: a malformed request is a client error on any host,
+  // and putting the guard first made every bad payload look like a 200 "not supported".
+  const built = buildUfwArgs(body || {});
+  if (built.error) return { success: false, output: built.error, invalid: true };
+
+  if (os.platform() !== 'linux') {
+    return { success: false, output: 'Firewall management requires a Linux host with ufw.' };
+  }
+  try {
+    const output = await run('ufw', built.args, { timeout: 20000 });
+    return { success: true, output: output.trim() || 'Rule applied.' };
+  } catch (e) {
+    return { success: false, output: execErrorPayload(e) };
+  }
+}
+
+/**
+ * Create a directory inside the configured file roots.
+ */
+async function createDirectory(targetPath) {
+  const safe = await resolveSafePath(targetPath, { mustExist: false });
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+
+  try {
+    await fsp.mkdir(safe.path, { recursive: true, mode: 0o755 });
+    return { status: 200, body: { success: true, path: safe.path } };
+  } catch (e) {
+    return { status: 500, body: { success: false, error: e.message } };
+  }
+}
+
+/**
+ * Delete a file or directory inside the configured file roots.
+ *
+ * Recursive deletion is opt-in per request so a mis-click on a directory cannot wipe a tree, and
+ * the roots themselves are never removable.
+ */
+async function deletePath(targetPath, recursive) {
+  const safe = await resolveSafePath(targetPath);
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+
+  if (FILE_ROOTS.some((root) => root === safe.path)) {
+    return { status: 403, body: { success: false, error: 'Refusing to delete a configured file root' } };
+  }
+
+  try {
+    const stat = await fsp.lstat(safe.path);
+    if (stat.isDirectory()) {
+      if (!recursive) {
+        // rmdir fails on a non-empty directory, which is the safe default.
+        await fsp.rmdir(safe.path);
+      } else {
+        await fsp.rm(safe.path, { recursive: true, force: false });
+      }
+    } else {
+      await fsp.unlink(safe.path);
+    }
+    return { status: 200, body: { success: true, path: safe.path } };
+  } catch (e) {
+    if (e.code === 'ENOTEMPTY') {
+      return {
+        status: 400,
+        body: { success: false, error: 'Directory is not empty. Re-send with recursive: true to delete its contents.' },
+      };
+    }
+    return { status: e.code === 'ENOENT' ? 404 : 500, body: { success: false, error: e.message } };
+  }
+}
+
+/** Rename or move a path. BOTH endpoints are confined, so a move cannot escape the roots. */
+async function renamePath(fromPath, toPath) {
+  const from = await resolveSafePath(fromPath);
+  if (from.error) return { status: from.status, body: { success: false, error: from.error } };
+
+  const to = await resolveSafePath(toPath, { mustExist: false });
+  if (to.error) return { status: to.status, body: { success: false, error: to.error } };
+
+  if (await fsp.stat(to.path).then(() => true).catch(() => false)) {
+    // rename() would silently clobber the destination.
+    return { status: 409, body: { success: false, error: 'Destination already exists' } };
+  }
+
+  try {
+    await fsp.rename(from.path, to.path);
+    return { status: 200, body: { success: true, from: from.path, to: to.path } };
+  } catch (e) {
+    return { status: 500, body: { success: false, error: e.message } };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1967,6 +2118,52 @@ async function handleRequest(req, res)
     } catch (e) {
       sendJson(res, 500, { success: false, error: e.message });
     }
+    return;
+  }
+
+  // ---- Firewall rule changes ----
+  if (method === 'POST' && pathname === '/api/v1/security/firewall/action') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, output: parsed.error });
+      return;
+    }
+    const result = await applyFirewallAction(parsed.body);
+    sendJson(res, result.invalid ? 400 : 200, { success: result.success, output: result.output });
+    return;
+  }
+
+  // ---- Filesystem mutations ----
+  if (method === 'POST' && pathname === '/api/v1/files/mkdir') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await createDirectory(parsed.body.path);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/v1/files/delete') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await deletePath(parsed.body.path, parsed.body.recursive === true);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/v1/files/rename') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await renamePath(parsed.body.from, parsed.body.to);
+    sendJson(res, result.status, result.body);
     return;
   }
 

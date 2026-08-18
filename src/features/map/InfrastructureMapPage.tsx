@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Network, Globe, Shield, Server, Container, Database, CheckCircle2, ArrowDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -28,6 +29,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 export function InfrastructureMapPage() {
+  const navigate = useNavigate();
   const { nodes } = useServerStore();
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [topology, setTopology] = useState<TopologyLayer[]>([]);
@@ -200,7 +202,7 @@ export function InfrastructureMapPage() {
               </div>
             </CardContent>
 
-            <Button className="w-full text-xs bg-primary">Open Full Diagnostics</Button>
+            <Button onClick={() => navigate('/diagnostics')} className="w-full text-xs bg-primary">Open Full Diagnostics</Button>
           </Card>
         </div>
       )}

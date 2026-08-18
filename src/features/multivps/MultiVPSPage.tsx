@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Grid2X2, Server, Cpu, HardDrive, Terminal, Play } from 'lucide-react';
 import { useServerStore } from '../../store/useServerStore';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
@@ -10,6 +11,7 @@ import { apiClient, ApiError } from '../../api/client';
 import { TelemetryPoint } from '../../types/monitoring';
 
 export function MultiVPSPage() {
+  const navigate = useNavigate();
   const { nodes } = useServerStore();
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [batchCommand, setBatchCommand] = useState('systemctl status nginx');
@@ -222,7 +224,7 @@ export function MultiVPSPage() {
 
                   <div className="border-t border-border/60 bg-muted/20 px-3 py-2 flex items-center justify-between text-[11px]">
                     <span className="text-muted-foreground font-mono">{node.os.name}</span>
-                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-primary">
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/terminal')} className="h-6 text-[10px] text-primary">
                       SSH Terminal →
                     </Button>
                   </div>

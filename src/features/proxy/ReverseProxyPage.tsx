@@ -39,7 +39,7 @@ export function ReverseProxyPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
+        <Button disabled title="Rules are read from the live nginx config — edit it via the File Manager, then Refresh" className="gap-1.5 text-xs bg-primary">
           <Plus className="h-4 w-4" />
           <span>Add Proxy Host</span>
         </Button>

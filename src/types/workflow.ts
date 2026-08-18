@@ -15,6 +15,10 @@ export interface AutomationWorkflow {
   stepsCount: number;
   lastRunAt?: string;
   lastRunStatus?: 'success' | 'failed';
+  /** The full cron command, used by "Run now". Present for cron-sourced workflows. */
+  command?: string;
+  /** Which crontab the entry came from (/etc/crontab, /etc/cron.d/x, root crontab). */
+  source?: string;
   steps: WorkflowStep[];
 }
 

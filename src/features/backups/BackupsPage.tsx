@@ -39,7 +39,7 @@ export function BackupsPage() {
           </p>
         </div>
 
-        <Button className="gap-1.5 text-xs bg-primary">
+        <Button disabled title="The agent implements no backup scheduler — use restic, borg, or your provider snapshots" className="gap-1.5 text-xs bg-primary">
           <Plus className="h-4 w-4" />
           <span>Create Snapshot</span>
         </Button>
@@ -84,7 +84,7 @@ export function BackupsPage() {
                     <Badge variant="success" className="text-[10px] uppercase font-mono">{b.status}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1">
+                    <Button size="sm" variant="outline" disabled title="Restore is not implemented by the agent" className="h-7 text-[11px] gap-1">
                       <RotateCcw className="h-3 w-3" /> Restore
                     </Button>
                   </TableCell>

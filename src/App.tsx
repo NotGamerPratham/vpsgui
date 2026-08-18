@@ -64,6 +64,8 @@ export function App() {
                 <Route path="/docker/containers" element={<DockerContainersPage />} />
                 <Route path="/docker/images" element={<DockerImagesPage />} />
                 <Route path="/files" element={<FileManagerPage />} />
+                {/* CategoryNavigation links here; alias kept so both paths and existing bookmarks work. */}
+                <Route path="/file-manager" element={<FileManagerPage />} />
                 <Route path="/terminal" element={<TerminalPage />} />
                 <Route path="/monitoring" element={<MonitoringPage />} />
                 <Route path="/health" element={<HealthMatrixPage />} />
@@ -71,12 +73,14 @@ export function App() {
                 <Route path="/disks" element={<StorageManagerPage />} />
                 <Route path="/network" element={<NetworkManagerPage />} />
                 <Route path="/firewall" element={<FirewallPage />} />
+                <Route path="/security/firewall" element={<FirewallPage />} />
                 <Route path="/ssh-keys" element={<SshKeysPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
                 <Route path="/secrets" element={<SecretsPage />} />
                 <Route path="/iac" element={<IacPage />} />
                 <Route path="/automation" element={<AutomationPage />} />
+                <Route path="/automation/workflows" element={<AutomationPage />} />
                 <Route path="/queue" element={<JobQueuePage />} />
                 <Route path="/audit" element={<AuditCenterPage />} />
                 <Route path="/spotlight" element={<SpotlightExplorerPage />} />

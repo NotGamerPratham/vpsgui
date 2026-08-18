@@ -49,6 +49,38 @@ class FileService {
     return apiClient.get<FileReadResult>(`/files/read?path=${encodeURIComponent(path)}`);
   }
 
+  /** Create a directory on the host. */
+  async createDirectory(path: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; error?: string }>('/files/mkdir', { path });
+    } catch (e) {
+      return { success: false, error: describeError(e) };
+    }
+  }
+
+  /**
+   * Delete a file or directory.
+   *
+   * `recursive` is opt-in: without it the agent refuses to remove a non-empty directory, so a
+   * mis-click cannot destroy a tree.
+   */
+  async deletePath(path: string, recursive = false): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; error?: string }>('/files/delete', { path, recursive });
+    } catch (e) {
+      return { success: false, error: describeError(e) };
+    }
+  }
+
+  /** Rename or move a path. Both endpoints are confined to the agent's file roots. */
+  async renamePath(from: string, to: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; error?: string }>('/files/rename', { from, to });
+    } catch (e) {
+      return { success: false, error: describeError(e) };
+    }
+  }
+
   /** Persist edited file content back to the host VPS via the agent. */
   async writeFile(path: string, content: string): Promise<{ success: boolean; error?: string }> {
     try {
