@@ -1201,6 +1201,353 @@ const CATALOG_ITEMS = [
 const UNIMPLEMENTED_FEATURES = ['deployments', 'backups', 'secrets'];
 
 // ---------------------------------------------------------------------------
+// Users, audit log, health matrix, topology, timers, cron
+// ---------------------------------------------------------------------------
+
+/** Shells that mean the account cannot log in interactively. */
+const NOLOGIN_SHELLS = new Set(['/usr/sbin/nologin', '/sbin/nologin', '/bin/false', '/usr/bin/false']);
+
+/** Real host accounts from /etc/passwd, enriched with group membership and last login. */
+async function getSystemUsers() {
+  if (os.platform() !== 'linux') return [];
+
+  let passwd;
+  try {
+    passwd = await fsp.readFile('/etc/passwd', 'utf-8');
+  } catch (e) {
+    return [];
+  }
+
+  // Supplementary group memberships from /etc/group.
+  const groupsByUser = Object.create(null);
+  try {
+    const groupFile = await fsp.readFile('/etc/group', 'utf-8');
+    for (const line of groupFile.split('\n')) {
+      const [groupName, , , members] = line.split(':');
+      if (!groupName || !members) continue;
+      for (const member of members.split(',').filter(Boolean)) {
+        (groupsByUser[member] ??= []).push(groupName);
+      }
+    }
+  } catch (e) {
+    /* /etc/group unreadable */
+  }
+
+  // `lastlog` reports the most recent login for every account in a single call.
+  const lastLoginByUser = Object.create(null);
+  const lastlogOut = await tryRun('lastlog', [], { timeout: 8000 });
+  if (lastlogOut) {
+    for (const line of lastlogOut.split('\n').slice(1)) {
+      const name = line.split(/\s+/)[0];
+      if (!name) continue;
+      lastLoginByUser[name] = /Never logged in/.test(line)
+        ? null
+        : line.slice(name.length).trim().replace(/\s+/g, ' ');
+    }
+  }
+
+  return passwd
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [username, , uidRaw, gidRaw, gecos, home, shell] = line.split(':');
+      const uid = Number.parseInt(uidRaw, 10);
+      if (!username || !Number.isFinite(uid)) return null;
+      return {
+        id: `user-${uid}`,
+        username,
+        uid,
+        gid: Number.parseInt(gidRaw, 10) || 0,
+        // The GECOS field's first comma-separated part is the human name, when it is set at all.
+        fullName: (gecos || '').split(',')[0] || '',
+        home: home || '',
+        shell: shell || '',
+        // Accounts below UID 1000 are service accounts rather than people.
+        isSystem: uid < 1000 && uid !== 0,
+        canLogin: !NOLOGIN_SHELLS.has(shell || ''),
+        groups: groupsByUser[username] || [],
+        lastLogin: lastLoginByUser[username] ?? null,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.uid - b.uid);
+}
+
+/**
+ * Authentication events from the systemd journal.
+ *
+ * A real audit trail of SSH and sudo activity. The agent keeps no action history of its own, so
+ * this reports what the host actually recorded rather than inventing application-level events.
+ */
+async function getAuditLogs() {
+  if (os.platform() !== 'linux') return [];
+
+  const output = await tryRun(
+    'journalctl',
+    ['--no-pager', '-n', '300', '-o', 'short-iso', '-t', 'sshd', '-t', 'sudo'],
+    { timeout: 10000 }
+  );
+  if (!output) return [];
+
+  const events = [];
+  for (const line of output.split('\n').filter(Boolean)) {
+    const tsMatch = /^(\S+)/.exec(line);
+    if (!tsMatch) continue;
+    const timestamp = new Date(tsMatch[1]);
+    if (Number.isNaN(timestamp.getTime())) continue;
+
+    const ip = (/from ([0-9a-fA-F:.]+)/.exec(line) || [])[1] || '';
+    let action = null;
+    let status = 'success';
+    let user = '';
+    let m;
+
+    if ((m = /Accepted (?:password|publickey|keyboard-interactive\/pam) for (\S+)/.exec(line))) {
+      action = 'SSH login accepted';
+      user = m[1];
+    } else if ((m = /Failed (?:password|publickey) for (?:invalid user )?(\S+)/.exec(line))) {
+      action = 'SSH login failed';
+      status = 'failure';
+      user = m[1];
+    } else if ((m = /Invalid user (\S+)/.exec(line))) {
+      action = 'SSH login attempt for unknown user';
+      status = 'failure';
+      user = m[1];
+    } else if ((m = /session opened for user (\S+)/.exec(line))) {
+      action = 'Session opened';
+      user = m[1];
+    } else if ((m = /(\S+) : TTY=\S+ ; PWD=\S+ ; USER=(\S+) ; COMMAND=(.+)$/.exec(line))) {
+      action = `sudo: ${m[3]}`;
+      user = m[1];
+    } else {
+      continue;
+    }
+
+    events.push({
+      id: `audit-${events.length}-${timestamp.getTime()}`,
+      timestamp: timestamp.toISOString(),
+      // The host log knows a username; it has no source for a display name, email or avatar.
+      actor: { name: user || 'unknown', email: '', avatarUrl: '' },
+      action,
+      category: 'auth',
+      target: os.hostname(),
+      ipAddress: ip,
+      status,
+      details: line.length > 300 ? `${line.slice(0, 300)}...` : line,
+    });
+  }
+
+  return events.reverse();
+}
+
+/** Live health checks computed from real host state. No check reports a status it did not measure. */
+async function getHealthMatrix() {
+  const now = new Date().toISOString();
+  const checks = [];
+  const telemetry = await getRealTelemetry();
+
+  const push = (id, category, name, target, status, message, latencyMs = 0) =>
+    checks.push({ id, category, name, target, status, latencyMs, message, lastCheck: now });
+
+  push('health-agent', 'node', 'Agent', `${HOST}:${PORT}`, 'green', `vpsgui-agent v${AGENT_VERSION} responding`);
+
+  const mem = telemetry.ramPercent;
+  push(
+    'health-memory', 'node', 'Memory', os.hostname(),
+    mem >= 95 ? 'red' : mem >= 85 ? 'yellow' : 'green',
+    `${mem}% of ${Math.round(telemetry.memoryTotalBytes / 1073741824)} GB in use`
+  );
+
+  if (telemetry.diskTotalBytes > 0) {
+    const disk = telemetry.diskPercent;
+    push(
+      'health-disk', 'node', 'Root filesystem', '/',
+      disk >= 95 ? 'red' : disk >= 85 ? 'yellow' : 'green',
+      `${disk}% of ${Math.round(telemetry.diskTotalBytes / 1073741824)} GB used`
+    );
+  }
+
+  const cores = telemetry.cpuCores || 1;
+  const load1 = (telemetry.loadAverage && telemetry.loadAverage[0]) || 0;
+  const loadRatio = load1 / cores;
+  push(
+    'health-load', 'node', 'CPU load', os.hostname(),
+    loadRatio >= 2 ? 'red' : loadRatio >= 1 ? 'yellow' : 'green',
+    `1-minute load ${load1.toFixed(2)} across ${cores} cores`
+  );
+
+  if (os.platform() === 'linux') {
+    const failed = await tryRun('systemctl', ['list-units', '--state=failed', '--no-legend', '--no-pager', '--plain'], { timeout: 8000 });
+    const failedUnits = (failed || '').trim().split('\n').filter(Boolean);
+    push(
+      'health-systemd', 'service', 'systemd units', os.hostname(),
+      failedUnits.length > 0 ? 'red' : 'green',
+      failedUnits.length > 0 ? `${failedUnits.length} failed unit(s)` : 'No failed units'
+    );
+  }
+
+  const dockerVersion = await tryRun('docker', ['info', '--format', '{{.ServerVersion}}'], { timeout: 8000 });
+  if (dockerVersion) {
+    const containers = await getRealDockerContainers();
+    const running = containers.filter((c) => c.state === 'running').length;
+    push(
+      'health-docker', 'container', 'Docker engine', os.hostname(), 'green',
+      `Engine ${dockerVersion.trim()} — ${running}/${containers.length} containers running`
+    );
+  }
+
+  return checks;
+}
+
+/**
+ * Infrastructure topology derived from what the host actually runs: the node itself, its Docker
+ * containers, and the database engines detected on listening ports.
+ */
+async function getTopology() {
+  const [containers, databases, telemetry] = await Promise.all([
+    getRealDockerContainers(),
+    getDatabases(),
+    getRealTelemetry(),
+  ]);
+
+  const layers = [
+    {
+      level: 'Edge',
+      items: [{ id: 'internet', title: 'Internet', type: 'cloud', status: 'online', desc: 'Inbound traffic' }],
+    },
+    {
+      level: 'Host',
+      items: [
+        {
+          id: 'host',
+          title: os.hostname(),
+          type: 'vps',
+          status: 'online',
+          desc: `${telemetry.cpuCores} vCPU · ${Math.round(telemetry.memoryTotalBytes / 1073741824)} GB RAM · ${telemetry.osName}`,
+        },
+      ],
+    },
+  ];
+
+  if (containers.length > 0) {
+    layers.push({
+      level: 'Containers',
+      items: containers.map((c) => ({
+        id: `container-${c.id}`,
+        title: c.name,
+        type: 'docker',
+        status: c.state === 'running' ? 'online' : 'offline',
+        desc: c.image,
+      })),
+    });
+  }
+
+  if (databases.length > 0) {
+    layers.push({
+      level: 'Data',
+      items: databases.map((db) => ({
+        id: `db-${db.port}`,
+        title: db.engine,
+        type: 'database',
+        status: 'online',
+        desc: `Listening on port ${db.port}`,
+      })),
+    });
+  }
+
+  return layers;
+}
+
+/** systemd timers — the host's real scheduled-job mechanism. */
+async function getQueueJobs() {
+  if (os.platform() !== 'linux') return [];
+  const output = await tryRun('systemctl', ['list-timers', '--all', '--no-legend', '--no-pager'], { timeout: 8000 });
+  if (!output) return [];
+
+  const jobs = [];
+  for (const line of output.trim().split('\n').filter(Boolean)) {
+    const cols = line.trim().split(/\s+/);
+    const unitIdx = cols.findIndex((c) => c.endsWith('.timer'));
+    if (unitIdx === -1) continue;
+
+    const unit = cols[unitIdx];
+    const activates = cols[unitIdx + 1] || '';
+    const next = cols.slice(0, unitIdx).join(' ');
+
+    jobs.push({
+      id: `timer-${unit}`,
+      title: activates || unit,
+      nodeName: os.hostname(),
+      type: 'systemd-timer',
+      status: /n\/a/i.test(next) ? 'completed' : 'queued',
+      // A timer has no meaningful completion percentage; 0 rather than an invented figure.
+      progressPercent: 0,
+      startedAt: new Date().toISOString(),
+      logs: [`Next elapse: ${next || 'unknown'}`, `Unit: ${unit}`],
+    });
+  }
+  return jobs;
+}
+
+/** Cron entries from the system crontab, /etc/cron.d and root's crontab. */
+async function getAutomationWorkflows() {
+  if (os.platform() !== 'linux') return [];
+
+  const workflows = [];
+  const seen = new Set();
+
+  const addEntry = (source, line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    // Skip environment assignments such as PATH= or SHELL=.
+    if (/^[A-Z_]+\s*=/.test(trimmed)) return;
+
+    const fields = trimmed.split(/\s+/);
+    if (fields.length < 6) return;
+
+    const schedule = fields.slice(0, 5).join(' ');
+    const rest = fields.slice(5);
+    // System crontabs carry a user field before the command; a user crontab does not.
+    const isSystemTab = source !== 'root crontab';
+    const command = (isSystemTab ? rest.slice(1) : rest).join(' ');
+    if (!command) return;
+
+    const key = `${schedule} ${command}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    workflows.push({
+      id: `cron-${workflows.length}`,
+      name: command.length > 60 ? `${command.slice(0, 60)}...` : command,
+      description: `${source} · ${schedule}`,
+      status: 'active',
+      triggerType: 'cron',
+      schedule,
+      stepsCount: 1,
+      // cron keeps no execution history the agent can read, so these stay absent rather than faked.
+      steps: [],
+    });
+  };
+
+  const systemTab = await tryRun('cat', ['/etc/crontab'], { timeout: 5000 });
+  if (systemTab) systemTab.split('\n').forEach((l) => addEntry('/etc/crontab', l));
+
+  try {
+    for (const entry of await fsp.readdir('/etc/cron.d')) {
+      const content = await fsp.readFile(path.join('/etc/cron.d', entry), 'utf-8').catch(() => '');
+      content.split('\n').forEach((l) => addEntry(`/etc/cron.d/${entry}`, l));
+    }
+  } catch (e) {
+    /* no /etc/cron.d on this host */
+  }
+
+  const rootTab = await tryRun('crontab', ['-l'], { timeout: 5000 });
+  if (rootTab) rootTab.split('\n').forEach((l) => addEntry('root crontab', l));
+
+  return workflows;
+}
+
+// ---------------------------------------------------------------------------
 // Node payload
 // ---------------------------------------------------------------------------
 
@@ -1491,6 +1838,30 @@ async function handleRequest(req, res)
     return;
   }
 
+  if (method === 'GET' && pathname === '/api/v1/users') {
+    sendJson(res, 200, await getSystemUsers());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/security/audit-logs') {
+    sendJson(res, 200, await getAuditLogs());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/health/matrix') {
+    sendJson(res, 200, await getHealthMatrix());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/topology') {
+    sendJson(res, 200, await getTopology());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/queue/jobs') {
+    sendJson(res, 200, await getQueueJobs());
+    return;
+  }
+  if (method === 'GET' && pathname === '/api/v1/automation/workflows') {
+    sendJson(res, 200, await getAutomationWorkflows());
+    return;
+  }
   if (method === 'GET' && pathname === '/api/v1/agent/info') {
     sendJson(res, 200, {
       version: AGENT_VERSION,

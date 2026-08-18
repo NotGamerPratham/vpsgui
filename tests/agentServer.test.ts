@@ -510,3 +510,52 @@ describe('agent: failed-auth lockout is per-client', () => {
     expect(victim.status).toBe(200);
   });
 });
+
+describe('agent: previously-404 page endpoints', () => {
+  it.each([
+    '/users',
+    '/security/audit-logs',
+    '/health/matrix',
+    '/topology',
+    '/queue/jobs',
+    '/automation/workflows',
+  ])('implements %s and returns an array', async (endpoint) => {
+    const res = await fetch(`${BASE}/api/v1${endpoint}`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it('requires a token for all of them', async () => {
+    for (const endpoint of ['/users', '/security/audit-logs', '/health/matrix', '/topology']) {
+      const res = await fetch(`${BASE}/api/v1${endpoint}`);
+      expect(res.status, `${endpoint} must require a token`).toBe(401);
+    }
+  });
+
+  it('computes health checks from measured state, with valid statuses', async () => {
+    const res = await fetch(`${BASE}/api/v1/health/matrix`, { headers: AUTH });
+    const checks = await res.json();
+    expect(checks.length).toBeGreaterThan(0);
+
+    for (const check of checks) {
+      // Every check must carry a real verdict and the reading it was derived from.
+      expect(['green', 'yellow', 'red']).toContain(check.status);
+      expect(typeof check.message).toBe('string');
+      expect(check.message.length).toBeGreaterThan(0);
+      expect(Number.isNaN(new Date(check.lastCheck).getTime())).toBe(false);
+    }
+
+    // The agent reporting on itself must always be present.
+    expect(checks.some((c: { id: string }) => c.id === 'health-agent')).toBe(true);
+  });
+
+  it('builds topology layers from the real host rather than a fixed graph', async () => {
+    const res = await fetch(`${BASE}/api/v1/topology`, { headers: AUTH });
+    const layers = await res.json();
+
+    const host = layers.find((l: { level: string }) => l.level === 'Host');
+    expect(host).toBeDefined();
+    expect(host.items[0].title).toBe(os.hostname());
+    expect(host.items[0].desc).toContain(`${os.cpus().length} vCPU`);
+  });
+});
