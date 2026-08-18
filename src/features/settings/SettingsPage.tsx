@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/input';
 import { useUIStore } from '../../store/useUIStore';
 import { themeCatalog } from '../../design-system/tokens';
 import { LanguageCode } from '../../i18n';
+import { resumeTelemetryPolling } from '../../services/telemetryPoller';
 
 const AGENT_TOKEN_KEY = 'vpsgui_auth_token';
 
@@ -22,6 +23,10 @@ export function SettingsPage() {
     }
     setTokenSaved(true);
     setTimeout(() => setTokenSaved(false), 2000);
+    // Telemetry polling halts itself when the agent rejects the token, so that a stale
+    // credential cannot keep re-arming the agent's failed-auth lockout. Saving a new token
+    // is the event that makes retrying worthwhile again.
+    resumeTelemetryPolling();
   };
 
   return (

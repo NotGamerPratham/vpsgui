@@ -468,3 +468,45 @@ describe('agent: shell execution', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('agent: failed-auth lockout is per-client', () => {
+  const badAuth = { Authorization: 'Bearer wrong-token-aaaaaaaaaaaaaaaa' };
+
+  it('does not lock out a second client when a first one sends bad tokens', async () => {
+    // Behind nginx every request arrives from 127.0.0.1, so keying the lockout on the socket
+    // address made it global: one browser with a stale token 429'd the entire application for
+    // everyone. The agent trusts X-Forwarded-For only from a loopback peer, and uses the rightmost
+    // hop — the one our own nginx appended.
+    for (let i = 0; i < 15; i++) {
+      await fetch(`${BASE}/api/v1/system/telemetry`, {
+        headers: { ...badAuth, 'X-Forwarded-For': '203.0.113.10' },
+      });
+    }
+
+    const offender = await fetch(`${BASE}/api/v1/system/telemetry`, {
+      headers: { ...badAuth, 'X-Forwarded-For': '203.0.113.10' },
+    });
+    expect(offender.status).toBe(429);
+
+    // A different client must be unaffected, and a valid token must still work.
+    const bystander = await fetch(`${BASE}/api/v1/system/telemetry`, {
+      headers: { ...AUTH, 'X-Forwarded-For': '203.0.113.99' },
+    });
+    expect(bystander.status).toBe(200);
+  });
+
+  it('ignores a forged leftmost X-Forwarded-For hop', async () => {
+    // A client that spoofs XFF must not be able to pin the lockout on someone else: nginx appends
+    // the real peer last, so only the rightmost entry is trustworthy.
+    for (let i = 0; i < 15; i++) {
+      await fetch(`${BASE}/api/v1/system/telemetry`, {
+        headers: { ...badAuth, 'X-Forwarded-For': '198.51.100.7, 203.0.113.55' },
+      });
+    }
+
+    const victim = await fetch(`${BASE}/api/v1/system/telemetry`, {
+      headers: { ...AUTH, 'X-Forwarded-For': '198.51.100.7' },
+    });
+    expect(victim.status).toBe(200);
+  });
+});

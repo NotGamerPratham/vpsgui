@@ -103,9 +103,28 @@ const AGENT_TOKEN_DIGEST = crypto.createHash('sha256').update(AGENT_TOKEN).diges
 
 const authFailures = new Map(); // ip -> { count, lockedUntil }
 
-function clientIp(req)
-{
-  return req.socket.remoteAddress || 'unknown';
+/**
+ * Identify the caller for rate-limiting purposes.
+ *
+ * The agent runs behind nginx, so socket.remoteAddress is 127.0.0.1 for EVERY request. Keying the
+ * failed-auth lockout on that made it global: one browser with a stale token locked out the whole
+ * application for everyone.
+ *
+ * When the TCP peer is loopback we therefore trust X-Forwarded-For, taking the RIGHTMOST entry —
+ * that is the one our own nginx appended from the real peer. Leftmost entries are client-supplied
+ * and trivially forged, which would let an attacker evade the lockout or lock out a third party.
+ */
+function clientIp(req) {
+  const peer = req.socket.remoteAddress || 'unknown';
+  const isLoopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
+  if (!isLoopback) return peer;
+
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    const hops = forwarded.split(',').map((h) => h.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
+  }
+  return peer;
 }
 
 function isLockedOut(ip)

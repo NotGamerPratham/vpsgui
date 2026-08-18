@@ -11,6 +11,12 @@ export interface EventMap {
   telemetry_tick: TelemetryPoint;
   /** Whether live telemetry is currently arriving. */
   ws_connected: boolean;
+
+  /**
+   * Telemetry polling stopped because the agent rejected or rate-limited our credentials.
+   * Retrying on a timer cannot fix that and keeps the agent's lockout armed.
+   */
+  telemetry_halted: string;
 }
 
 export type EventName = keyof EventMap;
