@@ -1,3 +1,5 @@
+import { apiClient } from '../api/client';
+
 export interface DnsRecordResult {
   name: string;
   type: string;
@@ -7,11 +9,16 @@ export interface DnsRecordResult {
 
 export interface IpInfoResult {
   ip: string;
-  city?: string;
-  region?: string;
-  country?: string;
-  countryCode?: string;
-  org?: string;
+  /** null when the provider does not report it — ipinfo's /lite tier is country-level only. */
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+  continent?: string | null;
+  org?: string | null;
+  asn?: string | null;
+  /** Which provider answered, so the UI can explain a missing city. */
+  source?: string | null;
 }
 
 class DiagnosticsService {
@@ -95,33 +102,49 @@ class DiagnosticsService {
   }
 
   /**
-   * Real IP Geolocation using ipapi.co / ipify API
+   * Geolocate an IP address.
+   *
+   * Prefers the agent, which proxies ipinfo.io using a token held in its 0600 config. The token
+   * deliberately does not live in the frontend: every VITE_* value is inlined into the public
+   * client bundle at build time, so anyone loading the page could read it.
+   *
+   * Falls back to a direct keyless lookup when the agent is unreachable or has no token, so the
+   * Diagnostics page still works without one.
    */
   async getIpInfo(targetIp?: string): Promise<IpInfoResult> {
+    try {
+      const viaAgent = await apiClient.get<IpInfoResult>(
+        `/network/ip-info${targetIp ? `?ip=${encodeURIComponent(targetIp)}` : ''}`,
+        12000
+      );
+      if (viaAgent?.ip) return viaAgent;
+    } catch (e) {
+      // Agent unreachable or no token configured; fall through to the browser-side lookup.
+    }
+
     try {
       let ip = targetIp;
       if (!ip || ip === 'localhost' || ip === '127.0.0.1') {
         const ipResponse = await fetch('https://api.ipify.org?format=json');
-        const ipData = await ipResponse.json();
-        ip = ipData.ip;
+        ip = (await ipResponse.json()).ip;
       }
 
-      try {
-        const geoResponse = await fetch(`https://ipapi.co/${ip}/json/`);
-        const geoData = await geoResponse.json();
-        return {
-          ip: ip || 'Unknown',
-          city: geoData.city || undefined,
-          region: geoData.region || undefined,
-          country: geoData.country_name || undefined,
-          countryCode: geoData.country_code || undefined,
-          org: geoData.org || undefined,
-        };
-      } catch {
-        return { ip: ip || 'Unknown' };
-      }
+      const geoResponse = await fetch(`https://ipapi.co/${encodeURIComponent(ip || '')}/json/`);
+      const geoData = await geoResponse.json();
+      if (geoData?.error) return { ip: ip || 'Unknown', source: null };
+
+      return {
+        ip: ip || 'Unknown',
+        city: geoData.city || null,
+        region: geoData.region || null,
+        country: geoData.country_name || null,
+        countryCode: geoData.country_code || null,
+        org: geoData.org || null,
+        asn: geoData.asn || null,
+        source: 'ipapi.co',
+      };
     } catch (e) {
-      return { ip: targetIp || 'Unavailable' };
+      return { ip: targetIp || 'Unavailable', source: null };
     }
   }
 

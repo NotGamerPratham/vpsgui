@@ -791,3 +791,36 @@ describe('agent: backups, deployments and image removal', () => {
     expect((await post('docker/images/action', { id: 'nginx:alpine', action: 'remove' })).status).toBe(200);
   });
 });
+
+describe('agent: IP geolocation proxy', () => {
+  it('requires a token', async () => {
+    expect((await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`)).status).toBe(401);
+  });
+
+  it('returns a stable shape and never fabricates a location', async () => {
+    // Network-dependent, so the values are not asserted — only that every field is present and
+    // that a field the provider did not supply is null rather than a plausible-looking guess.
+    const res = await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`, { headers: AUTH });
+    expect(res.status).toBe(200);
+
+    const info = await res.json();
+    for (const key of ['ip', 'city', 'region', 'country', 'countryCode', 'org', 'asn', 'source']) {
+      expect(info, `missing key: ${key}`).toHaveProperty(key);
+    }
+    for (const key of ['city', 'region', 'country', 'countryCode', 'org', 'asn']) {
+      expect(info[key] === null || typeof info[key] === 'string').toBe(true);
+    }
+    // No provider answered => nothing may be reported as if it had.
+    if (info.source === null) {
+      expect(info.city).toBeNull();
+      expect(info.country).toBeNull();
+    }
+  });
+
+  it('reports whether a token is configured without disclosing it', async () => {
+    const info = await (await fetch(`${BASE}/api/v1/agent/info`, { headers: AUTH })).json();
+    expect(typeof info.ipinfoConfigured).toBe('boolean');
+    // The token is an API credential; the info endpoint must never carry it.
+    expect(JSON.stringify(info)).not.toMatch(/token/i);
+  });
+});

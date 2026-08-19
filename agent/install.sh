@@ -108,6 +108,7 @@ AGENT_PORT_VALUE="${PORT:-$(read_env_value PORT)}"
 AGENT_HOST_VALUE="${AGENT_HOST:-$(read_env_value AGENT_HOST)}"
 AGENT_ROOTS_VALUE="${AGENT_FILE_ROOTS:-$(read_env_value AGENT_FILE_ROOTS)}"
 AGENT_SHELL_VALUE="${AGENT_ENABLE_SHELL:-$(read_env_value AGENT_ENABLE_SHELL)}"
+AGENT_IPINFO_VALUE="${AGENT_IPINFO_TOKEN:-$(read_env_value AGENT_IPINFO_TOKEN)}"
 
 # Defaults on a fresh install. AGENT_FILE_ROOTS defaults to the whole filesystem: this is a host
 # administration tool, and a narrow list makes ordinary paths fail with "outside the configured
@@ -116,6 +117,8 @@ AGENT_SHELL_VALUE="${AGENT_ENABLE_SHELL:-$(read_env_value AGENT_ENABLE_SHELL)}"
 : "${AGENT_HOST_VALUE:=127.0.0.1}"
 : "${AGENT_ROOTS_VALUE:=/}"
 : "${AGENT_SHELL_VALUE:=1}"
+# Empty by default. This is an API credential, so it is never committed to the repository.
+: "${AGENT_IPINFO_VALUE:=}"
 
 # Written before the supervisor starts, since both read their configuration from it.
 umask 077
@@ -134,6 +137,11 @@ AGENT_TOKEN=${AGENT_TOKEN}
 AGENT_FILE_ROOTS=${AGENT_ROOTS_VALUE}
 # Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
 AGENT_ENABLE_SHELL=${AGENT_SHELL_VALUE}
+# Optional ipinfo.io token for IP geolocation. It is held here rather than in the frontend because
+# every VITE_* value is inlined into the public client bundle at build time, where anyone could read
+# it. Set with: sudo AGENT_IPINFO_TOKEN=<token> ./run.sh
+# Without it the agent falls back to the keyless ipapi.co.
+AGENT_IPINFO_TOKEN=${AGENT_IPINFO_VALUE}
 EOF
 chmod 600 "${ENV_FILE}"
 umask 022

@@ -91,17 +91,24 @@ export function DiagnosticsPage() {
         );
       } else {
         const info = await diagnosticsService.getIpInfo(host);
+        // ipinfo's /lite tier is country-level, so city and region come back null from it. Say the
+        // provider does not report them rather than printing "unknown", which reads like a failure.
+        const notReported = info.source === 'ipinfo.io' ? 'not reported by ipinfo /lite' : 'unknown';
         setResults(
           [
             `Public IP geolocation for ${host}`,
             '',
-            `IP       : ${info.ip}`,
-            `City     : ${info.city ?? 'unknown'}`,
-            `Region   : ${info.region ?? 'unknown'}`,
-            `Country  : ${info.country ?? 'unknown'} ${info.countryCode ? `(${info.countryCode})` : ''}`,
-            `Operator : ${info.org ?? 'unknown'}`,
+            `IP        : ${info.ip}`,
+            `City      : ${info.city ?? notReported}`,
+            `Region    : ${info.region ?? notReported}`,
+            `Country   : ${info.country ?? 'unknown'} ${info.countryCode ? `(${info.countryCode})` : ''}`,
+            ...(info.continent ? [`Continent : ${info.continent}`] : []),
+            `Operator  : ${info.org ?? 'unknown'}`,
+            ...(info.asn ? [`ASN       : ${info.asn}`] : []),
             '',
-            'Source: ipapi.co',
+            info.source
+              ? `Source: ${info.source}`
+              : 'Source: none — no provider answered.',
           ].join('\n')
         );
       }

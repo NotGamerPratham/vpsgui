@@ -2089,6 +2089,87 @@ async function revealSecret(name) {
 }
 
 // ---------------------------------------------------------------------------
+// IP geolocation
+// ---------------------------------------------------------------------------
+
+// Optional ipinfo.io token. It lives here, server-side, rather than in the frontend: every VITE_*
+// value is inlined into the public client bundle at build time, so a token placed there would be
+// readable by anyone who loads the page.
+const IPINFO_TOKEN = (process.env.AGENT_IPINFO_TOKEN || '').trim();
+
+/** Fetch JSON with a timeout, returning null on any failure rather than throwing. */
+async function fetchJson(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Geolocate an IP address, proxied so the ipinfo.io token never reaches the browser.
+ *
+ * ipinfo's /lite endpoint is country-level only — it returns no city or region — so those fields
+ * come back null when it is the source, rather than being filled in from somewhere else and
+ * presented as if ipinfo had supplied them. Without a token the agent falls back to ipapi.co,
+ * which is keyless and does report a city.
+ */
+async function lookupIpInfo(targetIp) {
+  let ip = typeof targetIp === 'string' ? targetIp.trim() : '';
+
+  // Resolve the host's own public address when none was supplied. A private or loopback address is
+  // not externally routable, so geolocating it would describe the wrong machine.
+  if (!ip || ip === 'localhost' || /^127\./.test(ip) || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) {
+    const self = await fetchJson('https://api.ipify.org?format=json');
+    ip = self?.ip || '';
+  }
+  if (!ip) return { ip: null, city: null, region: null, country: null, countryCode: null, org: null, asn: null, source: null };
+
+  if (IPINFO_TOKEN) {
+    const data = await fetchJson(
+      `https://api.ipinfo.io/lite/${encodeURIComponent(ip)}?token=${encodeURIComponent(IPINFO_TOKEN)}`
+    );
+    if (data) {
+      return {
+        ip: data.ip || ip,
+        // Not provided by the lite endpoint — null rather than invented.
+        city: null,
+        region: null,
+        country: data.country || null,
+        countryCode: data.country_code || null,
+        continent: data.continent || null,
+        org: data.as_name || null,
+        asn: data.asn || null,
+        source: 'ipinfo.io',
+      };
+    }
+    // Fall through to the keyless provider if ipinfo failed (quota, network, bad token).
+  }
+
+  const geo = await fetchJson(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
+  if (!geo || geo.error) {
+    return { ip, city: null, region: null, country: null, countryCode: null, org: null, asn: null, source: null };
+  }
+  return {
+    ip,
+    city: geo.city || null,
+    region: geo.region || null,
+    country: geo.country_name || null,
+    countryCode: geo.country_code || null,
+    continent: null,
+    org: geo.org || null,
+    asn: geo.asn || null,
+    source: 'ipapi.co',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Node payload
 // ---------------------------------------------------------------------------
 
@@ -2344,6 +2425,10 @@ async function handleRequest(req, res)
     sendJson(res, 200, await getStoragePartitions());
     return;
   }
+  if (method === 'GET' && pathname === '/api/v1/network/ip-info') {
+    sendJson(res, 200, await lookupIpInfo(reqUrl.searchParams.get('ip') || ''));
+    return;
+  }
   if (method === 'GET' && pathname === '/api/v1/network/interfaces') {
     sendJson(res, 200, getNetworkInterfaces());
     return;
@@ -2401,6 +2486,8 @@ async function handleRequest(req, res)
       platform: os.platform(),
       // Lets the UI explain an empty page instead of implying the host simply has none.
       unimplementedFeatures: UNIMPLEMENTED_FEATURES,
+      // Whether a token is set — never the token itself.
+      ipinfoConfigured: Boolean(IPINFO_TOKEN),
     });
     return;
   }
