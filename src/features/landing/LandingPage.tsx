@@ -274,7 +274,7 @@ export function LandingPage() {
                   onClick={() => setActiveSdkTab('node')}
                   className="text-xs font-mono"
                 >
-                  @vpsgui/sdk (Node.js / npm)
+                  vpsgui-sdk (Node.js / npm)
                 </Button>
                 <Button
                   size="sm"
@@ -289,17 +289,17 @@ export function LandingPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => copySdkCmd(activeSdkTab === 'node' ? 'npm install @vpsgui/sdk' : 'pip install vpsgui')}
+                onClick={() => copySdkCmd(activeSdkTab === 'node' ? 'npm install vpsgui-sdk' : 'pip install vpsgui')}
                 className="h-8 text-xs font-mono gap-1.5"
               >
                 {copiedSdk ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copiedSdk ? 'Copied' : activeSdkTab === 'node' ? 'npm install @vpsgui/sdk' : 'pip install vpsgui'}</span>
+                <span>{copiedSdk ? 'Copied' : activeSdkTab === 'node' ? 'npm install vpsgui-sdk' : 'pip install vpsgui'}</span>
               </Button>
             </div>
 
             {activeSdkTab === 'node' ? (
               <div className="rounded-xl border border-border bg-slate-950 p-4 font-mono text-xs text-emerald-400 whitespace-pre-wrap leading-relaxed">
-{`import { VpsguiClient } from '@vpsgui/sdk';
+{`import { VpsguiClient } from 'vpsgui-sdk';
 
 const client = new VpsguiClient({
   baseUrl: 'https://your-vps-ip/api/v1',

@@ -57,3 +57,9 @@ agent/.agent-token
 # Encrypted secret store and its key (agent-local, never committed).
 agent/.secrets.json
 agent/.secrets-key
+
+# SDK build artifacts
+sdk/node/dist
+sdk/python/dist
+sdk/python/build
+sdk/python/*.egg-info

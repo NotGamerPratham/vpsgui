@@ -13,7 +13,7 @@ npm run build
 
 # 2. Build Node.js SDK
 if [ -d "sdk/node" ]; then
-  echo "[VPSGUI Build] Building Node.js SDK (@vpsgui/sdk)..."
+  echo "[VPSGUI Build] Building Node.js SDK (vpsgui-sdk)..."
   (cd sdk/node && npm run build)
 fi
 

@@ -8,7 +8,7 @@ VPSGUI provides official SDK packages for programmatic interaction with the VPSG
 
 | Package | Language | Location | Registry Target |
 |---------|----------|----------|-----------------|
-| `@vpsgui/sdk` | TypeScript / Node.js | `sdk/node` | npm |
+| `vpsgui-sdk` | TypeScript / Node.js | `sdk/node` | npm |
 | `vpsgui` | Python 3.8+ | `sdk/python` | PyPI |
 
 ---

@@ -1,4 +1,4 @@
-# @vpsgui/sdk
+# vpsgui-sdk
 
 Official Node.js / TypeScript SDK for the [VPSGUI](https://github.com/NotGamerPratham/vpsgui) agent
 REST API.
@@ -6,7 +6,7 @@ REST API.
 ## Install
 
 ```bash
-npm install @vpsgui/sdk
+npm install vpsgui-sdk
 ```
 
 Requires Node.js 18+ (uses the built-in `fetch`).
@@ -21,7 +21,7 @@ the environment, never commit it, and only talk to the agent over HTTPS — it t
 ## Usage
 
 ```ts
-import { VpsguiClient } from '@vpsgui/sdk';
+import { VpsguiClient } from 'vpsgui-sdk';
 
 const client = new VpsguiClient({
   baseUrl: 'https://vps.example.com/api/v1',
@@ -60,7 +60,7 @@ for (const c of await client.docker.listContainers()) {
 ## Errors
 
 ```ts
-import { VpsguiClient, VpsguiError } from '@vpsgui/sdk';
+import { VpsguiClient, VpsguiError } from 'vpsgui-sdk';
 
 try {
   await client.system.telemetry();

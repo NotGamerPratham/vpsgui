@@ -7,7 +7,8 @@ name = "vpsgui"
 version = "1.1.0"
 description = "Official Python SDK for the VPSGUI REST API - manage VPS nodes, Docker containers, telemetry, files, security, and more."
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "NotGamerPratham", email = "contact@notgamerpratham.com"},
 ]
@@ -19,7 +20,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",

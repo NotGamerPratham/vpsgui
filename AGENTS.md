@@ -23,7 +23,7 @@ This document defines mandatory directives and project guidelines for AI coding 
 - **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Lucide Icons, Recharts, Zustand, TanStack Query.
 - **REST Client**: `src/api/client.ts` targeting `/api/v1`.
 - **WebSocket Manager**: `src/websocket/socket.ts` listening on `/ws`.
-- **SDKs**: `@vpsgui/sdk` (Node/npm) and `vpsgui` (Python/PyPI) in `sdk/`.
+- **SDKs**: `vpsgui-sdk` (Node/npm) and `vpsgui` (Python/PyPI) in `sdk/`.
 
 ## Verification Requirement
 

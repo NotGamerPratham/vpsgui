@@ -50,7 +50,7 @@ Architected by **NotGamerPratham** ([notgamerpratham.com](https://notgamerpratha
 - Reads real `/proc/stat`, `/proc/meminfo`, `/sys/class/net`, and system metrics.
 
 ### 3. Client SDKs (`sdk/`)
-- **Node.js / TypeScript SDK**: Published as `@vpsgui/sdk` for npm.
+- **Node.js / TypeScript SDK**: Published as `vpsgui-sdk` on npm.
 - **Python SDK**: Published as `vpsgui` for PyPI.
 
 ---

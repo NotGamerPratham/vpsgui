@@ -96,7 +96,7 @@ VPSGUI/
 │   ├── types/           # Domain TypeScript Interfaces
 │   └── config/          # Shared ESLint, Tailwind & TS Configuration
 ├── sdk/
-│   ├── node/            # @vpsgui/sdk - Official Node.js/TypeScript SDK (npm)
+│   ├── node/            # vpsgui-sdk - Official Node.js/TypeScript SDK (npm)
 │   └── python/          # vpsgui - Official Python SDK (PyPI)
 ├── backend/
 │   ├── api/             # REST API Gateway & Authentication
@@ -133,18 +133,18 @@ VPSGUI/
 
 VPSGUI provides official SDK client libraries for programmatic API access.
 
-### Node.js / TypeScript (`@vpsgui/sdk`)
+### Node.js / TypeScript (`vpsgui-sdk`)
 
 ```bash
-npm install @vpsgui/sdk
+npm install vpsgui-sdk
 ```
 
 ```typescript
-import { VpsguiClient } from '@vpsgui/sdk';
+import { VpsguiClient } from 'vpsgui-sdk';
 
 const client = new VpsguiClient({
   baseUrl: 'https://your-vps-ip/api/v1',
-  token: 'your-jwt-token',
+  token: process.env.VPSGUI_AGENT_TOKEN,
 });
 
 const nodes = await client.nodes.list();
@@ -161,11 +161,12 @@ pip install vpsgui
 ```
 
 ```python
+import os
 from vpsgui import VpsguiClient
 
 client = VpsguiClient(
     base_url="https://your-vps-ip/api/v1",
-    token="your-jwt-token",
+    token=os.environ["VPSGUI_AGENT_TOKEN"],
 )
 
 nodes = client.nodes.list()
