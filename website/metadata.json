@@ -1,0 +1,42 @@
+{
+  "name": "VPSGUI",
+  "tagline": "Open Infrastructure Workspace",
+  "description": "Open-source, self-hosted control plane for Linux servers and Docker. Real telemetry, a real host shell, and zero mock data.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": {
+    "name": "NotGamerPratham",
+    "url": "https://notgamerpratham.com"
+  },
+  "repository": "https://github.com/NotGamerPratham/vpsgui",
+  "issues": "https://github.com/NotGamerPratham/vpsgui/issues",
+  "packages": {
+    "node": {
+      "name": "vpsgui-sdk",
+      "registry": "https://www.npmjs.com/package/vpsgui-sdk",
+      "install": "npm install vpsgui-sdk"
+    },
+    "python": {
+      "name": "vpsgui",
+      "registry": "https://pypi.org/project/vpsgui/",
+      "install": "pip install vpsgui"
+    }
+  },
+  "requirements": {
+    "node": ">=18",
+    "python": ">=3.8",
+    "platforms": ["Ubuntu", "Debian", "CentOS", "Alpine", "Arch"]
+  },
+  "keywords": [
+    "vps",
+    "server-management",
+    "docker",
+    "linux",
+    "self-hosted",
+    "devops",
+    "control-panel",
+    "open-source",
+    "telemetry",
+    "sysadmin"
+  ]
+}

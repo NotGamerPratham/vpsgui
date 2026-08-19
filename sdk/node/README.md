@@ -11,7 +11,7 @@ npm install vpsgui-sdk
 
 Requires Node.js 18+ (uses the built-in `fetch`).
 
-## ⚠️ The agent token is a root password
+## The agent token is a root password
 
 Every endpoint except `health()` requires the agent token, and that token grants **root-equivalent
 control of the host**: shell execution, package installs, and filesystem read/write. Read it from

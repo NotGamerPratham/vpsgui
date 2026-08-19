@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>VPSGUI — Open Infrastructure Workspace for Linux VPS &amp; Docker</title>
+    <meta
+      name="description"
+      content="VPSGUI is an open-source, self-hosted control plane for Linux servers and Docker. Real telemetry from /proc, a host terminal, file manager, firewall, secrets and backups — no mock data, MIT licensed."
+    />
+    <meta name="author" content="NotGamerPratham" />
+    <meta name="theme-color" content="#151517" />
+    <link rel="canonical" href="https://vpsgui.dev/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VPSGUI" />
+    <meta property="og:title" content="VPSGUI — Open Infrastructure Workspace" />
+    <meta
+      property="og:description"
+      content="Self-hosted control plane for Linux servers and Docker. Real telemetry, real shell, zero mock data. MIT licensed."
+    />
+    <meta property="og:url" content="https://vpsgui.dev/" />
+    <meta property="og:image" content="/og.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VPSGUI — Open Infrastructure Workspace" />
+    <meta
+      name="twitter:description"
+      content="Self-hosted control plane for Linux servers and Docker. Real telemetry, real shell, zero mock data. MIT licensed."
+    />
+    <meta name="twitter:image" content="/og.svg" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400..500&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+
+    <!--
+      Paint the page background before the bundle parses. Without this the
+      browser flashes white for a frame on a dark-themed site, which reads as
+      a broken load. Mirrors the persisted choice in src/hooks/use-theme.ts.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('vpsgui-site-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = stored ? stored === 'dark' : true;
+          if (stored === 'system') dark = prefersDark;
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.backgroundColor = dark ? '#151517' : '#ffffff';
+        } catch (e) {
+          /* Private-mode localStorage throws. The class on <html> already
+             defaults to dark, so failing here is harmless. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif; color: #e2e8f0">
+        <h1>VPSGUI</h1>
+        <p>
+          An open-source, self-hosted control plane for Linux servers and Docker.
+          This page needs JavaScript, but the project does not —
+          <a href="https://github.com/NotGamerPratham/vpsgui" style="color: #10b981">
+            read the source and the docs on GitHub</a
+          >.
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

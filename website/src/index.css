@@ -1,0 +1,246 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens
+
+   Near-monochrome on purpose. Chroma is held around 0.004 so the greys read as
+   paper and ink rather than "dark blue SaaS", and exactly one hue carries the
+   accent. Colour is information here, not decoration: green means the thing
+   works, amber means you have to do something, red means it will hurt you.
+--------------------------------------------------------------------------- */
+
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.994 0.001 286);
+  --foreground: oklch(0.17 0.004 286);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.004 286);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.004 286);
+
+  --muted: oklch(0.966 0.002 286);
+  --muted-foreground: oklch(0.475 0.008 286);
+  /* Carries the 12px mono eyebrows, so it has to clear 4.5:1 like body text
+     rather than sitting at the ~3:1 a decorative grey would get away with. */
+  --subtle: oklch(0.53 0.008 286);
+
+  --accent: oklch(0.955 0.002 286);
+  --accent-foreground: oklch(0.17 0.004 286);
+
+  --secondary: oklch(0.966 0.002 286);
+  --secondary-foreground: oklch(0.17 0.004 286);
+
+  --border: oklch(0.906 0.004 286);
+  --input: oklch(0.88 0.004 286);
+
+  /* Darker than the dark-mode green: the same hue at dark-mode lightness only
+     reaches ~3:1 on white, well under the 4.5:1 body-text floor. */
+  --primary: oklch(0.5 0.13 152);
+  --primary-foreground: oklch(0.99 0.01 152);
+  --ring: oklch(0.5 0.13 152);
+
+  --destructive: oklch(0.52 0.2 25);
+  --warning: oklch(0.55 0.13 70);
+
+  /* Terminal chrome is the same in both themes. A light-mode terminal would
+     misrepresent what the reader sees when they actually run the command. */
+  --terminal: oklch(0.16 0.004 286);
+  --terminal-fg: oklch(0.9 0.003 286);
+  --terminal-dim: oklch(0.56 0.006 286);
+  --terminal-accent: oklch(0.78 0.16 152);
+  --terminal-border: oklch(0.26 0.005 286);
+}
+
+.dark {
+  --background: oklch(0.145 0.004 286);
+  --foreground: oklch(0.968 0.001 286);
+  --card: oklch(0.176 0.004 286);
+  --card-foreground: oklch(0.968 0.001 286);
+  --popover: oklch(0.176 0.004 286);
+  --popover-foreground: oklch(0.968 0.001 286);
+
+  --muted: oklch(0.205 0.004 286);
+  --muted-foreground: oklch(0.645 0.008 286);
+  --subtle: oklch(0.585 0.008 286);
+
+  --accent: oklch(0.225 0.004 286);
+  --accent-foreground: oklch(0.968 0.001 286);
+
+  --secondary: oklch(0.225 0.004 286);
+  --secondary-foreground: oklch(0.968 0.001 286);
+
+  --border: oklch(0.256 0.005 286);
+  --input: oklch(0.29 0.005 286);
+
+  --primary: oklch(0.78 0.16 152);
+  --primary-foreground: oklch(0.19 0.05 152);
+  --ring: oklch(0.78 0.16 152);
+
+  --destructive: oklch(0.66 0.2 25);
+  --warning: oklch(0.79 0.14 78);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-terminal: var(--terminal);
+  --color-terminal-fg: var(--terminal-fg);
+  --color-terminal-dim: var(--terminal-dim);
+  --color-terminal-accent: var(--terminal-accent);
+  --color-terminal-border: var(--terminal-border);
+
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Geist, not Inter. Inter is the default everywhere, which is exactly why a
+     page set in it reads as generic. Instrument Serif appears only as the
+     italic emphasis inside headlines. */
+  --font-sans: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: Geist Mono, ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: Instrument Serif, ui-serif, Georgia, serif;
+
+  --animate-accordion-down: accordion-down 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-accordion-up: accordion-up 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-caret: caret 1.05s steps(1) infinite;
+  --animate-menu-in: menu-in 0.18s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+  @keyframes caret {
+    0%, 50%   { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Large type is set at medium weight with tight tracking. Heavy weights at
+     display sizes are the single loudest tell of a template. */
+  h1, h2, h3, h4 {
+    font-weight: 500;
+    letter-spacing: -0.022em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* The emphasis device for headlines: one word set in serif italic. It does
+     the job a gradient was doing, without announcing itself as a template. */
+  .accent-word {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  /* Mono label above a section, and the hairline that carries it. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--subtle);
+  }
+
+  .hairline {
+    border-top: 1px solid var(--border);
+  }
+
+  /* A single, very quiet grid. No colour, no blur, no drifting blobs. */
+  .bg-hairgrid {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+    mask-image: linear-gradient(to bottom, black, transparent);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
