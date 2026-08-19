@@ -54,11 +54,7 @@ const THREATS: Array<{ scenario: string; outcome: string; mitigation: string }> 
 ];
 
 export default function SecurityPage() {
-  usePageMeta({
-    title: 'Security model — VPSGUI',
-    description:
-      'What the VPSGUI agent protects, what it cannot, and how to harden a deployment. The agent token is root-equivalent.',
-  });
+  usePageMeta('/security');
 
   return (
     <>
@@ -92,7 +88,10 @@ export default function SecurityPage() {
       <section className="px-5 pb-20 sm:px-8">
         <div className="mx-auto w-full max-w-5xl space-y-16">
           <Reveal>
-            <div className="max-w-3xl border-l-2 border-destructive py-1 pl-5">
+            <div className="clay-inset max-w-3xl rounded-2xl border-l-4 border-foreground p-7">
+              <p className="mb-3 inline-block rounded-md bg-foreground px-2 py-0.5 font-mono text-[0.6875rem] tracking-wide text-background uppercase">
+                Warning
+              </p>
               <h2 className="text-[1.0625rem]">The agent token is equivalent to a root password</h2>
               <p className="mt-2.5 text-[0.9375rem] leading-relaxed text-muted-foreground text-pretty">
                 Anyone who can reach the agent while holding that token owns the machine. Store it
@@ -107,7 +106,7 @@ export default function SecurityPage() {
             <p className="mt-2 max-w-2xl text-[0.875rem] leading-relaxed text-muted-foreground">
               These hold without any configuration on your part.
             </p>
-            <SecurityGrid points={securityGuards} className="mt-8" />
+            <SecurityGrid points={securityGuards} columns={3} className="mt-8" />
           </div>
 
           <div>
@@ -126,31 +125,31 @@ export default function SecurityPage() {
             </p>
 
             <Reveal className="mt-8">
-              <div className="overflow-x-auto">
+              <div className="clay overflow-x-auto rounded-2xl p-2">
                 <table className="w-full min-w-3xl border-collapse text-left text-[0.875rem]">
                   <thead>
                     <tr className="border-b border-border">
-                      <th scope="col" className="eyebrow py-3 pr-6 text-left">
+                      <th scope="col" className="eyebrow px-5 py-4 text-left">
                         Scenario
                       </th>
-                      <th scope="col" className="eyebrow py-3 pr-6 text-left">
+                      <th scope="col" className="eyebrow px-5 py-4 text-left">
                         Impact
                       </th>
-                      <th scope="col" className="eyebrow py-3 text-left">
+                      <th scope="col" className="eyebrow px-5 py-4 text-left">
                         What stands in the way
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border/60">
                     {THREATS.map((row) => (
                       <tr key={row.scenario} className="align-top">
-                        <th scope="row" className="py-4 pr-6 text-left font-medium text-pretty">
+                        <th scope="row" className="px-5 py-4 text-left font-medium text-pretty">
                           {row.scenario}
                         </th>
-                        <td className="py-4 pr-6 text-muted-foreground text-pretty">
+                        <td className="px-5 py-4 text-muted-foreground text-pretty">
                           {row.outcome}
                         </td>
-                        <td className="py-4 text-muted-foreground text-pretty">{row.mitigation}</td>
+                        <td className="px-5 py-4 text-muted-foreground text-pretty">{row.mitigation}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -171,7 +170,7 @@ export default function SecurityPage() {
           </div>
 
           <Reveal>
-            <div className="hairline max-w-3xl pt-8">
+            <div className="clay max-w-3xl rounded-2xl p-7">
               <h2 className="text-[1.0625rem]">Reporting a vulnerability</h2>
               <p className="mt-2.5 text-[0.9375rem] leading-relaxed text-muted-foreground text-pretty">
                 Please do not open a public issue for a security bug in the agent. Contact the
@@ -180,7 +179,7 @@ export default function SecurityPage() {
                   href={site.author.url}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="text-foreground underline underline-offset-4 hover:text-primary"
+                  className="text-foreground underline underline-offset-4 transition-opacity hover:opacity-65"
                 >
                   notgamerpratham.com
                 </a>{' '}

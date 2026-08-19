@@ -6,7 +6,8 @@
   "description": "Marketing and documentation site for VPSGUI — the open infrastructure workspace.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
+    "build:client": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },

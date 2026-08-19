@@ -6,14 +6,10 @@ import { Limits } from '@/components/sections/limits';
 import { Quickstart } from '@/components/sections/quickstart';
 import { SdkShowcase } from '@/components/sections/sdk-showcase';
 import { SecurityPreview } from '@/components/sections/security-preview';
-import { site } from '@/data/site';
 import { usePageMeta } from '@/hooks/use-page-meta';
 
 export default function HomePage() {
-  usePageMeta({
-    title: 'VPSGUI — run your Linux servers from a browser tab',
-    description: site.description,
-  });
+  usePageMeta('/');
 
   return (
     <>

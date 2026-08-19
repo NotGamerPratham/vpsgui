@@ -2,11 +2,6 @@ import { Reveal } from '@/components/reveal';
 import { Section, SectionHeading } from '@/components/section';
 import { features } from '@/data/features';
 
-/**
- * A two-column definition list, not a card grid. Nine identical bordered cards
- * each with its own colour is the most recognisable shape a generated landing
- * page takes; hairlines and typography carry this instead.
- */
 export function Features() {
   return (
     <Section id="features">
@@ -22,22 +17,23 @@ export function Features() {
         lede="Every panel is one call to the agent running on your host. When the agent cannot determine a value it returns null and the UI shows nothing, because a confident wrong number about a production machine is worse than a blank."
       />
 
-      <div className="mt-14 grid gap-x-12 sm:grid-cols-2">
+      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {features.map((feature, i) => {
           const Icon = feature.icon;
 
           return (
-            <Reveal key={feature.id} delay={(i % 2) * 0.05}>
-              <div className="hairline py-6">
-                <div className="flex items-center gap-2.5">
-                  <Icon aria-hidden className="size-4 text-subtle" />
-                  <h3 className="text-[0.9375rem]">{feature.title}</h3>
-                </div>
+            <Reveal key={feature.id} delay={(i % 3) * 0.05}>
+              <article className="clay clay-press h-full rounded-2xl p-6">
+                <span className="clay-inset mb-4 flex size-11 items-center justify-center rounded-full text-primary">
+                  <Icon aria-hidden className="size-5" />
+                </span>
+
+                <h3 className="text-[0.9375rem]">{feature.title}</h3>
 
                 <p className="mt-2.5 text-[0.875rem] leading-relaxed text-muted-foreground text-pretty">
                   {feature.description}
                 </p>
-              </div>
+              </article>
             </Reveal>
           );
         })}

@@ -8,6 +8,13 @@
       "port": 3001
     },
     {
+      "name": "website-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--prefix", "website"],
+      "port": 4173,
+      "autoPort": true
+    },
+    {
       "name": "website",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "website"],

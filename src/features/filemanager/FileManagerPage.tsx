@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FolderTree, FileText, Folder, Link2, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2 } from 'lucide-react';
+import { FolderTree, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { fileService } from '../../services/fileService';
 import { FileItem } from '../../types/file';
+import { iconForFile } from '../../lib/fileIcons';
+import { describeSystemRisk, SystemRisk } from '../../lib/systemPaths';
+import { SystemFileConfirm } from './SystemFileConfirm';
 
 /** Walk one level up, handling both POSIX and Windows separators. */
 function parentPath(currentPath: string): string {
@@ -38,12 +41,21 @@ export function FileManagerPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Reported by the agent on the resolved path, so a symlink into /usr counts. */
+  const [selectedIsSystem, setSelectedIsSystem] = useState(false);
+  /** Set while the system-file confirmation is open; cleared either way. */
+  const [pendingRisk, setPendingRisk] = useState<SystemRisk | null>(null);
+  /** The agent's configured roots, learned from a confinement refusal. */
+  const [agentRoots, setAgentRoots] = useState<string[] | null>(null);
 
   const loadDirectory = useCallback(async (targetPath: string) => {
     setListLoading(true);
-    const { items, error } = await fileService.fetchFiles(targetPath);
+    const { items, error, roots } = await fileService.fetchFiles(targetPath);
     setFiles(items);
     setListError(error);
+    // Only overwrite on a refusal; a successful listing carries no roots and
+    // would otherwise wipe the hint we are about to show.
+    if (roots) setAgentRoots(roots);
     setListLoading(false);
     // Do not auto-open a file: opening now costs a separate read request, and silently loading an
     // arbitrary file into a save-capable editor invites accidental overwrites.
@@ -52,6 +64,7 @@ export function FileManagerPage() {
     setIsDirty(false);
     setIsTruncated(false);
     setFileError(null);
+    setSelectedIsSystem(false);
   }, []);
 
   useEffect(() => {
@@ -74,9 +87,16 @@ export function FileManagerPage() {
       const result = await fileService.readFile(file.path);
       setFileContent(result.content);
       setIsTruncated(result.truncated);
+      setSelectedIsSystem(result.system === true);
+      // The agent resolves symlinks before answering, so prefer the path it
+      // reports over the one we asked for — /etc/os-release is really in /usr.
+      if (result.path && result.path !== file.path) {
+        setSelectedFile({ ...file, path: result.path });
+      }
     } catch (e) {
       setFileContent('');
       setIsTruncated(false);
+      setSelectedIsSystem(false);
       setFileError(e instanceof Error ? e.message : 'Failed to read file');
     } finally {
       setFileLoading(false);
@@ -141,9 +161,27 @@ export function FileManagerPage() {
 
   const canSave = Boolean(selectedFile) && !fileLoading && !isTruncated && !fileError && saveState !== 'saving';
 
-  const handleSave = async () => {
+  /** The risk of writing to whatever is currently open, or null if it is ordinary. */
+  const currentRisk = selectedFile ? describeSystemRisk(selectedFile.path, selectedIsSystem) : null;
+
+  /**
+   * Entry point for the Save button. A system path opens the confirmation
+   * first; everything else writes straight through, because putting a dialog in
+   * front of every save is how people learn to dismiss dialogs without reading.
+   */
+  const handleSave = () => {
+    if (!selectedFile || !canSave) return;
+    if (currentRisk) {
+      setPendingRisk(currentRisk);
+      return;
+    }
+    void performSave();
+  };
+
+  const performSave = async () => {
     // Refuse to write back a partially loaded file — that would truncate it on disk.
     if (!selectedFile || !canSave) return;
+    setPendingRisk(null);
     setSaveState('saving');
     setSaveError(null);
     const result = await fileService.writeFile(selectedFile.path, fileContent);
@@ -219,9 +257,51 @@ export function FileManagerPage() {
       </div>
 
       {(listError || saveError || fileError || actionError) && (
-        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-          <span className="break-words">{listError || fileError || saveError || actionError}</span>
+        <div className="space-y-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span className="break-words">{listError || fileError || saveError || actionError}</span>
+          </div>
+
+          {/* A confinement refusal is unfixable from the UI, so say what the
+              limit actually is and where to change it rather than leaving the
+              operator to guess which paths are allowed. */}
+          {agentRoots && (
+            <div className="border-t border-rose-500/20 pt-2 text-rose-300/90">
+              <p>
+                The agent is configured to allow only:{' '}
+                <span className="font-mono text-rose-200">{agentRoots.join(', ')}</span>
+              </p>
+              <p className="mt-1 text-rose-300/70">
+                For full disk access set{' '}
+                <span className="font-mono">AGENT_FILE_ROOTS=/</span> in{' '}
+                <span className="font-mono">/opt/vpsgui/agent/agent.env</span> and restart the agent
+                (<span className="font-mono">pm2 restart vpsgui-agent</span>). The installer keeps
+                existing values on upgrade, so a host set up before the default changed still has
+                the old list.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {currentRisk && (
+        <div
+          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
+            currentRisk.severity === 'critical'
+              ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+          }`}
+        >
+          {currentRisk.severity === 'critical' ? (
+            <ShieldAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          ) : (
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          )}
+          <span>
+            <strong className="font-semibold">{currentRisk.label}.</strong> {currentRisk.consequence}{' '}
+            Saving asks for confirmation.
+          </span>
         </div>
       )}
 
@@ -262,24 +342,35 @@ export function FileManagerPage() {
             ) : (
               files.map((item) => {
                 const isSelected = selectedFile?.path === item.path;
+                const itemIcon = iconForFile(item);
+                const ItemIcon = itemIcon.Icon;
                 return (
                   <div key={item.path} className="group flex items-center gap-1">
                   <button
                     onClick={() => handleSelectFile(item)}
                     disabled={item.readable === false}
-                    title={item.readable === false ? 'Blocked by the agent (credential file)' : item.path}
+                    title={
+                      item.readable === false
+                        ? 'Blocked by the agent (credential file)'
+                        : `${itemIcon.label} — ${item.path}${item.system ? ' (system path)' : ''}`
+                    }
                     className={`flex flex-1 min-w-0 items-center space-x-2 rounded px-2 py-1 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       isSelected ? 'bg-primary/20 text-primary font-bold' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                   >
-                    {item.type === 'directory' ? (
-                      <Folder className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                    ) : item.type === 'symlink' ? (
-                      <Link2 className="h-3.5 w-3.5 text-violet-400 shrink-0" />
-                    ) : (
-                      <FileText className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                    )}
+                    <ItemIcon
+                      aria-hidden
+                      className={`h-3.5 w-3.5 shrink-0 ${itemIcon.className}`}
+                    />
                     <span className="truncate">{item.name}</span>
+                    {/* Marks distribution-owned paths in the tree, so the warning
+                        is not the first time you hear about it. */}
+                    {item.system && (
+                      <ShieldAlert
+                        aria-label="System path"
+                        className="h-3 w-3 shrink-0 text-amber-400/70"
+                      />
+                    )}
                   </button>
 
                   {/* Revealed on hover so the tree stays readable; both call real agent endpoints. */}
@@ -338,6 +429,15 @@ export function FileManagerPage() {
           />
         </Card>
       </div>
+
+      {pendingRisk && selectedFile && (
+        <SystemFileConfirm
+          path={selectedFile.path}
+          risk={pendingRisk}
+          onCancel={() => setPendingRisk(null)}
+          onConfirm={() => void performSave()}
+        />
+      )}
     </div>
   );
 }

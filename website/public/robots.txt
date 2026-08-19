@@ -1,0 +1,8 @@
+# https://vpsgui.dev
+User-agent: *
+Allow: /
+
+# Nothing here is private, but these are build output, not content.
+Disallow: /assets/
+
+Sitemap: https://vpsgui.dev/sitemap.xml

@@ -17,11 +17,19 @@ export interface FileReadResult {
   sizeBytes: number;
   /** False for truncated files: saving would overwrite the original with a partial copy. */
   editable: boolean;
+  /** True when the resolved path is inside a system-owned tree. */
+  system?: boolean;
 }
 
 export interface FileListResult {
   items: FileItem[];
   error: string | null;
+  /**
+   * The agent's configured file roots, present when a request was refused for
+   * being outside them. Lets the UI name the actual limit instead of leaving
+   * the operator to guess why "/" is forbidden.
+   */
+  roots?: string[] | null;
 }
 
 class FileService {
@@ -34,7 +42,7 @@ class FileService {
       const items = await apiClient.get<FileItem[]>(`/files?path=${encodeURIComponent(path)}`);
       return { items: Array.isArray(items) ? items : [], error: null };
     } catch (e) {
-      return { items: [], error: describeError(e) };
+      return { items: [], error: describeError(e), roots: rootsFromError(e) };
     }
   }
 
@@ -89,6 +97,13 @@ class FileService {
       return { success: false, error: describeError(e) };
     }
   }
+}
+
+/** Pull the agent's configured roots out of a confinement error, if it sent them. */
+export function rootsFromError(e: unknown): string[] | null {
+  if (!(e instanceof ApiError)) return null;
+  const roots = e.details?.roots;
+  return Array.isArray(roots) ? roots.map(String) : null;
 }
 
 function describeError(e: unknown): string {

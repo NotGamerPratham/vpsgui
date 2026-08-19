@@ -15,6 +15,11 @@ export interface FileItem {
   modifiedAt: string | null;
   /** False when the agent blocks this path (credential files). */
   readable?: boolean;
+  /**
+   * True when the agent resolved this path inside a distribution-owned tree
+   * (/etc, /usr, /boot, ...). Editing is still allowed; the UI warns first.
+   */
+  system?: boolean;
 }
 
 export interface FileEditorTab {

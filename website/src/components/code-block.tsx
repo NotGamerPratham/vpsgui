@@ -21,11 +21,11 @@ export function CodeBlock({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-lg border border-terminal-border bg-terminal',
+        'overflow-hidden rounded-3xl bg-terminal shadow-[0_18px_38px_-14px_var(--clay-drop-lg)]',
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-terminal-border/70 px-4 py-2">
+      <div className="flex items-center justify-between gap-3 border-b border-terminal-border px-5 py-3">
         <span className="font-mono text-xs text-terminal-dim">{filename ?? language}</span>
 
         {showCopy ? (
@@ -35,7 +35,7 @@ export function CodeBlock({
 
       {/* Wide snippets scroll inside this box rather than widening the page. */}
       <div className="overflow-x-auto">
-        <pre className="min-w-full p-4 font-mono text-[0.8125rem] leading-relaxed text-terminal-fg">
+        <pre className="min-w-full p-5 font-mono text-[0.8125rem] leading-relaxed text-terminal-fg">
           <code>{highlight(code, language)}</code>
         </pre>
       </div>

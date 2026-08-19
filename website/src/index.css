@@ -3,84 +3,126 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Design tokens
+   Design tokens — claymorphism
 
-   Near-monochrome on purpose. Chroma is held around 0.004 so the greys read as
-   paper and ink rather than "dark blue SaaS", and exactly one hue carries the
-   accent. Colour is information here, not decoration: green means the thing
-   works, amber means you have to do something, red means it will hurt you.
+   Clay reads as a soft solid catching light from the top-left. That means every
+   raised surface carries three shadows at once, not one: a wide drop beneath it,
+   an inset highlight along the top-left edge, and an inset shade along the
+   bottom-right. Drop only one and the surface goes flat.
+
+   Black and white only: every token sits at chroma 0. That removes colour as a
+   signalling channel, so severity is carried by explicit labels, border weight
+   and inverted fills instead — which is what WCAG 1.4.1 asks for anyway.
 --------------------------------------------------------------------------- */
 
 :root {
-  --radius: 0.5rem;
+  --radius: 1.5rem;
 
-  --background: oklch(0.994 0.001 286);
-  --foreground: oklch(0.17 0.004 286);
+  --background: oklch(0.962 0 0);
+  --foreground: oklch(0.15 0 0);
+
+  /* Surfaces sit *above* the background, so card is lighter than the page —
+     pure white on light grey is what lets a clay panel read as raised. */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.17 0.004 286);
+  --card-foreground: oklch(0.15 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.004 286);
+  --popover-foreground: oklch(0.15 0 0);
 
-  --muted: oklch(0.966 0.002 286);
-  --muted-foreground: oklch(0.475 0.008 286);
-  /* Carries the 12px mono eyebrows, so it has to clear 4.5:1 like body text
-     rather than sitting at the ~3:1 a decorative grey would get away with. */
-  --subtle: oklch(0.53 0.008 286);
+  --muted: oklch(0.93 0 0);
+  --muted-foreground: oklch(0.44 0 0);
+  --subtle: oklch(0.52 0 0);
 
-  --accent: oklch(0.955 0.002 286);
-  --accent-foreground: oklch(0.17 0.004 286);
+  --accent: oklch(0.925 0 0);
+  --accent-foreground: oklch(0.15 0 0);
 
-  --secondary: oklch(0.966 0.002 286);
-  --secondary-foreground: oklch(0.17 0.004 286);
+  --secondary: oklch(0.93 0 0);
+  --secondary-foreground: oklch(0.15 0 0);
 
-  --border: oklch(0.906 0.004 286);
-  --input: oklch(0.88 0.004 286);
+  --border: oklch(0.875 0 0);
+  --input: oklch(0.9 0 0);
 
-  /* Darker than the dark-mode green: the same hue at dark-mode lightness only
-     reaches ~3:1 on white, well under the 4.5:1 body-text floor. */
-  --primary: oklch(0.5 0.13 152);
-  --primary-foreground: oklch(0.99 0.01 152);
-  --ring: oklch(0.5 0.13 152);
+  /* Ink. Buttons are black with white type. */
+  --primary: oklch(0.18 0 0);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.35 0 0);
 
-  --destructive: oklch(0.52 0.2 25);
-  --warning: oklch(0.55 0.13 70);
+  /* Severity is carried by labels, border weight and inverted fills, not hue.
+     These stay as tokens so emphasis is adjustable, but they are greys. */
+  --destructive: oklch(0.15 0 0);
+  --warning: oklch(0.42 0 0);
 
-  /* Terminal chrome is the same in both themes. A light-mode terminal would
+  /* Neutral shadow. Any tint here would put colour back into every surface. */
+  --clay-hi: oklch(1 0 0 / 0.95);
+  --clay-lo: oklch(0.55 0 0 / 0.3);
+  --clay-drop: oklch(0.4 0 0 / 0.15);
+  --clay-drop-lg: oklch(0.4 0 0 / 0.19);
+
+  /* Terminal chrome is the same in both themes: a light-mode terminal would
      misrepresent what the reader sees when they actually run the command. */
-  --terminal: oklch(0.16 0.004 286);
-  --terminal-fg: oklch(0.9 0.003 286);
-  --terminal-dim: oklch(0.56 0.006 286);
-  --terminal-accent: oklch(0.78 0.16 152);
-  --terminal-border: oklch(0.26 0.005 286);
+  --terminal: oklch(0.14 0 0);
+  --terminal-fg: oklch(0.93 0 0);
+  --terminal-dim: oklch(0.58 0 0);
+  --terminal-accent: oklch(1 0 0);
+  --terminal-border: oklch(0.27 0 0);
+
+  /* ---- Syntax colours: the one exception to the monochrome rule -----------
+     The page chrome is black and white. A terminal, though, is a depiction of
+     another program's output, and that output is genuinely coloured — rendering
+     it in greys would be showing you something the real shell does not do.
+     These apply only inside .bg-terminal surfaces and are identical in both
+     themes, because the terminal is dark either way. Each is checked for at
+     least 4.5:1 against the terminal background. */
+  --syn-command: oklch(0.8 0.16 150);
+  --syn-flag: oklch(0.76 0.13 310);
+  --syn-variable: oklch(0.82 0.11 205);
+  --syn-string: oklch(0.86 0.13 95);
+  --syn-number: oklch(0.8 0.13 60);
+  --syn-literal: oklch(0.73 0.16 25);
+  --syn-key: oklch(0.79 0.11 250);
+  --syn-keyword: oklch(0.77 0.14 295);
+  --syn-property: oklch(0.93 0 0);
+  --syn-comment: oklch(0.6 0 0);
+  --syn-punct: oklch(0.66 0 0);
+  --syn-ok: oklch(0.8 0.16 150);
+  --syn-warn: oklch(0.83 0.14 80);
 }
 
 .dark {
-  --background: oklch(0.145 0.004 286);
-  --foreground: oklch(0.968 0.001 286);
-  --card: oklch(0.176 0.004 286);
-  --card-foreground: oklch(0.968 0.001 286);
-  --popover: oklch(0.176 0.004 286);
-  --popover-foreground: oklch(0.968 0.001 286);
+  --background: oklch(0.16 0 0);
+  --foreground: oklch(0.97 0 0);
 
-  --muted: oklch(0.205 0.004 286);
-  --muted-foreground: oklch(0.645 0.008 286);
-  --subtle: oklch(0.585 0.008 286);
+  --card: oklch(0.212 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.212 0 0);
+  --popover-foreground: oklch(0.97 0 0);
 
-  --accent: oklch(0.225 0.004 286);
-  --accent-foreground: oklch(0.968 0.001 286);
+  --muted: oklch(0.25 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --subtle: oklch(0.62 0 0);
 
-  --secondary: oklch(0.225 0.004 286);
-  --secondary-foreground: oklch(0.968 0.001 286);
+  --accent: oklch(0.27 0 0);
+  --accent-foreground: oklch(0.97 0 0);
 
-  --border: oklch(0.256 0.005 286);
-  --input: oklch(0.29 0.005 286);
+  --secondary: oklch(0.25 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
 
-  --primary: oklch(0.78 0.16 152);
-  --primary-foreground: oklch(0.19 0.05 152);
-  --ring: oklch(0.78 0.16 152);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.33 0 0);
 
-  --destructive: oklch(0.66 0.2 25);
-  --warning: oklch(0.79 0.14 78);
+  /* Inverted: buttons are white with black type. */
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.16 0 0);
+  --ring: oklch(0.75 0 0);
+
+  --destructive: oklch(0.97 0 0);
+  --warning: oklch(0.72 0 0);
+
+  /* On a dark surface the highlight is a faint sheen, not white — a bright
+     inset would read as plastic wrap rather than moulded material. */
+  --clay-hi: oklch(1 0 0 / 0.06);
+  --clay-lo: oklch(0 0 0 / 0.45);
+  --clay-drop: oklch(0 0 0 / 0.42);
+  --clay-drop-lg: oklch(0 0 0 / 0.52);
 }
 
 @theme inline {
@@ -111,22 +153,21 @@
   --color-terminal-accent: var(--terminal-accent);
   --color-terminal-border: var(--terminal-border);
 
-  --radius-sm: calc(var(--radius) - 3px);
-  --radius-md: calc(var(--radius) - 1px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 
-  /* Geist, not Inter. Inter is the default everywhere, which is exactly why a
-     page set in it reads as generic. Instrument Serif appears only as the
-     italic emphasis inside headlines. */
   --font-sans: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: Geist Mono, ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-serif: Instrument Serif, ui-serif, Georgia, serif;
 
-  --animate-accordion-down: accordion-down 0.22s cubic-bezier(0.32, 0.72, 0, 1);
-  --animate-accordion-up: accordion-up 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-accordion-down: accordion-down 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-accordion-up: accordion-up 0.24s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-caret: caret 1.05s steps(1) infinite;
-  --animate-menu-in: menu-in 0.18s ease-out;
+  --animate-menu-in: menu-in 0.2s cubic-bezier(0.32, 0.72, 0, 1);
 
   @keyframes accordion-down {
     from { height: 0; }
@@ -141,19 +182,21 @@
     51%, 100% { opacity: 0; }
   }
   @keyframes menu-in {
-    from { opacity: 0; transform: translateY(-4px); }
+    from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 }
 
 @layer base {
+  /* Tailwind v4 defaults border-color to currentColor; without this any bare
+     `border` utility would paint in the text colour. */
   * {
     border-color: var(--border);
   }
 
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 5rem;
+    scroll-padding-top: 6rem;
     -webkit-text-size-adjust: 100%;
   }
 
@@ -167,29 +210,29 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Large type is set at medium weight with tight tracking. Heavy weights at
-     display sizes are the single loudest tell of a template. */
+  /* Display type stays medium weight with tight tracking. Clay supplies the
+     visual weight; the type does not need to shout as well. */
   h1, h2, h3, h4 {
     font-weight: 500;
     letter-spacing: -0.022em;
-    line-height: 1.1;
+    line-height: 1.12;
     text-wrap: balance;
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+    background-color: color-mix(in oklab, var(--primary) 28%, transparent);
   }
 
-  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+    background: color-mix(in oklab, var(--muted-foreground) 32%, transparent);
     border-radius: 9999px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+    background: color-mix(in oklab, var(--muted-foreground) 52%, transparent);
     background-clip: content-box;
   }
 
@@ -203,44 +246,103 @@
   }
 }
 
-@layer utilities {
-  /* The emphasis device for headlines: one word set in serif italic. It does
-     the job a gradient was doing, without announcing itself as a template. */
-  .accent-word {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: -0.01em;
+/* Registered with @utility, not @layer utilities, so they compose with variants.
+   A class declared inside @layer utilities cannot be prefixed — `hover:clay` or
+   `data-[state=active]:clay` would silently generate nothing. */
+
+@utility accent-word {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The clay surface ----------------------------------------------------- */
+
+/* A raised piece: a wide drop for lift, then the two insets that round it. */
+@utility clay {
+  background-color: var(--card);
+  box-shadow:
+    0 14px 30px -10px var(--clay-drop),
+    inset 4px 4px 9px var(--clay-hi),
+    inset -5px -5px 11px var(--clay-lo);
+}
+
+@utility clay-sm {
+  background-color: var(--card);
+  box-shadow:
+    0 8px 18px -8px var(--clay-drop),
+    inset 3px 3px 6px var(--clay-hi),
+    inset -3px -3px 8px var(--clay-lo);
+}
+
+@utility clay-lg {
+  background-color: var(--card);
+  box-shadow:
+    0 26px 50px -14px var(--clay-drop-lg),
+    inset 6px 6px 13px var(--clay-hi),
+    inset -7px -7px 16px var(--clay-lo);
+}
+
+/* Pressed into the page rather than sitting on it. Inputs, tab tracks, and the
+   duties nobody has done yet. */
+@utility clay-inset {
+  background-color: color-mix(in oklab, var(--background) 82%, var(--card));
+  box-shadow:
+    inset 4px 4px 9px var(--clay-lo),
+    inset -3px -3px 8px var(--clay-hi);
+}
+
+/* Transform is animated separately from the shadow so a press reads as the
+   object moving, not just its shadow changing. */
+@utility clay-press {
+  /* Shadow and transform only. The hover state does not change the background,
+     so transitioning it bought nothing and made every surface on the page
+     cross-fade whenever the theme flipped. */
+  transition:
+    box-shadow 0.18s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.18s cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* `.clay-press:hover` is specificity (0,2,0) against `.clay`'s (0,1,0), so
+     these win over the base surface regardless of emitted order. */
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 18px 34px -10px var(--clay-drop-lg),
+      inset 4px 4px 9px var(--clay-hi),
+      inset -5px -5px 11px var(--clay-lo);
   }
 
-  /* Mono label above a section, and the hairline that carries it. */
-  .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--subtle);
+  &:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 4px 10px -6px var(--clay-drop),
+      inset 5px 5px 10px var(--clay-lo),
+      inset -4px -4px 9px var(--clay-hi);
   }
+}
 
-  .hairline {
-    border-top: 1px solid var(--border);
-  }
+@utility bg-hairgrid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
 
-  /* A single, very quiet grid. No colour, no blur, no drifting blobs. */
-  .bg-hairgrid {
-    background-image:
-      linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
-      linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
-    background-size: 64px 64px;
-  }
-
-  .mask-fade-b {
-    -webkit-mask-image: linear-gradient(to bottom, black, transparent);
-    mask-image: linear-gradient(to bottom, black, transparent);
-  }
-
-  .tabular {
-    font-variant-numeric: tabular-nums;
-  }
+@utility mask-fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+  mask-image: linear-gradient(to bottom, black, transparent);
 }

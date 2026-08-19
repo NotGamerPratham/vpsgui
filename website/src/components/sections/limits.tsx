@@ -16,18 +16,21 @@ export function Limits() {
         lede="Worth knowing before you install rather than after."
       />
 
-      <dl className="mt-12 max-w-3xl">
-        {limits.map((limit, i) => (
-          <Reveal key={limit.claim} delay={i * 0.04}>
-            <div className="hairline grid gap-2 py-6 sm:grid-cols-[15rem_1fr] sm:gap-8">
-              <dt className="text-[0.9375rem] text-foreground">{limit.claim}</dt>
+      <Reveal className="mt-12">
+        <dl className="clay divide-y divide-border/70 overflow-hidden rounded-2xl">
+          {limits.map((limit) => (
+            <div
+              key={limit.claim}
+              className="grid gap-2 p-6 sm:grid-cols-[16rem_1fr] sm:gap-8 sm:p-7"
+            >
+              <dt className="text-[0.9375rem]">{limit.claim}</dt>
               <dd className="text-[0.875rem] leading-relaxed text-muted-foreground text-pretty">
                 {limit.detail}
               </dd>
             </div>
-          </Reveal>
-        ))}
-      </dl>
+          ))}
+        </dl>
+      </Reveal>
     </Section>
   );
 }

@@ -10,7 +10,7 @@
       content="VPSGUI is an open-source, self-hosted control plane for Linux servers and Docker. Real telemetry from /proc, a host terminal, file manager, firewall, secrets and backups — no mock data, MIT licensed."
     />
     <meta name="author" content="NotGamerPratham" />
-    <meta name="theme-color" content="#151517" />
+    <meta name="theme-color" content="#161616" />
     <link rel="canonical" href="https://vpsgui.dev/" />
 
     <meta property="og:type" content="website" />
@@ -52,7 +52,7 @@
           var dark = stored ? stored === 'dark' : true;
           if (stored === 'system') dark = prefersDark;
           document.documentElement.classList.toggle('dark', dark);
-          document.documentElement.style.backgroundColor = dark ? '#151517' : '#ffffff';
+          document.documentElement.style.backgroundColor = dark ? '#161616' : '#f3f3f3';
         } catch (e) {
           /* Private-mode localStorage throws. The class on <html> already
              defaults to dark, so failing here is harmless. */

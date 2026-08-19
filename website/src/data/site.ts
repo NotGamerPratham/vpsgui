@@ -44,8 +44,9 @@ export const agentInstallCommand =
   'curl -fsSLO https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh';
 
 export const navLinks: NavLink[] = [
+  { label: 'Home', href: '/' },
   { label: 'Features', href: '/#features' },
-  { label: 'Install', href: '/#install' },
+  { label: 'Docs', href: '/docs' },
   { label: 'API', href: '/api' },
   { label: 'SDKs', href: '/#sdks' },
   { label: 'Security', href: '/security' },
@@ -56,7 +57,7 @@ export const footerSections: Array<{ title: string; links: NavLink[] }> = [
     title: 'Product',
     links: [
       { label: 'Features', href: '/#features' },
-      { label: 'Quickstart', href: '/#install' },
+      { label: 'Documentation', href: '/docs' },
       { label: 'API reference', href: '/api' },
       { label: 'Security model', href: '/security' },
     ],

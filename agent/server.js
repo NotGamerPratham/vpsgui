@@ -623,6 +623,36 @@ function isSensitivePath(resolved)
   return SENSITIVE_PATTERNS.some((re) => re.test(resolved));
 }
 
+/**
+ * Paths owned by the distribution and the running system rather than by the operator.
+ *
+ * Editing one of these is legitimate — changing sshd_config or an nginx vhost is the whole point of
+ * the tool — but it is the kind of edit that takes a host off the network if it goes wrong. The flag
+ * exists so the UI can say so before the write, not to block it.
+ */
+const SYSTEM_PREFIXES = os.platform() === 'win32'
+  ? [process.env.SystemRoot || 'C:\Windows', 'C:\Program Files', 'C:\Program Files (x86)']
+  : ['/bin', '/boot', '/dev', '/etc', '/lib', '/lib32', '/lib64', '/libx32', '/proc', '/run',
+     '/sbin', '/sys', '/usr', '/var/lib', '/var/log'];
+
+/**
+ * True when `resolved` sits inside a system-owned tree. Expects an already-resolved real path.
+ *
+ * Comparison is case-insensitive on Windows, where the filesystem is. SystemRoot reports
+ * "C:\WINDOWS" while a directory listing yields "C:\Windows", so a case-sensitive match flagged
+ * nothing under the Windows directory at all.
+ */
+function isSystemPath(resolved) {
+  const fold = (value) => (os.platform() === 'win32' ? value.toLowerCase() : value);
+  const target = fold(resolved);
+
+  return SYSTEM_PREFIXES.some((prefix) => {
+    const root = fold(path.resolve(prefix));
+    if (target === root) return true;
+    return target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+  });
+}
+
 function isInsideRoot(resolved) {
   return FILE_ROOTS.some((root) => {
     if (resolved === root) return true;
@@ -716,6 +746,8 @@ async function getRealDirectoryContents(targetDir)
       extension: type === 'file' ? path.extname(item.name).replace(/^\./, '') : undefined,
       modifiedAt: stat ? stat.mtime.toISOString() : null,
       readable: !isSensitivePath(fullPath),
+      // Lets the browser mark distribution-owned paths without a read per entry.
+      system: isSystemPath(fullPath),
     });
   }
   results.sort((a, b) =>
@@ -1645,7 +1677,7 @@ async function applyFirewallAction(body) {
  */
 async function createDirectory(targetPath) {
   const safe = await resolveSafePath(targetPath, { mustExist: false });
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
 
   try {
     await fsp.mkdir(safe.path, { recursive: true, mode: 0o755 });
@@ -1663,7 +1695,7 @@ async function createDirectory(targetPath) {
  */
 async function deletePath(targetPath, recursive) {
   const safe = await resolveSafePath(targetPath);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
 
   if (FILE_ROOTS.some((root) => root === safe.path)) {
     return { status: 403, body: { success: false, error: 'Refusing to delete a configured file root' } };
@@ -1696,10 +1728,10 @@ async function deletePath(targetPath, recursive) {
 /** Rename or move a path. BOTH endpoints are confined, so a move cannot escape the roots. */
 async function renamePath(fromPath, toPath) {
   const from = await resolveSafePath(fromPath);
-  if (from.error) return { status: from.status, body: { success: false, error: from.error } };
+  if (from.error) return { status: from.status, body: { success: false, error: from.error , roots: FILE_ROOTS } };
 
   const to = await resolveSafePath(toPath, { mustExist: false });
-  if (to.error) return { status: to.status, body: { success: false, error: to.error } };
+  if (to.error) return { status: to.status, body: { success: false, error: to.error , roots: FILE_ROOTS } };
 
   if (await fsp.stat(to.path).then(() => true).catch(() => false)) {
     // rename() would silently clobber the destination.
@@ -1886,7 +1918,7 @@ async function createBackup(sourcePath, label) {
   // Confine the source BEFORE the platform check, so an escape attempt is a 403 on any host rather
   // than being masked by a "not supported here" 400.
   const safe = await resolveSafePath(sourcePath);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
 
   if (os.platform() === 'win32') {
     return { status: 400, body: { success: false, error: 'Backups require a Linux host with tar.' } };
@@ -1938,7 +1970,7 @@ async function restoreBackup(name, destination) {
   }
 
   const safe = await resolveSafePath(destination);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
 
   const archive = path.join(BACKUP_DIR, name);
   if (!(await fsp.stat(archive).catch(() => null))) {
@@ -2516,7 +2548,7 @@ async function handleRequest(req, res)
   if (method === 'GET' && pathname === '/api/v1/files/read') {
     const safe = await resolveSafePath(reqUrl.searchParams.get('path'));
     if (safe.error) {
-      sendJson(res, safe.status, { error: safe.error });
+      sendJson(res, safe.status, { error: safe.error, roots: FILE_ROOTS });
       return;
     }
     try {
@@ -2538,6 +2570,7 @@ async function handleRequest(req, res)
             truncated: true,
             sizeBytes: stat.size,
             editable: false,
+            system: isSystemPath(safe.path),
           });
         } finally {
           await handle.close();
@@ -2550,6 +2583,7 @@ async function handleRequest(req, res)
         truncated: false,
         sizeBytes: stat.size,
         editable: true,
+        system: isSystemPath(safe.path),
       });
     } catch (e) {
       sendJson(res, e.code === 'ENOENT' ? 404 : 403, { error: e.message });
@@ -2570,7 +2604,7 @@ async function handleRequest(req, res)
     }
     const safe = await resolveSafePath(targetPath, { mustExist: false });
     if (safe.error) {
-      sendJson(res, safe.status, { success: false, error: safe.error });
+      sendJson(res, safe.status, { success: false, error: safe.error, roots: FILE_ROOTS });
       return;
     }
     try {
@@ -2581,7 +2615,12 @@ async function handleRequest(req, res)
       }
       // Preserve the original mode; a fresh file defaults to 0600 rather than the umask.
       await fsp.writeFile(safe.path, content, { encoding: 'utf-8', mode: existing ? existing.mode & 0o777 : 0o600 });
-      sendJson(res, 200, { success: true, path: safe.path, bytesWritten: Buffer.byteLength(content, 'utf-8') });
+      sendJson(res, 200, {
+        success: true,
+        path: safe.path,
+        bytesWritten: Buffer.byteLength(content, 'utf-8'),
+        system: isSystemPath(safe.path),
+      });
     } catch (e) {
       sendJson(res, 500, { success: false, error: e.message });
     }

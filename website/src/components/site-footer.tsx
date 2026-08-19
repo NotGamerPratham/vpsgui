@@ -6,7 +6,7 @@ import { Logo } from './logo';
 
 export function SiteFooter() {
   return (
-    <footer className="hairline px-5 py-14 sm:px-8">
+    <footer className="px-5 pt-6 pb-14 sm:px-8">
       <div className="mx-auto w-full max-w-5xl">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_repeat(3,1fr)]">
           <div className="space-y-4">
@@ -46,7 +46,7 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="hairline mt-12 flex flex-col gap-2 pt-6 font-mono text-xs text-subtle sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-12 flex flex-col gap-2 border-t border-border pt-6 font-mono text-xs text-subtle sm:flex-row sm:items-center sm:justify-between">
           <p>
             v{site.version} &middot; MIT &middot; built by{' '}
             <a

@@ -19,7 +19,7 @@ export function CommandLine({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg border border-terminal-border bg-terminal py-2 pr-2 pl-3.5',
+        'flex items-center gap-3 rounded-2xl bg-terminal py-2.5 pr-2.5 pl-5 shadow-[0_12px_26px_-12px_var(--clay-drop-lg)]',
         className,
       )}
     >

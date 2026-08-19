@@ -13,12 +13,22 @@ export const AGENT_TOKEN_STORAGE_KEY = 'vpsgui_auth_token';
 export class ApiError extends Error {
   readonly status: number;
   readonly endpoint: string;
+  /**
+   * The parsed error body, when the agent sent one.
+   *
+   * Several endpoints return context alongside `error` — a confinement failure
+   * reports the configured `roots`, for instance — and that context is what
+   * lets the UI explain how to fix the problem rather than just restating it.
+   */
+  readonly details: Record<string, unknown> | null;
 
-  constructor(message: string, status: number, endpoint: string) {
+  constructor(message: string, status: number, endpoint: string, details?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.endpoint = endpoint;
+    this.details =
+      details && typeof details === 'object' ? (details as Record<string, unknown>) : null;
   }
 
   /** The agent token is missing, wrong, or temporarily locked out after repeated failures. */
@@ -102,7 +112,7 @@ class ApiClient {
         parsed && typeof parsed === 'object' && 'error' in parsed
           ? String((parsed as { error: unknown }).error)
           : `HTTP ${response.status} ${response.statusText}`;
-      throw new ApiError(detail, response.status, endpoint);
+      throw new ApiError(detail, response.status, endpoint, parsed);
     }
 
     return parsed as T;

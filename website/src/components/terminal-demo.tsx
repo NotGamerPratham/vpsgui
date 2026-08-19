@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 
+import { highlight } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 
 type Line =
   | { kind: 'command'; text: string }
-  | { kind: 'output'; text: string; tone?: 'muted' | 'ok' | 'warn' | 'key' };
+  /**
+   * `lang` picks the tokeniser for the line. Command output is not all one
+   * language — a JSON body and a `docker ps` table need different rules, and
+   * running the shell tokeniser over either produced nonsense colours.
+   */
+  | { kind: 'output'; text: string; lang?: 'json' | 'table' };
 
 /**
  * An illustrative session against a fictional host, not a recording of anyone's
@@ -15,36 +21,29 @@ type Line =
  */
 const SESSION: Line[] = [
   { kind: 'command', text: 'curl -s $VPS/api/v1/health' },
-  { kind: 'output', text: '{ "status": "ok", "agent": "vpsgui-agent", "uptime": 184203 }', tone: 'ok' },
+  { kind: 'output', text: '{ "status": "ok", "agent": "vpsgui-agent", "uptime": 184203 }', lang: 'json' },
   { kind: 'output', text: '' },
   { kind: 'command', text: 'curl -s $VPS/api/v1/system/telemetry -H "$AUTH"' },
-  { kind: 'output', text: '{' },
-  { kind: 'output', text: '  "cpuPercent": 12.4,      "cpuCores": 16,', tone: 'key' },
-  { kind: 'output', text: '  "memUsedBytes": 9138470912,', tone: 'key' },
-  { kind: 'output', text: '  "memTotalBytes": 33619402752,', tone: 'key' },
-  { kind: 'output', text: '  "loadAvg": [0.42, 0.55, 0.61],', tone: 'key' },
-  { kind: 'output', text: '  "smartHealth": null      // no smartctl on this host', tone: 'warn' },
-  { kind: 'output', text: '}' },
+  { kind: 'output', text: '{', lang: 'json' },
+  { kind: 'output', text: '  "cpuPercent": 12.4,      "cpuCores": 16,', lang: 'json' },
+  { kind: 'output', text: '  "memUsedBytes": 9138470912,', lang: 'json' },
+  { kind: 'output', text: '  "memTotalBytes": 33619402752,', lang: 'json' },
+  { kind: 'output', text: '  "loadAvg": [0.42, 0.55, 0.61],', lang: 'json' },
+  { kind: 'output', text: '  "smartHealth": null      // no smartctl on this host', lang: 'json' },
+  { kind: 'output', text: '}', lang: 'json' },
   { kind: 'output', text: '' },
   { kind: 'command', text: 'curl -s $VPS/api/v1/docker/containers -H "$AUTH"' },
-  { kind: 'output', text: 'postgres-16     running   up 6 days', tone: 'ok' },
-  { kind: 'output', text: 'redis-alpine    running   up 6 days', tone: 'ok' },
-  { kind: 'output', text: 'nginx-proxy     running   up 2 days', tone: 'ok' },
-  { kind: 'output', text: 'backup-runner   exited    (0) 4 hours ago', tone: 'muted' },
+  { kind: 'output', text: 'postgres-16     running   up 6 days', lang: 'table' },
+  { kind: 'output', text: 'redis-alpine    running   up 6 days', lang: 'table' },
+  { kind: 'output', text: 'nginx-proxy     running   up 2 days', lang: 'table' },
+  { kind: 'output', text: 'backup-runner   exited    (0) 4 hours ago', lang: 'table' },
 ];
-
-const TONE_CLASS = {
-  muted: 'text-terminal-dim',
-  ok: 'text-terminal-accent',
-  warn: 'text-warning',
-  key: 'text-terminal-fg',
-  undefined: 'text-terminal-fg/80',
-} as const;
 
 const TYPE_MS = 26;
 const AFTER_COMMAND_MS = 320;
 const AFTER_OUTPUT_MS = 90;
 const RESTART_MS = 4200;
+const START_DELAY_MS = 400;
 
 export function TerminalDemo({ className }: { className?: string }) {
   const reduced = useReducedMotion();
@@ -105,7 +104,12 @@ export function TerminalDemo({ className }: { className?: string }) {
       tick();
     };
 
-    run(0);
+    // Deferred, not called inline. Running it synchronously fired the first
+    // setTyped during the hydration commit, so the client had already typed a
+    // line while the prerendered HTML still showed an empty transcript — React
+    // reported that as a text-content mismatch and threw the whole root away.
+    // The delay also gives the terminal a beat before it starts.
+    timer = window.setTimeout(() => run(0), START_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -124,11 +128,11 @@ export function TerminalDemo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-lg border border-terminal-border bg-terminal',
+        'overflow-hidden rounded-3xl bg-terminal shadow-[0_28px_56px_-18px_var(--clay-drop-lg)]',
         className,
       )}
     >
-      <div className="flex items-center justify-between border-b border-terminal-border px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-terminal-border px-5 py-3.5">
         <span className="font-mono text-xs text-terminal-dim">agent api &middot; vps.example.com</span>
         <span className="font-mono text-xs text-terminal-dim">bash</span>
       </div>
@@ -136,18 +140,19 @@ export function TerminalDemo({ className }: { className?: string }) {
       {/* Fixed height so the surrounding layout never jumps as lines land. */}
       <div
         ref={scrollRef}
-        className="h-[19rem] overflow-y-auto px-4 py-3 font-mono text-[0.78125rem] leading-6 sm:text-[0.8125rem]"
+        className="h-[19rem] overflow-y-auto px-5 py-4 font-mono text-[0.78125rem] leading-6 sm:text-[0.8125rem]"
       >
         {SESSION.slice(0, visible).map((line, i) => (
           <div key={i} className="whitespace-pre">
             {line.kind === 'command' ? (
               <>
-                <span className="text-terminal-accent">$ </span>
-                <span className="text-terminal-fg">{line.text}</span>
+                <span className="text-terminal-accent select-none">$ </span>
+                <span className="text-terminal-fg">{highlight(line.text, 'shell')}</span>
               </>
             ) : (
-              <span className={TONE_CLASS[line.tone ?? 'undefined']}>
-                {line.text || ' '}
+              <span className="text-terminal-fg/85">
+                {/* A non-breaking space keeps blank lines from collapsing. */}
+                {line.text ? highlight(line.text, line.lang ?? 'table') : ' '}
               </span>
             )}
           </div>
@@ -155,8 +160,8 @@ export function TerminalDemo({ className }: { className?: string }) {
 
         {typed && pending?.kind === 'command' ? (
           <div className="whitespace-pre">
-            <span className="text-terminal-accent">$ </span>
-            <span className="text-terminal-fg">{typed}</span>
+            <span className="text-terminal-accent select-none">$ </span>
+            <span className="text-terminal-fg">{highlight(typed, 'shell')}</span>
             {showCaret ? (
               <span className="ml-px inline-block w-[0.55em] animate-caret bg-terminal-accent align-text-bottom text-transparent">
                 .

@@ -15,14 +15,16 @@ export function Faq() {
       <SectionHeading index="06" label="Questions" title="Asked often enough to write down." />
 
       <Reveal className="mt-10 max-w-3xl">
-        <Accordion type="single" collapsible>
-          {faqs.map((faq) => (
-            <AccordionItem key={faq.id} value={faq.id}>
-              <AccordionTrigger>{faq.question}</AccordionTrigger>
-              <AccordionContent>{faq.answer}</AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <div className="clay rounded-2xl px-7 py-2">
+          <Accordion type="single" collapsible>
+            {faqs.map((faq) => (
+              <AccordionItem key={faq.id} value={faq.id}>
+                <AccordionTrigger>{faq.question}</AccordionTrigger>
+                <AccordionContent>{faq.answer}</AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
 
         <p className="mt-8 text-sm text-subtle">
           Something missing?{' '}

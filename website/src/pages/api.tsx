@@ -10,14 +10,14 @@ import { usePageMeta } from '@/hooks/use-page-meta';
 import { cn } from '@/lib/utils';
 
 /**
- * Method is carried by weight and one accent, not by three coloured pills.
- * GET is the safe one and reads quietly; anything that changes state is the
- * one worth spotting in a long list.
+ * Three tiers without hue: GET reads quietly because it is the safe one,
+ * anything that mutates is at full contrast, and DELETE inverts so it is the
+ * one your eye catches scanning a long list.
  */
 const METHOD_CLASS: Record<string, string> = {
   GET: 'text-subtle',
-  POST: 'text-primary',
-  DELETE: 'text-destructive',
+  POST: 'text-foreground',
+  DELETE: 'bg-foreground text-background px-1.5 rounded-md',
 };
 
 const AUTH_SAMPLE = `# Everything is prefixed /api/v1. Everything except /health
@@ -32,11 +32,7 @@ curl -s https://vps.example.com/api/v1/system/telemetry \\
 # 429 -> this client is locked out after repeated failures`;
 
 export default function ApiPage() {
-  usePageMeta({
-    title: 'API reference — VPSGUI',
-    description:
-      'Every REST endpoint the VPSGUI agent serves: telemetry, Docker, files, security, network, operations and terminal.',
-  });
+  usePageMeta('/api');
 
   const [query, setQuery] = useState('');
 
@@ -114,7 +110,10 @@ export default function ApiPage() {
           </Reveal>
 
           <Reveal delay={0.05} className="mt-5">
-            <p className="max-w-2xl border-l-2 border-warning/60 py-1 pl-5 text-[0.875rem] leading-relaxed text-muted-foreground">
+            <p className="clay-inset max-w-2xl rounded-2xl border-l-4 border-foreground p-6 text-[0.875rem] leading-relaxed text-muted-foreground">
+              <span className="mb-2 block font-mono text-[0.6875rem] tracking-wide text-foreground uppercase">
+                Important
+              </span>
               <code className="font-mono text-foreground">POST /terminal/exec</code> runs arbitrary
               commands as the agent user. That one route is why the token is root-equivalent, and why
               the agent belongs on loopback behind a proxy you control.
@@ -125,14 +124,14 @@ export default function ApiPage() {
 
       <section className="px-5 pb-24 sm:px-8">
         <div className="mx-auto w-full max-w-5xl">
-          <div className="sticky top-14 z-30 -mx-1 mb-6 bg-background px-1 pt-4 pb-3">
+          <div className="sticky top-20 z-30 -mx-1 mb-6 bg-background px-1 pt-4 pb-3">
             <label htmlFor="endpoint-search" className="sr-only">
               Filter endpoints
             </label>
             <div className="relative">
               <Search
                 aria-hidden
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle"
+                className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-subtle"
               />
               <input
                 id="endpoint-search"
@@ -140,7 +139,7 @@ export default function ApiPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Filter by path, method or description"
-                className="h-10 w-full rounded-lg border border-border bg-card pr-3 pl-9 font-mono text-[0.8125rem] outline-none transition-colors placeholder:font-sans placeholder:text-subtle focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                className="clay-inset h-11 w-full rounded-xl pr-3 pl-10 font-mono text-[0.8125rem] outline-none placeholder:font-sans placeholder:text-subtle focus-visible:ring-[3px] focus-visible:ring-ring/30"
               />
             </div>
             <p aria-live="polite" className="mt-2 px-1 font-mono text-xs text-subtle tabular">
@@ -149,7 +148,7 @@ export default function ApiPage() {
           </div>
 
           {groups.length === 0 ? (
-            <p className="hairline py-16 text-center text-sm text-subtle">
+            <p className="clay-inset rounded-2xl py-16 text-center text-sm text-subtle">
               Nothing matches “{query}”.
             </p>
           ) : (
@@ -162,11 +161,11 @@ export default function ApiPage() {
                       {group.description}
                     </p>
 
-                    <ul className="mt-5">
+                    <ul className="clay mt-5 divide-y divide-border/60 overflow-hidden rounded-2xl">
                       {group.routes.map((route) => (
                         <li
                           key={`${route.method} ${route.path}`}
-                          className="hairline grid gap-1 py-3 sm:grid-cols-[4rem_16rem_1fr] sm:items-baseline sm:gap-4"
+                          className="grid gap-1 px-6 py-3.5 sm:grid-cols-[4rem_16rem_1fr] sm:items-baseline sm:gap-4"
                         >
                           <span
                             className={cn(

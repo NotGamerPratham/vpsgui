@@ -28,12 +28,16 @@ export function SiteHeader() {
 
   return (
     <header
-      className={cn(
-        'sticky top-0 z-50 w-full bg-background transition-colors',
-        scrolled || open ? 'border-b border-border' : 'border-b border-transparent',
-      )}
+      className="sticky top-0 z-50 w-full px-4 pt-4 sm:px-6"
     >
-      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-6 px-5 sm:px-8">
+      <div
+        className={cn(
+          'mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-6 px-4 transition-shadow sm:px-5',
+          // The bar only lifts off the page once you scroll; at rest it sits
+          // flush so the hero is not competing with a floating slab.
+          scrolled || open ? 'clay rounded-2xl' : 'rounded-2xl bg-transparent',
+        )}
+      >
         <Link
           to="/"
           aria-label="VPSGUI home"
@@ -88,13 +92,16 @@ export function SiteHeader() {
       {/* Rendered only while open. An element left mid-exit keeps its links in
           the focus order while invisible, which is worse than no exit animation. */}
       {open ? (
-        <div id="mobile-nav" className="animate-menu-in border-t border-border md:hidden">
+        <div
+          id="mobile-nav"
+          className="animate-menu-in clay mx-auto mt-3 w-full max-w-5xl overflow-hidden rounded-2xl md:hidden"
+        >
           <nav aria-label="Mobile" className="flex flex-col px-5 py-2">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
-                className="hairline py-3.5 text-[0.9375rem] text-muted-foreground transition-colors first:border-t-0 hover:text-foreground"
+                className="border-b border-border/60 py-3.5 text-[0.9375rem] text-muted-foreground transition-colors last:border-b-0 hover:text-foreground"
               >
                 {link.label}
               </Link>

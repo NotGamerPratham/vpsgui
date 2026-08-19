@@ -3,13 +3,19 @@ import { Link } from 'react-router-dom';
 import { GridBackdrop } from '@/components/grid-backdrop';
 import { Button } from '@/components/ui/button';
 import { site } from '@/data/site';
-import { usePageMeta } from '@/hooks/use-page-meta';
+import { useEffect } from 'react';
 
 export default function NotFoundPage() {
-  usePageMeta({
-    title: 'Page not found — VPSGUI',
-    description: 'That page does not exist on the VPSGUI site.',
-  });
+  // Not in routeSeo: a 404 should never be indexed, and it has no canonical.
+  useEffect(() => {
+    document.title = 'Page not found — VPSGUI';
+    const robots = document.createElement('meta');
+    robots.name = 'robots';
+    robots.content = 'noindex, follow';
+    document.head.appendChild(robots);
+    return () => robots.remove();
+  }, []);
+
 
   return (
     <section className="relative flex min-h-[68vh] items-center px-5 py-24 sm:px-8">
