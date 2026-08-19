@@ -326,6 +326,47 @@ describe('agent: filesystem-root configuration', () => {
     });
     expect(res.status).toBe(403);
   });
+
+  it.each([
+    ['agent.env', 'agent.env'],
+    ['secret store', '.secrets.json'],
+    ['secret key', '.secrets-key'],
+  ])("refuses to serve the agent's own %s", async (_label, filename) => {
+    // AGENT_FILE_ROOTS now defaults to "/", so these files are reachable by path. Serving any of
+    // them would hand over the bearer token or every stored secret in a single request.
+    const target = path.join(process.cwd(), 'agent', filename);
+    await fs.writeFile(target, 'canary', 'utf-8').catch(() => {});
+    try {
+      const read = await fetch(`${ROOT_BASE}/api/v1/files/read?path=${encodeURIComponent(target)}`, {
+        headers: AUTH,
+      });
+      expect(read.status).toBe(403);
+
+      // Writing over them must be refused too, or the token could simply be replaced.
+      const write = await fetch(`${ROOT_BASE}/api/v1/files/write`, {
+        method: 'POST',
+        headers: { ...AUTH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: target, content: 'overwritten' }),
+      });
+      expect(write.status).toBe(403);
+    } finally {
+      await fs.rm(target, { force: true }).catch(() => {});
+    }
+  });
+
+  it('lists a directory but marks blocked entries unreadable', async () => {
+    const res = await fetch(
+      `${ROOT_BASE}/api/v1/files?path=${encodeURIComponent(path.join(process.cwd(), 'agent'))}`,
+      { headers: AUTH }
+    );
+    expect(res.status).toBe(200);
+
+    for (const entry of await res.json()) {
+      if (/^(agent\.env|\.secrets\.json|\.secrets-key|\.agent-token)$/.test(entry.name)) {
+        expect(entry.readable, `${entry.name} must be flagged unreadable`).toBe(false);
+      }
+    }
+  });
 });
 
 describe('agent: input validation', () => {

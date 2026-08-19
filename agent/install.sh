@@ -92,20 +92,48 @@ if [ -z "${AGENT_TOKEN}" ]; then
   exit 1
 fi
 
+# Carry forward existing settings rather than resetting them. Rewriting this file wholesale on every
+# deploy silently reverted any operator change to the roots, host, or shell switch.
+read_env_value() {
+  if [ -f "${ENV_FILE}" ]; then
+    sed -n "s/^$1=//p" "${ENV_FILE}" | head -n1
+  fi
+}
+
+# Precedence: an explicitly exported variable wins, then whatever is already stored, then the
+# default. Without the first tier there would be no way to change a setting on an existing install
+# short of hand-editing the file, since the stored value would always win.
+#   sudo AGENT_FILE_ROOTS=/ ./run.sh
+AGENT_PORT_VALUE="${PORT:-$(read_env_value PORT)}"
+AGENT_HOST_VALUE="${AGENT_HOST:-$(read_env_value AGENT_HOST)}"
+AGENT_ROOTS_VALUE="${AGENT_FILE_ROOTS:-$(read_env_value AGENT_FILE_ROOTS)}"
+AGENT_SHELL_VALUE="${AGENT_ENABLE_SHELL:-$(read_env_value AGENT_ENABLE_SHELL)}"
+
+# Defaults on a fresh install. AGENT_FILE_ROOTS defaults to the whole filesystem: this is a host
+# administration tool, and a narrow list makes ordinary paths fail with "outside the configured
+# agent file roots". Narrow it here to reduce blast radius if you prefer.
+: "${AGENT_PORT_VALUE:=46509}"
+: "${AGENT_HOST_VALUE:=127.0.0.1}"
+: "${AGENT_ROOTS_VALUE:=/}"
+: "${AGENT_SHELL_VALUE:=1}"
+
 # Written before the supervisor starts, since both read their configuration from it.
 umask 077
 cat > "${ENV_FILE}" << EOF
 # VPSGUI agent configuration. Read by both the systemd unit and the pm2 process.
 # This file contains a token equivalent to a root password — keep it mode 0600.
-PORT=46509
+PORT=${AGENT_PORT_VALUE}
 # Loopback only. The bundled nginx config proxies to 127.0.0.1:46509 and terminates TLS.
 # Change to 0.0.0.0 ONLY if you front the agent with TLS and a firewall.
-AGENT_HOST=127.0.0.1
+AGENT_HOST=${AGENT_HOST_VALUE}
 AGENT_TOKEN=${AGENT_TOKEN}
-# Directories the file manager may browse. Narrow this list to reduce blast radius.
-AGENT_FILE_ROOTS=/etc,/var/www,/var/log,/home,/opt,/srv
+# Directories the file manager may browse. "/" means the whole filesystem, which is the default for
+# a host administration tool. Narrow it (e.g. /etc,/var/www,/home,/opt,/srv) to reduce blast radius.
+# The credential deny list still applies at any setting: shadow, sudoers, SSH private keys, and the
+# agent's own token and secret key are never served.
+AGENT_FILE_ROOTS=${AGENT_ROOTS_VALUE}
 # Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
-AGENT_ENABLE_SHELL=1
+AGENT_ENABLE_SHELL=${AGENT_SHELL_VALUE}
 EOF
 chmod 600 "${ENV_FILE}"
 umask 022

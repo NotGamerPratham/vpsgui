@@ -580,10 +580,20 @@ async function getRealDockerImages()
 // Confined filesystem access
 // ---------------------------------------------------------------------------
 
-function defaultFileRoots()
-{
-  if (os.platform() === 'win32') return [process.cwd()];
-  return ['/etc', '/var/www', '/var/log', '/home', '/opt', '/srv'];
+/**
+ * Directories the file browser may reach when AGENT_FILE_ROOTS is unset.
+ *
+ * Defaults to the whole filesystem. VPSGUI is a host administration tool and operators expect to
+ * reach any path; a narrow list simply produced "Path is outside the configured agent file roots"
+ * for ordinary work. Narrow it via AGENT_FILE_ROOTS to reduce blast radius — for example
+ * AGENT_FILE_ROOTS=/etc,/var/www,/home,/opt,/srv.
+ *
+ * The credential deny list (shadow, sudoers, SSH private keys, the agent's own token and secret
+ * key) still applies regardless of the roots, so those stay unreadable even at '/'.
+ */
+function defaultFileRoots() {
+  if (os.platform() === 'win32') return [path.parse(process.cwd()).root];
+  return ['/'];
 }
 
 const FILE_ROOTS = (process.env.AGENT_FILE_ROOTS
@@ -599,6 +609,12 @@ const SENSITIVE_PATTERNS = [
   /(^|[\\/])id_(rsa|dsa|ecdsa|ed25519)$/i,
   /(^|[\\/])\.agent-token$/i,
   /\.(pem|key|pfx|p12)$/i,
+  // The agent's own configuration and secret store. With AGENT_FILE_ROOTS defaulting to "/" these
+  // are reachable by path, and serving them would hand over the bearer token and every stored
+  // secret in a single request.
+  /(^|[\\/])agent\.env$/i,
+  /(^|[\\/])\.secrets\.json$/i,
+  /(^|[\\/])\.secrets-key$/i,
 ];
 
 function isSensitivePath(resolved)

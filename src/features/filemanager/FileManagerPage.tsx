@@ -21,7 +21,8 @@ function joinPath(dir: string, name: string): string {
   return `${dir.replace(/[\\/]+$/, '')}/${name}`;
 }
 
-const DEFAULT_PATH = '/etc';
+// With the whole filesystem browsable, start at the root rather than an arbitrary subdirectory.
+const DEFAULT_PATH = '/';
 
 export function FileManagerPage() {
   const [currentPath, setCurrentPath] = useState(DEFAULT_PATH);
