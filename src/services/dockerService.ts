@@ -43,6 +43,24 @@ class DockerService {
     }
   }
 
+  /**
+   * Remove a local image.
+   *
+   * `force` is opt-in: without it docker refuses to remove an image still referenced by a
+   * container, which is the safe default.
+   */
+  async removeImage(id: string, force = false): Promise<{ success: boolean; output: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; output: string }>(
+        '/docker/images/action',
+        { id, action: 'remove', force },
+        60000
+      );
+    } catch (e) {
+      return { success: false, output: describeError(e) };
+    }
+  }
+
   /** Perform container lifecycle actions on the host Docker daemon. */
   async controlContainer(
     id: string,

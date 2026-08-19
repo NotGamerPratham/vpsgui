@@ -54,3 +54,6 @@ agent/.agent-token
 # Local env overrides (Vite convention). The committed .env* files hold non-secret defaults only.
 .env.local
 .env.*.local
+# Encrypted secret store and its key (agent-local, never committed).
+agent/.secrets.json
+agent/.secrets-key

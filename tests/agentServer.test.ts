@@ -174,10 +174,12 @@ describe('agent: host inventory endpoints', () => {
     }
   });
 
-  it('advertises which features have no implementation', async () => {
+  it('reports no unimplemented features now that all endpoints are backed', async () => {
+    // deployments, backups and secrets were previously advertised here as having no
+    // implementation; all three are now real, so the list must be empty.
     const res = await fetch(`${BASE}/api/v1/agent/info`, { headers: AUTH });
     const info = await res.json();
-    expect(info.unimplementedFeatures).toEqual(expect.arrayContaining(['deployments', 'backups', 'secrets']));
+    expect(info.unimplementedFeatures).toEqual([]);
   });
 
   it('requires a token for the inventory endpoints too', async () => {
@@ -651,5 +653,100 @@ describe('agent: filesystem mutations', () => {
     const inside = path.join(sandboxRoot, 'sample.txt');
     const outside = os.platform() === 'win32' ? path.join('C:', 'Windows', 'escaped.txt') : '/etc/escaped.txt';
     expect((await post('rename', { from: inside, to: outside })).status).toBe(403);
+  });
+});
+
+describe('agent: secrets are encrypted at rest', () => {
+  const post = (endpoint: string, body: unknown) =>
+    fetch(`${BASE}/api/v1/${endpoint}`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const SECRET_VALUE = 'plaintext-canary-value-9f3a';
+
+  afterAll(async () => {
+    await post('security/secrets/delete', { name: 'TEST_SECRET' }).catch(() => {});
+  });
+
+  it('never writes the plaintext value to disk', async () => {
+    expect((await post('security/secrets', { name: 'TEST_SECRET', value: SECRET_VALUE })).status).toBe(200);
+
+    const store = await fs.readFile(path.resolve(__dirname, '../agent/.secrets.json'), 'utf-8');
+    // The whole point of the store: the value must not be recoverable by reading the file.
+    expect(store).not.toContain(SECRET_VALUE);
+    expect(store).toContain('TEST_SECRET');
+  });
+
+  it('omits values from the list and returns them only on explicit reveal', async () => {
+    const list = await (await fetch(`${BASE}/api/v1/security/secrets`, { headers: AUTH })).json();
+    const entry = list.find((s: { name: string }) => s.name === 'TEST_SECRET');
+    expect(entry).toBeDefined();
+    expect(JSON.stringify(entry)).not.toContain(SECRET_VALUE);
+
+    const revealed = await (await post('security/secrets/reveal', { name: 'TEST_SECRET' })).json();
+    expect(revealed.value).toBe(SECRET_VALUE);
+  });
+
+  it('rejects invalid names and oversized values', async () => {
+    expect((await post('security/secrets', { name: 'bad name!', value: 'x' })).status).toBe(400);
+    expect((await post('security/secrets', { name: 'OK_NAME', value: '' })).status).toBe(400);
+    expect((await post('security/secrets', { name: 'OK_NAME', value: 'x'.repeat(9000) })).status).toBe(400);
+  });
+
+  it('404s on revealing or deleting an unknown secret', async () => {
+    expect((await post('security/secrets/reveal', { name: 'NOPE' })).status).toBe(404);
+    expect((await post('security/secrets/delete', { name: 'NOPE' })).status).toBe(404);
+  });
+
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/security/secrets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'X', value: 'y' }),
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('agent: backups, deployments and image removal', () => {
+  const post = (endpoint: string, body: unknown) =>
+    fetch(`${BASE}/api/v1/${endpoint}`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it.each(['/deployments', '/backups'])('serves %s as an array', async (endpoint) => {
+    const res = await fetch(`${BASE}/api/v1${endpoint}`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it('confines a backup source to the configured roots', async () => {
+    const outside = os.platform() === 'win32' ? path.join('C:', 'Windows') : '/root';
+    expect((await post('backups/create', { sourcePath: outside })).status).toBe(403);
+  });
+
+  it.each(['../../etc/passwd', 'x.tar.gz; ls', 'nope.txt'])('rejects archive name %s', async (name) => {
+    // The name pattern excludes separators, so a delete cannot escape the backup directory.
+    expect((await post('backups/delete', { name })).status).toBe(400);
+  });
+
+  it('refuses to pull a path that is not a known deployment', async () => {
+    expect((await post('deployments/pull', { path: sandboxRoot })).status).toBe(403);
+  });
+
+  it.each([
+    ['prototype-chain action', { id: 'abc', action: 'constructor' }],
+    ['shell metacharacters in id', { id: 'a; rm -rf /', action: 'remove' }],
+    ['missing id', { action: 'remove' }],
+  ])('rejects docker image removal with %s', async (_label, body) => {
+    expect((await post('docker/images/action', body)).status).toBe(400);
+  });
+
+  it('accepts a well-formed image reference', async () => {
+    expect((await post('docker/images/action', { id: 'nginx:alpine', action: 'remove' })).status).toBe(200);
   });
 });

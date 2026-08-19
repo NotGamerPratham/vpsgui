@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Image as ImageIcon, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Trash2, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 
@@ -19,6 +19,36 @@ export function DockerImagesPage() {
     setError(fetchError);
     setLoading(false);
   }, []);
+
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  /** Remove an image via `docker rmi`, retrying with -f only after an explicit confirmation. */
+  const handleRemove = async (img: DockerImageItem) => {
+    const ref = img.repository && img.repository !== '<none>' ? `${img.repository}:${img.tag}` : img.id;
+    if (!window.confirm(`Remove image ${ref}? This cannot be undone.`)) return;
+
+    setRemovingId(img.id);
+    setError(null);
+
+    let result = await dockerService.removeImage(ref, false);
+    // docker refuses while a container still references the image; forcing is the user's call.
+    if (!result.success && /is being used|container/i.test(result.output || '')) {
+      if (window.confirm(`${ref} is still referenced by a container.
+
+${result.output}
+
+Force removal?`)) {
+        result = await dockerService.removeImage(ref, true);
+      } else {
+        setRemovingId(null);
+        return;
+      }
+    }
+
+    if (!result.success) setError(`Remove failed: ${(result.output || 'unknown error').slice(0, 300)}`);
+    await refresh();
+    setRemovingId(null);
+  };
 
   useEffect(() => {
     refresh();
@@ -87,16 +117,15 @@ export function DockerImagesPage() {
                     {img.created ? new Date(img.created).toLocaleString() : 'unknown'}
                   </TableCell>
                   <TableCell className="text-right">
-                    {/* The delete control had no handler and the agent exposes no image-remove
-                        endpoint, so it is shown as unavailable rather than as a working button. */}
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled
-                      title="Image removal is not supported by the agent — run `docker rmi` from the Terminal page"
-                      className="h-7 w-7 p-0"
+                      onClick={() => handleRemove(img)}
+                      disabled={removingId === img.id}
+                      title={`docker rmi ${img.repository}:${img.tag}`}
+                      className="h-7 w-7 p-0 hover:text-rose-400"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {removingId === img.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </Button>
                   </TableCell>
                 </TableRow>

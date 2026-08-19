@@ -1198,7 +1198,7 @@ const CATALOG_ITEMS = [
  * state instead of spraying console errors on every page load. `/agent/info` advertises them as
  * unsupported so the frontend can say why.
  */
-const UNIMPLEMENTED_FEATURES = ['deployments', 'backups', 'secrets'];
+const UNIMPLEMENTED_FEATURES = [];
 
 // ---------------------------------------------------------------------------
 // Users, audit log, health matrix, topology, timers, cron
@@ -1699,6 +1699,380 @@ async function renamePath(fromPath, toPath) {
 }
 
 // ---------------------------------------------------------------------------
+// Git deployments, archive backups, encrypted secrets
+// ---------------------------------------------------------------------------
+
+// Where to look for git checkouts. Scanning every file root recursively would be far too slow, so
+// this is a small, explicit list walked to a shallow depth.
+const DEPLOY_ROOTS = (process.env.AGENT_DEPLOY_ROOTS
+  ? process.env.AGENT_DEPLOY_ROOTS.split(',').map((p) => p.trim()).filter(Boolean)
+  : ['/var/www', '/opt', '/srv', '/home']
+).map((p) => path.resolve(p));
+
+const DEPLOY_SCAN_DEPTH = 3;
+
+/** Directories that never contain a deployment and would dominate the scan. */
+const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'dist', 'build', '.cache', 'tmp', 'proc', 'sys']);
+
+/** Find git checkouts under DEPLOY_ROOTS, breadth-limited so the scan stays fast. */
+async function findGitRepos() {
+  const found = [];
+  const seen = new Set();
+
+  async function walk(dir, depth) {
+    if (depth > DEPLOY_SCAN_DEPTH || found.length >= 50) return;
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch (e) {
+      return;
+    }
+
+    if (entries.some((e) => e.isDirectory() && e.name === '.git')) {
+      if (!seen.has(dir)) {
+        seen.add(dir);
+        found.push(dir);
+      }
+      // A repository's subdirectories are part of that checkout, not separate deployments.
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+      await walk(path.join(dir, entry.name), depth + 1);
+    }
+  }
+
+  for (const root of DEPLOY_ROOTS) await walk(root, 0);
+  return found;
+}
+
+/**
+ * Git checkouts on the host, reported as deployments.
+ *
+ * There is no build pipeline to invent a history from, so this describes what is actually deployed
+ * right now: the commit each checkout is on, whether it has local modifications, and how far it has
+ * drifted from its remote.
+ */
+async function getDeployments() {
+  if (os.platform() === 'win32') return [];
+  const repos = await findGitRepos();
+
+  return Promise.all(
+    repos.map(async (repo, index) => {
+      const git = (args) => tryRun('git', ['-C', repo, ...args], { timeout: 8000 });
+
+      const [branch, sha, subject, when, remote, status, tracking] = await Promise.all([
+        git(['rev-parse', '--abbrev-ref', 'HEAD']),
+        git(['rev-parse', '--short', 'HEAD']),
+        git(['log', '-1', '--pretty=%s']),
+        git(['log', '-1', '--pretty=%cI']),
+        git(['config', '--get', 'remote.origin.url']),
+        git(['status', '--porcelain']),
+        git(['rev-list', '--left-right', '--count', 'HEAD...@{u}']),
+      ]);
+
+      const dirtyCount = (status || '').trim() ? (status || '').trim().split('\n').length : 0;
+      // `rev-list --left-right --count HEAD...@{u}` prints "<ahead>\t<behind>".
+      const [aheadRaw, behindRaw] = (tracking || '').trim().split(/\s+/);
+      const ahead = Number.parseInt(aheadRaw, 10) || 0;
+      const behind = Number.parseInt(behindRaw, 10) || 0;
+
+      return {
+        id: `repo-${index}`,
+        path: repo,
+        app: path.basename(repo),
+        branch: (branch || '').trim() || 'unknown',
+        commit: (sha || '').trim() || 'unknown',
+        message: (subject || '').trim(),
+        // ISO-8601 from git; null when the repo has no commits yet.
+        committedAt: (when || '').trim() || null,
+        remote: (remote || '').trim(),
+        dirtyCount,
+        ahead,
+        behind,
+        // Derived purely from measured state — nothing here is a placeholder.
+        status: dirtyCount > 0 ? 'modified' : behind > 0 ? 'behind' : 'clean',
+      };
+    })
+  );
+}
+
+/** `git pull --ff-only` in a checkout, refusing anything that would need a merge commit. */
+async function pullDeployment(repoPath) {
+  if (typeof repoPath !== 'string' || !repoPath.trim()) {
+    return { status: 400, body: { success: false, output: 'A repository path is required' } };
+  }
+
+  const resolved = path.resolve(repoPath);
+  const known = await findGitRepos();
+  // Only repositories the scan already reported may be pulled, so an arbitrary path cannot be
+  // handed to git.
+  if (!known.includes(resolved)) {
+    return { status: 403, body: { success: false, output: 'Not a known deployment path' } };
+  }
+
+  try {
+    const output = await run('git', ['-C', resolved, 'pull', '--ff-only'], { timeout: 120000 });
+    return { status: 200, body: { success: true, output: output.trim() || 'Already up to date.' } };
+  } catch (e) {
+    return { status: 200, body: { success: false, output: execErrorPayload(e) } };
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+const BACKUP_DIR = path.resolve(process.env.AGENT_BACKUP_DIR || '/var/backups/vpsgui');
+const ARCHIVE_SUFFIX = '.tar.gz';
+/** Archive names are generated from this pattern; anything else is rejected. */
+const ARCHIVE_NAME = /^[a-zA-Z0-9._-]{1,120}$/;
+
+/** tar.gz archives previously created by this agent. */
+async function getBackups() {
+  if (os.platform() === 'win32') return [];
+
+  let entries;
+  try {
+    entries = await fsp.readdir(BACKUP_DIR, { withFileTypes: true });
+  } catch (e) {
+    // The directory is created on first backup; absent simply means none have been taken.
+    return [];
+  }
+
+  const backups = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(ARCHIVE_SUFFIX)) continue;
+    const full = path.join(BACKUP_DIR, entry.name);
+    let stat;
+    try {
+      stat = await fsp.stat(full);
+    } catch (e) {
+      continue;
+    }
+    backups.push({
+      id: entry.name,
+      name: entry.name,
+      path: full,
+      sizeBytes: stat.size,
+      size: `${Math.round((stat.size / 1048576) * 10) / 10} MB`,
+      target: BACKUP_DIR,
+      date: stat.mtime.toISOString(),
+      status: 'complete',
+    });
+  }
+
+  return backups.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Create a tar.gz of a directory inside the agent's file roots. */
+async function createBackup(sourcePath, label) {
+  // Confine the source BEFORE the platform check, so an escape attempt is a 403 on any host rather
+  // than being masked by a "not supported here" 400.
+  const safe = await resolveSafePath(sourcePath);
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+
+  if (os.platform() === 'win32') {
+    return { status: 400, body: { success: false, error: 'Backups require a Linux host with tar.' } };
+  }
+
+  const stat = await fsp.stat(safe.path).catch(() => null);
+  if (!stat) return { status: 404, body: { success: false, error: 'Source path not found' } };
+
+  const slug = (label && String(label).trim()) || path.basename(safe.path) || 'backup';
+  const safeSlug = slug.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 60);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const name = `${safeSlug}-${stamp}${ARCHIVE_SUFFIX}`;
+  if (!ARCHIVE_NAME.test(name)) {
+    return { status: 400, body: { success: false, error: 'Could not derive a valid archive name' } };
+  }
+
+  try {
+    await fsp.mkdir(BACKUP_DIR, { recursive: true, mode: 0o700 });
+    // -C <parent> <basename> keeps the archive relative, so it does not unpack absolute paths.
+    await run(
+      'tar',
+      ['czf', path.join(BACKUP_DIR, name), '-C', path.dirname(safe.path), path.basename(safe.path)],
+      { timeout: 600000, maxBuffer: 8 * 1024 * 1024 }
+    );
+    return { status: 200, body: { success: true, name, path: path.join(BACKUP_DIR, name) } };
+  } catch (e) {
+    return { status: 200, body: { success: false, error: execErrorPayload(e) } };
+  }
+}
+
+/** Delete an archive from the backup directory. */
+async function deleteBackup(name) {
+  if (typeof name !== 'string' || !ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
+    return { status: 400, body: { success: false, error: 'Invalid archive name' } };
+  }
+  // The name pattern excludes path separators, so this cannot escape BACKUP_DIR.
+  try {
+    await fsp.unlink(path.join(BACKUP_DIR, name));
+    return { status: 200, body: { success: true } };
+  } catch (e) {
+    return { status: e.code === 'ENOENT' ? 404 : 500, body: { success: false, error: e.message } };
+  }
+}
+
+/** Extract an archive back over a destination inside the file roots. */
+async function restoreBackup(name, destination) {
+  if (typeof name !== 'string' || !ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
+    return { status: 400, body: { success: false, error: 'Invalid archive name' } };
+  }
+
+  const safe = await resolveSafePath(destination);
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error } };
+
+  const archive = path.join(BACKUP_DIR, name);
+  if (!(await fsp.stat(archive).catch(() => null))) {
+    return { status: 404, body: { success: false, error: 'Archive not found' } };
+  }
+
+  try {
+    await run('tar', ['xzf', archive, '-C', safe.path], { timeout: 600000 });
+    return { status: 200, body: { success: true, restoredTo: safe.path } };
+  } catch (e) {
+    return { status: 200, body: { success: false, error: execErrorPayload(e) } };
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+const SECRETS_FILE = path.join(__dirname, '.secrets.json');
+const SECRETS_KEY_FILE = path.join(__dirname, '.secrets-key');
+const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,64}$/;
+
+/**
+ * Load (or create) the AES key used to encrypt secret values.
+ *
+ * IMPORTANT — what this does and does not protect against. Values are encrypted at rest with
+ * AES-256-GCM, so they do not appear in plaintext in the store, in backups of it, or in anything
+ * that happens to read the file. It does NOT protect against root on this host: the agent runs as
+ * root and must be able to decrypt, so the key sits beside the data. Use a dedicated secret manager
+ * if you need protection from a compromised host.
+ */
+async function getSecretsKey() {
+  try {
+    const existing = await fsp.readFile(SECRETS_KEY_FILE, 'utf-8');
+    const buf = Buffer.from(existing.trim(), 'hex');
+    if (buf.length === 32) return buf;
+  } catch (e) {
+    /* generate below */
+  }
+  const key = crypto.randomBytes(32);
+  await fsp.writeFile(SECRETS_KEY_FILE, key.toString('hex'), { mode: 0o600 });
+  await fsp.chmod(SECRETS_KEY_FILE, 0o600).catch(() => {});
+  return key;
+}
+
+async function readSecretStore() {
+  try {
+    const raw = await fsp.readFile(SECRETS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function writeSecretStore(entries) {
+  await fsp.writeFile(SECRETS_FILE, JSON.stringify(entries, null, 2), { mode: 0o600 });
+  await fsp.chmod(SECRETS_FILE, 0o600).catch(() => {});
+}
+
+function encryptValue(key, plaintext) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
+  return {
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    data: enc.toString('base64'),
+  };
+}
+
+function decryptValue(key, record) {
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(record.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(record.tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(record.data, 'base64')), decipher.final()]).toString('utf-8');
+}
+
+/** Secret metadata. Values are never included — reveal is a separate, explicit request. */
+async function getSecrets() {
+  const entries = await readSecretStore();
+  return entries.map((e) => ({
+    id: e.name,
+    name: e.name,
+    type: e.type || 'env',
+    environment: e.environment || 'production',
+    // A fixed mask: revealing even the length of a secret is unnecessary.
+    maskedValue: '••••••••',
+    updatedBy: 'agent',
+    updatedAt: e.updatedAt,
+  }));
+}
+
+async function upsertSecret({ name, value, type, environment }) {
+  if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
+    return { status: 400, body: { success: false, error: 'Name must match [A-Za-z_][A-Za-z0-9_]{0,64}' } };
+  }
+  if (typeof value !== 'string' || value.length === 0) {
+    return { status: 400, body: { success: false, error: 'A non-empty value is required' } };
+  }
+  if (value.length > 8192) {
+    return { status: 400, body: { success: false, error: 'Value exceeds 8 KiB' } };
+  }
+
+  const key = await getSecretsKey();
+  const entries = await readSecretStore();
+  const record = {
+    name,
+    type: typeof type === 'string' && type ? type.slice(0, 32) : 'env',
+    environment: typeof environment === 'string' && environment ? environment.slice(0, 32) : 'production',
+    updatedAt: new Date().toISOString(),
+    ...encryptValue(key, value),
+  };
+
+  const idx = entries.findIndex((e) => e.name === name);
+  if (idx >= 0) entries[idx] = record;
+  else entries.push(record);
+
+  await writeSecretStore(entries);
+  return { status: 200, body: { success: true, name } };
+}
+
+async function deleteSecret(name) {
+  if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
+    return { status: 400, body: { success: false, error: 'Invalid secret name' } };
+  }
+  const entries = await readSecretStore();
+  const remaining = entries.filter((e) => e.name !== name);
+  if (remaining.length === entries.length) {
+    return { status: 404, body: { success: false, error: 'Secret not found' } };
+  }
+  await writeSecretStore(remaining);
+  return { status: 200, body: { success: true } };
+}
+
+async function revealSecret(name) {
+  if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
+    return { status: 400, body: { success: false, error: 'Invalid secret name' } };
+  }
+  const entries = await readSecretStore();
+  const record = entries.find((e) => e.name === name);
+  if (!record) return { status: 404, body: { success: false, error: 'Secret not found' } };
+
+  try {
+    const key = await getSecretsKey();
+    return { status: 200, body: { success: true, name, value: decryptValue(key, record) } };
+  } catch (e) {
+    // A GCM tag mismatch means the store was tampered with or the key no longer matches.
+    return { status: 500, body: { success: false, error: 'Could not decrypt — the key may have changed' } };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Node payload
 // ---------------------------------------------------------------------------
 
@@ -1979,16 +2353,6 @@ async function handleRequest(req, res)
     return;
   }
 
-  // Features with no backing implementation. 200 + empty list keeps the console clean and lets the
-  // UI explain itself; see UNIMPLEMENTED_FEATURES.
-  if (
-    method === 'GET' &&
-    ['/api/v1/deployments', '/api/v1/backups', '/api/v1/security/secrets'].includes(pathname)
-  ) {
-    sendJson(res, 200, []);
-    return;
-  }
-
   if (method === 'GET' && pathname === '/api/v1/users') {
     sendJson(res, 200, await getSystemUsers());
     return;
@@ -2164,6 +2528,117 @@ async function handleRequest(req, res)
     }
     const result = await renamePath(parsed.body.from, parsed.body.to);
     sendJson(res, result.status, result.body);
+    return;
+  }
+
+  // ---- Deployments (git checkouts) ----
+  if (method === 'GET' && pathname === '/api/v1/deployments') {
+    sendJson(res, 200, await getDeployments());
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/deployments/pull') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, output: parsed.error });
+      return;
+    }
+    const result = await pullDeployment(parsed.body.path);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
+  // ---- Backups (tar.gz archives) ----
+  if (method === 'GET' && pathname === '/api/v1/backups') {
+    sendJson(res, 200, await getBackups());
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/backups/create') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await createBackup(parsed.body.sourcePath, parsed.body.label);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/backups/delete') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await deleteBackup(parsed.body.name);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/backups/restore') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await restoreBackup(parsed.body.name, parsed.body.destination);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
+  // ---- Secrets (encrypted at rest) ----
+  if (method === 'GET' && pathname === '/api/v1/security/secrets') {
+    sendJson(res, 200, await getSecrets());
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/security/secrets') {
+    const parsed = await parseJsonBody(req, 32 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await upsertSecret(parsed.body || {});
+    sendJson(res, result.status, result.body);
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/security/secrets/delete') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await deleteSecret(parsed.body.name);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+  if (method === 'POST' && pathname === '/api/v1/security/secrets/reveal') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await revealSecret(parsed.body.name);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
+  // ---- Docker image removal ----
+  if (method === 'POST' && pathname === '/api/v1/docker/images/action') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, output: parsed.error });
+      return;
+    }
+    const { id, action, force } = parsed.body;
+    if (action !== 'remove' || typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,127}$/.test(id)) {
+      sendJson(res, 400, { success: false, output: 'Invalid action or image id' });
+      return;
+    }
+    try {
+      // -f is opt-in: without it docker refuses to remove an image still used by a container.
+      const args = force === true ? ['rmi', '-f', '--', id] : ['rmi', '--', id];
+      const output = await run('docker', args, { timeout: 60000 });
+      sendJson(res, 200, { success: true, output: output.trim() });
+    } catch (e) {
+      sendJson(res, 200, { success: false, output: execErrorPayload(e) });
+    }
     return;
   }
 
