@@ -1,114 +1,87 @@
 # vpsgui
 
-Official Python SDK for the **VPSGUI** REST API.
+Official Python SDK for the [VPSGUI](https://github.com/NotGamerPratham/vpsgui) agent REST API.
 
-Manage VPS nodes, Docker containers, telemetry, files, security, databases, backups, and more -- all from Python.
-
-**Repository**: [github.com/NotGamerPratham/vpsgui](https://github.com/NotGamerPratham/vpsgui)
-**Author**: [NotGamerPratham](https://notgamerpratham.com)
-
----
-
-## Installation
+## Install
 
 ```bash
 pip install vpsgui
 ```
 
----
+Requires Python 3.8+.
 
-## Quick Start
+## ⚠️ The agent token is a root password
+
+Every endpoint except `health()` requires the agent token, and that token grants **root-equivalent
+control of the host**: shell execution, package installs, and filesystem read/write. Read it from
+the environment, never commit it, and only talk to the agent over HTTPS — it travels in the
+`Authorization` header.
+
+## Usage
 
 ```python
+import os
 from vpsgui import VpsguiClient
 
-client = VpsguiClient(
-    base_url="https://your-vps-ip/api/v1",
-    token="your-jwt-auth-token",
-)
+with VpsguiClient(
+    base_url="https://vps.example.com/api/v1",
+    token=os.environ["VPSGUI_AGENT_TOKEN"],
+) as client:
+    telemetry = client.system.telemetry()
+    print(f"CPU {telemetry['cpuPercent']}% across {telemetry['cpuCores']} cores")
 
-# List all connected VPS nodes
-nodes = client.nodes.list()
-print(nodes)
-
-# List Docker containers
-containers = client.docker.list_containers()
-
-# Get system telemetry
-telemetry = client.system.telemetry()
-
-# Browse files on the VPS
-files = client.files.list("/etc/nginx")
-
-# List firewall rules
-rules = client.security.list_firewall_rules()
+    for container in client.docker.list_containers():
+        print(container["name"], container["state"], container["image"])
 ```
 
----
+## API
 
-## API Reference
+| Resource | Methods |
+| :--- | :--- |
+| `client.nodes` | `get()`, `list()`, `topology()`, `health()` |
+| `client.system` | `telemetry()`, `processes()`, `services()`, `service_action(name, action)`, `packages()`, `install_package(name)`, `users()` |
+| `client.docker` | `list_containers()`, `list_images()`, `container_action(id, action)`, `remove_image(id, force=False)` |
+| `client.files` | `list(path)`, `read(path)`, `write(path, content)`, `mkdir(path)`, `delete(path, recursive=False)`, `rename(src, dst)` |
+| `client.security` | `firewall_rules()`, `apply_firewall_rule(...)`, `ssh_keys()`, `audit_logs()`, `list_secrets()`, `save_secret(...)`, `delete_secret(name)`, `reveal_secret(name)` |
+| `client.network` | `interfaces()`, `ip_info(ip=None)` |
+| `client.storage` | `partitions()` |
+| `client.backups` | `list()`, `create(source_path, label=None)`, `delete(name)`, `restore(name, destination)` |
+| `client.deployments` | `list()`, `pull(path)` |
+| `client.catalog` | `list()` |
+| `client.automation` | `workflows()` |
+| `client.queue` | `jobs()` |
+| `client.databases` | `list()` |
+| `client.proxy` | `rules()` |
+| `client.terminal` | `exec(command)` |
+| top level | `health()`, `info()`, `close()` |
 
-### `VpsguiClient(base_url, token=None, timeout=30)`
-
-| Parameter  | Type  | Required | Description                             |
-|------------|-------|----------|-----------------------------------------|
-| `base_url` | `str` | Yes      | VPSGUI API base URL                     |
-| `token`    | `str` | No       | JWT Bearer authentication token         |
-| `timeout`  | `int` | No       | Request timeout in seconds (default: 30)|
-
-### Resources
-
-| Resource                | Methods                                                              |
-|-------------------------|----------------------------------------------------------------------|
-| `client.nodes`          | `list()`, `get(id)`, `create(payload)`, `delete(id)`, `reboot(id)` |
-| `client.docker`         | `list_containers()`, `list_images()`, `start_container(id)`, `stop_container(id)`, `restart_container(id)`, `delete_container(id)`, `container_logs(id)` |
-| `client.system`         | `telemetry()`, `processes()`                                        |
-| `client.files`          | `list(path)`, `read(file_path)`                                     |
-| `client.security`       | `list_firewall_rules()`, `list_secrets()`, `list_audit_logs()`, `list_ssh_keys()` |
-| `client.catalog`        | `list()`, `deploy(item_id, config)`                                 |
-| `client.automation`     | `list()`, `trigger(workflow_id)`                                    |
-| `client.queue`          | `list()`                                                             |
-| `client.storage`        | `list_partitions()`                                                  |
-| `client.network`        | `list_interfaces()`                                                  |
-| `client.backups`        | `list()`, `create(config)`, `restore(backup_id)`                    |
-| `client.databases`      | `list()`                                                             |
-| `client.deployments`    | `list()`                                                             |
-| `client.proxy`          | `list()`                                                             |
-| `client.health`         | `matrix()`                                                           |
-
----
-
-## Error Handling
+## Errors
 
 ```python
-from vpsgui import VpsguiClient, VpsguiApiError
-
-client = VpsguiClient(base_url="https://your-vps-ip/api/v1", token="your-token")
+from vpsgui import VpsguiClient, VpsguiError
 
 try:
-    nodes = client.nodes.list()
-except VpsguiApiError as e:
-    print(f"API Error {e.status_code}: {e.status_text}")
-    print(f"Response body: {e.body}")
+    client.system.telemetry()
+except VpsguiError as e:
+    # status is 0 for transport failures (timeout, DNS, connection refused).
+    print(e.status, e.endpoint, e.message)
+    if e.is_auth_error:
+        print("Bad token, or locked out after repeated failures.")
 ```
 
----
+## `None` values are deliberate
 
-## Advanced: Update Token at Runtime
+Fields the agent cannot determine are `None` rather than guessed. Check before formatting:
 
-```python
-client.set_token("new-jwt-token")
-```
+- `smartHealth` — needs `smartctl` and raw device access
+- `cpuPercent` on a process — Windows `tasklist` reports none
+- `city` / `region` from `ip_info()` — ipinfo's `/lite` tier is country-level
+- `size` / `tables` / `keys` on a database — would need per-engine credentials
+- `downloadsCount` / `rating` on a catalog item — the agent queries no registry
 
----
-
-## Requirements
-
-- Python >= 3.8
-- `requests >= 2.28.0`
-
----
+`read()` also returns `truncated: True` and `editable: False` for a file that exceeded the read cap.
+**Do not write that content back** — it would truncate the file on disk.
 
 ## License
 
-MIT -- [NotGamerPratham](https://notgamerpratham.com)
+MIT © [NotGamerPratham](https://notgamerpratham.com)

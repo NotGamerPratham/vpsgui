@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpsgui"
-version = "1.0.0"
+version = "1.1.0"
 description = "Official Python SDK for the VPSGUI REST API - manage VPS nodes, Docker containers, telemetry, files, security, and more."
 readme = "README.md"
 license = {text = "MIT"}

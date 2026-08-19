@@ -1,13 +1,13 @@
-"""
-VPSGUI Python SDK
-Official Python client for the VPSGUI REST API.
+"""VPSGUI Python SDK.
+
+Official Python client for the VPSGUI agent REST API.
 
 Author: NotGamerPratham (https://notgamerpratham.com)
 Repository: https://github.com/NotGamerPratham/vpsgui
 """
 
-from vpsgui.client import VpsguiClient, VpsguiApiError
+from vpsgui.client import VpsguiClient, VpsguiError
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "NotGamerPratham"
-__all__ = ["VpsguiClient", "VpsguiApiError"]
+__all__ = ["VpsguiClient", "VpsguiError"]

@@ -88,3 +88,80 @@ jobs:
         run: |
           curl -fsS -H 'Authorization: Bearer ci-token-0123456789abcdef' \
             http://127.0.0.1:46509/api/v1/system/telemetry | grep -q '"cpuPercent"'
+
+  sdks:
+    name: SDKs compile and match the agent API
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The SDKs drifted badly once before: the Python client called endpoints such as
+      # /docker/containers/{id}/start and /nodes/{id}/reboot that the agent has never served, so
+      # most calls would have failed at runtime. These steps compile both and exercise them against
+      # a real agent.
+      - name: Build the Node SDK
+        working-directory: sdk/node
+        run: npm install && npx tsc
+
+      - name: Install Python SDK dependencies
+        run: pip install requests
+
+      - name: Start the agent
+        env:
+          AGENT_TOKEN: ci-token-0123456789abcdef
+          AGENT_HOST: 127.0.0.1
+          PORT: '46509'
+        run: |
+          node agent/server.js &
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:46509/api/v1/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Agent failed to become healthy" >&2
+          exit 1
+
+      - name: Node SDK talks to the agent
+        run: |
+          node -e "
+          const { VpsguiClient, VpsguiError } = require('./sdk/node/dist/index.js');
+          (async () => {
+            const c = new VpsguiClient({ baseUrl: 'http://127.0.0.1:46509/api/v1', token: 'ci-token-0123456789abcdef' });
+            if ((await c.health()).status !== 'ok') throw new Error('health failed');
+            if (!(await c.system.telemetry()).cpuCores) throw new Error('telemetry failed');
+            if (!(await c.catalog.list()).length) throw new Error('catalog failed');
+            const bad = new VpsguiClient({ baseUrl: 'http://127.0.0.1:46509/api/v1', token: 'wrong' });
+            try { await bad.system.telemetry(); throw new Error('expected 401'); }
+            catch (e) { if (!(e instanceof VpsguiError) || e.status !== 401) throw e; }
+            console.log('Node SDK OK');
+          })().catch(e => { console.error(e); process.exit(1); });
+          "
+
+      - name: Python SDK talks to the agent
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'sdk/python')
+          from vpsgui import VpsguiClient, VpsguiError
+
+          c = VpsguiClient(base_url="http://127.0.0.1:46509/api/v1", token="ci-token-0123456789abcdef")
+          assert c.health()["status"] == "ok"
+          assert c.system.telemetry()["cpuCores"] > 0
+          assert len(c.catalog.list()) > 0
+
+          bad = VpsguiClient(base_url="http://127.0.0.1:46509/api/v1", token="wrong")
+          try:
+              bad.system.telemetry()
+              raise AssertionError("expected 401")
+          except VpsguiError as e:
+              assert e.status == 401 and e.is_auth_error
+          print("Python SDK OK")
+          PY
