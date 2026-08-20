@@ -134,6 +134,55 @@ describe('agent: host inventory endpoints', () => {
     }
   });
 
+  it('reports a parsed version for every runtime it says is installed', async () => {
+    const res = await fetch(`${BASE}/api/v1/system/packages`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const { languages, packages } = await res.json();
+
+    expect(Array.isArray(languages)).toBe(true);
+    expect(Array.isArray(packages)).toBe(true);
+
+    // The agent runs on Node, so Node is installed by definition. This is the
+    // one runtime that can be asserted on unconditionally.
+    const node = languages.find((l: { binary: string }) => l.binary === 'node');
+    expect(node.installed).toBe(true);
+
+    // Versions used to be the raw first line of the banner: "v22.23.2",
+    // "go version go1.22.0 linux/amd64", 'openjdk version "17.0.9"'. Go and
+    // Java reported null outright, because `go --version` is not valid Go and
+    // `java -version` writes to stderr, which the runner discarded.
+    expect(node.version).toMatch(/^\d+\.\d+/);
+
+    for (const lang of languages) {
+      if (!lang.installed) {
+        // Nothing is claimed about a tool that is not there.
+        expect(lang.version).toBeNull();
+        continue;
+      }
+      expect(typeof lang.version === 'string' || lang.version === null).toBe(true);
+      if (typeof lang.version === 'string') {
+        expect(lang.version).not.toMatch(/^v/);
+        expect(lang.version.length).toBeLessThan(40);
+      }
+    }
+  });
+
+  it('probes a PATH wider than the one a service inherits', async () => {
+    // Bun installs to ~/.bun/bin and Deno to ~/.deno/bin. A login shell adds
+    // those from .bashrc; systemd and pm2 do not, so the agent reported them as
+    // not installed on hosts where `bun -v` worked over ssh. There is no way to
+    // assert the outcome portably, but the entries must at least be present and
+    // well-formed so the UI can offer an install.
+    const res = await fetch(`${BASE}/api/v1/system/packages`, { headers: AUTH });
+    const { languages } = await res.json();
+
+    for (const binary of ['bun', 'deno']) {
+      const entry = languages.find((l: { binary: string }) => l.binary === binary);
+      expect(entry).toBeDefined();
+      expect(typeof entry.installed).toBe('boolean');
+    }
+  });
+
   it('never reports a fabricated SMART verdict', async () => {
     const res = await fetch(`${BASE}/api/v1/storage/partitions`, { headers: AUTH });
     for (const part of await res.json()) {

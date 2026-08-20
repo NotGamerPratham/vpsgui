@@ -30,14 +30,20 @@ class TelemetryWebSocket {
   private shouldReconnect = false;
 
   get connected(): boolean {
-    return this.socket?.readyState === WebSocket.OPEN;
+    // Read the instance, never the `WebSocket` global. With no socket there is
+    // nothing to compare against, and touching the global throws outright in any
+    // environment that does not define it - Node 20 under CI, or SSR. Since this
+    // transport is dormant by default, that path is the common one.
+    const socket = this.socket;
+    return socket !== null && socket.readyState === socket.OPEN;
   }
 
   /** No-op when VITE_WS_URL is unset, so the polling transport stays the single source of truth. */
   connect(): void {
     const url = getWsUrl();
     if (!url) return;
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    const existing = this.socket;
+    if (existing && (existing.readyState === existing.OPEN || existing.readyState === existing.CONNECTING)) {
       return;
     }
 

@@ -40,6 +40,20 @@ describe('telemetrySocket', () => {
   it('disconnect() is safe to call when never connected', () => {
     expect(() => telemetrySocket.disconnect()).not.toThrow();
   });
+
+  it('works in an environment with no WebSocket global at all', () => {
+    // Node 20 defines no global WebSocket; Node 22 does. CI runs 20 and this
+    // repo develops on 22, so reading `WebSocket.OPEN` to answer "am I
+    // connected?" passed locally and threw ReferenceError in CI. Deleting the
+    // global here reproduces the older runtime whichever Node runs the suite.
+    vi.stubGlobal('WebSocket', undefined);
+
+    expect(() => telemetrySocket.connected).not.toThrow();
+    expect(telemetrySocket.connected).toBe(false);
+    expect(() => telemetrySocket.connect()).not.toThrow();
+    expect(() => telemetrySocket.send('ping', {})).not.toThrow();
+    expect(() => telemetrySocket.disconnect()).not.toThrow();
+  });
 });
 
 describe('event bus telemetry contract', () => {

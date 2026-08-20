@@ -454,8 +454,35 @@ async function run(file, args, opts = {})
     timeout: opts.timeout || EXEC_TIMEOUT_MS,
     maxBuffer: opts.maxBuffer || MAX_EXEC_BUFFER_BYTES,
     windowsHide: true,
+    ...(opts.env ? { env: opts.env } : {}),
   });
   return stdout;
+}
+
+// stdout and stderr together. `java -version` writes to stderr, as do several
+// other tools, so probing them through run() alone reported them as installed
+// with an unknown version.
+async function runCombined(file, args, opts = {})
+{
+  const { stdout, stderr } = await execFileAsync(file, args, {
+    encoding: 'utf-8',
+    timeout: opts.timeout || EXEC_TIMEOUT_MS,
+    maxBuffer: opts.maxBuffer || MAX_EXEC_BUFFER_BYTES,
+    windowsHide: true,
+    ...(opts.env ? { env: opts.env } : {}),
+  });
+  return `${stdout || ''}${stderr || ''}`;
+}
+
+async function tryRunCombined(file, args, opts)
+{
+  try {
+    return await runCombined(file, args, opts);
+  } catch (e) {
+    // Some tools exit non-zero while still printing their version.
+    const merged = `${(e && e.stdout) || ''}${(e && e.stderr) || ''}`;
+    return merged.trim() ? merged : null;
+  }
 }
 
 // Only for the explicit user-driven terminal, which is shell-by-design.
@@ -1070,14 +1097,84 @@ async function getRealDirectoryContents(targetDir)
 // Packages & services
 // ---------------------------------------------------------------------------
 
-async function probeBinary(bin, versionFlag)
+/**
+ * PATH to probe binaries with.
+ *
+ * A service does not inherit the PATH a login shell builds. Bun installs to
+ * ~/.bun/bin, Deno to ~/.deno/bin, Rust to ~/.cargo/bin and Go to
+ * /usr/local/go/bin - all of which .bashrc adds for an interactive session and
+ * systemd/pm2 never sees. The result was `bun -v` working over ssh while this
+ * agent reported Bun as not installed on the very same host.
+ *
+ * The process PATH stays first, so an operator's own configuration still wins.
+ */
+const PROBE_PATH = (() =>
 {
+  if (os.platform() === 'win32') return process.env.PATH || '';
+
+  const home = os.homedir() || '/root';
+  const candidates = [
+    '/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin',
+    '/snap/bin',
+    '/usr/local/go/bin',
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.deno', 'bin'),
+    path.join(home, '.cargo', 'bin'),
+    path.join(home, '.local', 'bin'),
+  ];
+
+  const seen = new Set();
+  const parts = [];
+  for (const entry of String(process.env.PATH || '').split(path.delimiter).concat(candidates)) {
+    if (entry && !seen.has(entry)) {
+      seen.add(entry);
+      parts.push(entry);
+    }
+  }
+  return parts.join(path.delimiter);
+})();
+
+/**
+ * The version number out of a tool's banner.
+ *
+ * Banners are wildly inconsistent - "v22.23.2", "Python 3.14.4", "go version
+ * go1.22.0 linux/amd64", 'openjdk version "17.0.9" 2023-10-17'. Rendering the
+ * raw first line gave a mix of formats, several of which the cards truncated
+ * mid-word. Falls back to the first line when nothing version-shaped is present,
+ * because a banner we cannot parse is still worth more than "version unknown".
+ */
+function extractVersion(raw)
+{
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const match = /(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.]+)?)/.exec(text);
+  if (match) return match[1];
+  const firstLine = (text.split('\n')[0] || '').trim();
+  return firstLine || null;
+}
+
+async function probeBinary(bin, versionArgs)
+{
+  const env = { ...process.env, PATH: PROBE_PATH };
   const locator = os.platform() === 'win32' ? 'where' : 'which';
-  const found = await tryRun(locator, [bin], { timeout: 3000 });
+
+  // `bin` may be a list of alternate names for the same tool - python3 on Linux
+  // and python on Windows are the same interpreter, and probing only the first
+  // reported a real one as missing.
+  let found = null;
+  for (const candidate of Array.isArray(bin) ? bin : [bin]) {
+    found = await tryRun(locator, [candidate], { timeout: 3000, env });
+    if (found) break;
+  }
   if (!found) return { installed: false, version: null };
-  const verOut = await tryRun(bin, [versionFlag || '--version'], { timeout: 5000 });
-  if (!verOut) return { installed: true, version: null };
-  return { installed: true, version: (verOut.split('\n')[0] || '').trim() || null };
+
+  // Invoke the path `which` resolved, not the bare name: the lookup used the
+  // augmented PATH, and execFile would otherwise search the process PATH again
+  // and fail to find exactly the binaries this exists to catch.
+  const resolved = (found.split('\n')[0] || '').trim();
+  if (!resolved) return { installed: true, version: null };
+  const verOut = await tryRunCombined(resolved, versionArgs || ['--version'], { timeout: 5000, env });
+  return { installed: true, version: extractVersion(verOut) };
 }
 
 const PACKAGE_DEFS = [
@@ -1097,11 +1194,11 @@ const PACKAGE_DEFS = [
 
 const LANGUAGE_DEFS = [
   { name: 'Node.js', bin: 'node', category: 'runtime', description: 'JavaScript runtime built on V8' },
-  { name: 'Python', bin: 'python3', category: 'runtime', description: 'High-level programming language' },
-  { name: 'Go (Golang)', bin: 'go', category: 'runtime', description: 'Open source programming language by Google' },
+  { name: 'Python', bin: ['python3', 'python'], category: 'runtime', description: 'High-level programming language' },
+  { name: 'Go (Golang)', bin: 'go', category: 'runtime', versionArgs: ['version'], description: 'Open source programming language by Google' },
   { name: 'Rust', bin: 'rustc', category: 'runtime', description: 'Empowering everyone to build reliable and efficient software' },
   { name: 'PHP', bin: 'php', category: 'runtime', description: 'Popular general-purpose scripting language' },
-  { name: 'OpenJDK (Java)', bin: 'java', category: 'runtime', versionFlag: '-version', description: 'Open-source implementation of Java Platform' },
+  { name: 'OpenJDK (Java)', bin: 'java', category: 'runtime', versionArgs: ['-version'], description: 'Open-source implementation of Java Platform' },
   { name: 'Bun', bin: 'bun', category: 'runtime', description: 'Incredibly fast JavaScript & TypeScript toolkit' },
   { name: 'Deno', bin: 'deno', category: 'runtime', description: 'Modern runtime for JavaScript and TypeScript' },
 ];
@@ -1121,13 +1218,13 @@ async function getRealPackages()
     Promise.all(
       LANGUAGE_DEFS.map(async (def) =>
       {
-        const probe = await probeBinary(def.bin, def.versionFlag);
+        const probe = await probeBinary(def.bin, def.versionArgs);
         return {
           name: def.name,
           category: def.category,
           installed: probe.installed,
           version: probe.version,
-          binary: def.bin,
+          binary: Array.isArray(def.bin) ? def.bin[0] : def.bin,
           description: def.description,
         };
       })
@@ -1143,11 +1240,14 @@ async function getRealServices()
   const output = await tryRun('systemctl', ['list-units', '--type=service', '--all', '--no-legend', '--no-pager', '--plain']);
   if (!output) return [];
 
+  // No cap here. This was `.slice(0, 80)`, which is why a host running 300 units
+  // reported exactly 80 services and looked suspiciously round. Silently
+  // truncating an inventory is the same failure as inventing one: the operator
+  // cannot tell that what they are reading is partial.
   const units = output
     .trim()
     .split('\n')
     .filter(Boolean)
-    .slice(0, 80)
     .map((line) =>
     {
       const cols = line.trim().split(/\s+/);

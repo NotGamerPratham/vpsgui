@@ -16,6 +16,7 @@ import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import { formatNodeLocation, hasKnownLocation } from '../../lib/location';
 
 export function ServersPage() {
   const { nodes, toggleFavorite, rebootNode, verifyNodeConnection } = useServerStore();
@@ -133,8 +134,11 @@ export function ServersPage() {
                 <CardContent className="space-y-3 pt-0 flex-1">
                   <div className="flex items-center justify-between text-xs border-y border-border/40 py-2">
                     <span className="text-muted-foreground">Location</span>
-                    <span className="font-medium text-foreground flex items-center gap-1">
-                      <Globe className="h-3 w-3 text-primary" /> {node.location.city}, {node.location.country}
+                    <span
+                      className={`font-medium flex items-center gap-1 ${hasKnownLocation(node.location) ? 'text-foreground' : 'text-muted-foreground'
+                        }`}
+                    >
+                      <Globe className="h-3 w-3 text-primary" /> {formatNodeLocation(node.location)}
                     </span>
                   </div>
 

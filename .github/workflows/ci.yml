@@ -178,9 +178,12 @@ jobs:
       # /docker/containers/{id}/start and /nodes/{id}/reboot that the agent has never served, so
       # most calls would have failed at runtime. These steps compile both and exercise them against
       # a real agent.
-      - name: Build the Node SDK
+      # `npm run build` rather than a bare `npx tsc`: the build script also marks
+      # dist/cli.js executable, and skipping that is exactly how a global install
+      # ends up failing with "permission denied" on first run.
+      - name: Build the Node SDK and CLI
         working-directory: sdk/node
-        run: npm install && npx tsc
+        run: npm install && npm run build
 
       - name: Install Python SDK dependencies
         run: pip install requests
@@ -235,3 +238,42 @@ jobs:
               assert e.status == 401 and e.is_auth_error
           print("Python SDK OK")
           PY
+
+      # Both packages install a binary called `vpsgui` and only one can win on
+      # PATH, so they must behave identically and share ~/.vpsgui/config.json.
+      # These steps drive each CLI against the running agent and then have the
+      # other one read the profile it wrote.
+      - name: Node CLI logs in and reads the host
+        env:
+          VPSGUI_CONFIG_DIR: /tmp/vpsgui-cli-node
+        run: |
+          cli="node sdk/node/dist/cli.js"
+          $cli --version
+          $cli login 127.0.0.1:46509 --token ci-token-0123456789abcdef
+          $cli whoami | grep -q 'Token accepted'
+          $cli status | grep -q 'cpu'
+          $cli exec 'echo hello-from-ci' | grep -q hello-from-ci
+
+          # A failing remote command must fail the CLI, or `vpsgui exec ... && next`
+          # would run `next` after a failure.
+          if $cli exec 'exit 3'; then
+            echo "FAIL: exec returned 0 for a command that exited 3" >&2
+            exit 1
+          fi
+
+      - name: Python CLI installs and shares the Node CLI's config
+        env:
+          VPSGUI_CONFIG_DIR: /tmp/vpsgui-cli-node
+        run: |
+          pip install ./sdk/python
+          vpsgui --version
+          # The profile below was written by the Node CLI in the previous step.
+          vpsgui whoami | grep -q 'Token accepted'
+          vpsgui status | grep -q 'cpu'
+
+      - name: The shared config contract holds from both sides
+        run: |
+          npm ci
+          npx vitest run tests/cliConfig.test.ts
+          pip install pytest
+          cd sdk/python && python -m pytest tests/ -q
