@@ -75,3 +75,58 @@ npm run typecheck && npm run lint && npm test && npm run build
   shell. The one exception is `/terminal/exec`, which is shell-by-design and token-gated.
 - Add a test in `tests/agentServer.test.ts`. It boots the real daemon and asserts on authentication,
   path confinement, and input validation.
+
+## Releasing
+
+Publishing runs from `.github/workflows/publish.yml` and is triggered by publishing a GitHub
+Release, or manually via **Actions → Publish → Run workflow**. Nothing reaches a registry until the
+`verify` job has built both SDKs, confirmed the `vpsgui` binary exists and is executable, checked
+the tarball actually contains it, and re-run the shared CLI config tests from both sides.
+
+Registry versions cannot be replaced, so bump the version first and let the release be the trigger.
+
+### The Node package goes to two registries under two names
+
+| Registry | Published name | Install |
+| --- | --- | --- |
+| npmjs.com | `vpsgui` | `npm i -g vpsgui` |
+| GitHub Packages | `@notgamerpratham/vpsgui` | `npm i -g @notgamerpratham/vpsgui` (requires auth) |
+
+The names differ because **GitHub Packages only accepts scoped npm packages, and the scope must be
+the repository owner**. `sdk/node/package.json` carries `publishConfig.registry` pointing at GitHub
+Packages, so a bare `npm publish` targets it; the workflow rewrites the name to the scoped form
+first. The npmjs leg overrides the registry instead and keeps the unscoped name, because that is
+what `npm i -g vpsgui` resolves.
+
+The `bin` entry stays `vpsgui` in both, so the command is the same whichever one you install.
+
+Note that GitHub Packages requires an authenticated `.npmrc` to *install* from, even for public
+packages. npmjs.com is therefore the registry to point users at; GitHub Packages is a mirror.
+
+### Secrets
+
+| Secret | Used by | Notes |
+| --- | --- | --- |
+| `NPM_TOKEN` | the npmjs job | An npmjs automation token with publish rights. |
+| `GITHUB_TOKEN` | the GitHub Packages job | Provided automatically; the job requests `packages: write`. |
+
+### The Python package
+
+PyPI publishing is still manual. `sdk/python/pyproject.toml` declares the `vpsgui = "vpsgui.cli:main"`
+console script, so the wheel carries the same CLI.
+
+```bash
+cd sdk/python
+python -m build
+twine upload dist/*
+```
+
+### Keep the two CLIs in step
+
+`sdk/node/src/config.ts` and `sdk/python/vpsgui/config.py` implement the same on-disk format, because
+both packages install a binary called `vpsgui` and only one can win on `PATH`. Change one and you
+must change the other; `tests/cliConfig.test.ts` and `sdk/python/tests/test_config.py` assert the
+contract from both sides and both run in `verify` before anything publishes.
+
+Bump all three versions together: `sdk/node/package.json`, `sdk/python/pyproject.toml`, and
+`sdk/python/vpsgui/__init__.py`, plus `VERSION` in each CLI.

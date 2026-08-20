@@ -15,9 +15,15 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "publish:npm": "npm publish --registry=https://registry.npmjs.org --access public",
+    "publish:github": "npm publish"
   },
   "keywords": [
     "vpsgui",

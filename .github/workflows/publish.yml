@@ -1,0 +1,140 @@
+name: Publish
+
+# Publishing is deliberately tied to a GitHub Release rather than to pushes on
+# main: a version on a registry cannot be replaced, so it should take a
+# deliberate act, not an accidental merge.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which registry to publish to
+        required: true
+        default: both
+        type: choice
+        options: [both, npmjs, github]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Nothing reaches a registry until the thing being published actually works.
+  # A broken publish cannot be undone - the version number is burnt either way.
+  verify:
+    name: Verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the Node SDK and CLI
+        working-directory: sdk/node
+        run: npm install && npm run build
+
+      - name: The published bin entry must exist and be executable
+        working-directory: sdk/node
+        run: |
+          node -e "
+          const pkg = require('./package.json');
+          const fs = require('fs');
+          const bin = pkg.bin.vpsgui;
+          if (!fs.existsSync(bin)) throw new Error(bin + ' is missing from the build');
+          if (process.platform !== 'win32' && !(fs.statSync(bin).mode & 0o111)) {
+            throw new Error(bin + ' is not executable; a global install would fail on first run');
+          }
+          "
+          node dist/cli.js --version
+
+      - name: The tarball must contain the CLI
+        working-directory: sdk/node
+        run: |
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e "
+          const files = require('/tmp/pack.json')[0].files.map(f => f.path);
+          for (const required of ['dist/cli.js', 'dist/config.js', 'dist/index.js']) {
+            if (!files.includes(required)) throw new Error(required + ' is not in the tarball');
+          }
+          "
+
+      - name: Python CLI entry point resolves
+        working-directory: sdk/python
+        run: |
+          pip install --quiet build requests
+          python -m build --wheel
+          pip install --quiet dist/*.whl
+          vpsgui --version
+
+      # Both CLIs read ~/.vpsgui/config.json. If that contract breaks, logging in
+      # with one leaves the other unable to see the profile - so it is asserted
+      # from both sides before either package ships.
+      - name: The shared CLI config contract holds
+        run: |
+          npm ci
+          npx vitest run tests/cliConfig.test.ts
+          cd sdk/python && pip install --quiet pytest && python -m pytest tests/ -q
+
+  npmjs:
+    name: npmjs.com (public, unscoped)
+    needs: verify
+    if: github.event_name == 'release' || inputs.target == 'both' || inputs.target == 'npmjs'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish vpsgui
+        working-directory: sdk/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # This is the one `npm i -g vpsgui` resolves, so it stays unscoped and
+        # overrides the publishConfig registry.
+        run: npm install && npm run publish:npm
+
+  github-packages:
+    name: GitHub Packages (scoped)
+    needs: verify
+    if: github.event_name == 'release' || inputs.target == 'both' || inputs.target == 'github'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://npm.pkg.github.com
+
+      # GitHub Packages only accepts scoped names, and the scope must be the
+      # repository owner. The published name therefore differs from the npmjs
+      # one; renaming here rather than in package.json keeps `vpsgui` as the
+      # name everywhere else, including the `bin` entry, which is unaffected.
+      - name: Scope the name to the repository owner
+        working-directory: sdk/node
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          npm pkg set name="@$owner/vpsgui"
+          echo "Publishing as $(node -p "require('./package.json').name")"
+
+      - name: Publish
+        working-directory: sdk/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm install && npm run publish:github

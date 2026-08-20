@@ -62,8 +62,10 @@ jobs:
         with:
           bun-version: latest
 
-      # No bun.lock is committed: package-lock.json stays the single source of
-      # truth, and two lockfiles drift. Bun resolves from package.json here.
+      # bun.lock is committed alongside package-lock.json so this job installs
+      # exactly what a contributor on Bun gets. CI sets CI=true, which makes
+      # `bun install` frozen by default - so a lockfile that has drifted from
+      # package.json fails here rather than silently resolving something else.
       - name: Install dependencies
         run: bun install
 
