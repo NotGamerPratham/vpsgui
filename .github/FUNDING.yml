@@ -1,4 +1,29 @@
-# GitHub Funding configuration for VPSGUI (NotGamerPratham)
+# Funding links for the "Sponsor" button on this repository.
+#
+# GitHub validates this file and silently ignores keys it does not recognise, so
+# a typo shows up as a missing button rather than an error. Every platform it
+# supports is listed below; uncomment one and fill in the handle to enable it.
+#
+# `github` only renders once GitHub Sponsors is actually enabled on the account
+# - listing a username here does not create the profile.
 
-github: [NotGamerPratham]
-custom: ['https://notgamerpratham.com']
+github: NotGamerPratham
+
+# Handle only, not the full URL: this becomes buymeacoffee.com/notgamerpratham.
+buy_me_a_coffee: notgamerpratham
+
+# Up to four URLs. This is the author's homepage rather than a donation page, so
+# it sits below the funding links above as a "who made this" destination.
+custom:
+  - https://notgamerpratham.com
+
+# ko_fi:              # username
+# patreon:            # username
+# liberapay:          # username
+# open_collective:    # collective slug
+# polar:              # username
+# thanks_dev:         # u/gh/<username>
+# tidelift:           # npm/vpsgui
+# issuehunt:          # username
+# community_bridge:   # LFX project name
+# lfx_crowdfunding:   # LFX project name
