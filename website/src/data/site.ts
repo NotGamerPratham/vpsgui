@@ -30,7 +30,7 @@ export const site = {
     security: 'https://github.com/NotGamerPratham/vpsgui/blob/main/docs/SECURITY.md',
   },
   packages: {
-    npm: 'https://www.npmjs.com/package/vpsgui-sdk',
+    npm: 'https://www.npmjs.com/package/vpsgui',
     pypi: 'https://pypi.org/project/vpsgui/',
   },
 } as const;

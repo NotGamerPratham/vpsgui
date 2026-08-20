@@ -89,7 +89,7 @@ export default function ApiPage() {
               rel="noreferrer noopener"
               className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
             >
-              vpsgui-sdk on npm
+              vpsgui on npm
             </a>
             <a
               href={site.packages.pypi}

@@ -12,10 +12,10 @@ export const sdkSamples: CodeSample[] = [
   {
     id: 'node',
     label: 'Node.js',
-    install: 'npm install vpsgui-sdk',
+    install: 'npm install vpsgui',
     language: 'typescript',
     registryUrl: site.packages.npm,
-    code: `import { VpsguiClient } from 'vpsgui-sdk';
+    code: `import { VpsguiClient } from 'vpsgui';
 
 const client = new VpsguiClient({
   baseUrl: 'https://vps.example.com/api/v1',

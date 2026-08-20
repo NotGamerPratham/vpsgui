@@ -34,7 +34,7 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 
-const AGENT_VERSION = '1.5.0';
+const AGENT_VERSION = '1.6.0';
 
 const PORT = Number.parseInt(process.env.PORT || '46509', 10);
 // Bind to loopback by default. The agent grants root-equivalent control of the host, so it must not

@@ -21,5 +21,11 @@
 - **Live Telemetry**: Delivered by polling via `startTelemetryPolling` (`src/services/telemetryPoller.ts`), which republishes on `globalEventBus`. The agent serves **no** WebSocket endpoint; `telemetrySocket` (`src/websocket/socket.ts`) stays dormant unless `VITE_WS_URL` is set for a custom backend.
 - **Data Honesty**: Never fall back to invented data when the agent is unreachable. Surface the error and render an empty state - a fabricated "installed"/"active"/"online" reading about a real host is worse than showing nothing.
 - **Agent Token**: The single real credential (`localStorage` key `vpsgui_auth_token`, set under Settings). It grants root-equivalent host control; the login page is a local profile gate, not authentication.
-- **SDKs**: Node.js SDK in `sdk/node`, Python SDK in `sdk/python`.
+- **SDKs and CLI**: Node.js SDK in `sdk/node` (npm `vpsgui`, formerly `vpsgui-sdk`), Python SDK in
+  `sdk/python` (PyPI `vpsgui`). Both publish a `vpsgui` binary and share `~/.vpsgui/config.json` -
+  the format is a contract between them, asserted from both sides in `tests/cliConfig.test.ts` and
+  `sdk/python/tests/test_config.py`. Change one config module and you must change the other.
+- **Deploying**: the console and the agent install to different places. `git pull` + `npm run build`
+  updates `/var/www/vpsgui` only; the agent runs from `/opt/vpsgui/agent` and is copied there by
+  `run.sh`. Skipping it leaves a console calling routes the old agent does not serve.
 - **Author**: NotGamerPratham ([notgamerpratham.com](https://notgamerpratham.com)).

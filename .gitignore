@@ -67,3 +67,7 @@ sdk/node/dist
 sdk/python/dist
 sdk/python/build
 sdk/python/*.egg-info
+
+# Python bytecode
+__pycache__/
+*.py[cod]

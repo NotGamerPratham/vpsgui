@@ -124,7 +124,7 @@ VPSGUI/
 │   ├── types/           # Domain TypeScript Interfaces
 │   └── config/          # Shared ESLint, Tailwind & TS Configuration
 ├── sdk/
-│   ├── node/            # vpsgui-sdk - Official Node.js/TypeScript SDK (npm)
+│   ├── node/            # vpsgui - Official CLI + Node.js/TypeScript SDK (npm)
 │   └── python/          # vpsgui - Official Python SDK (PyPI)
 ├── backend/
 │   ├── api/             # REST API Gateway & Authentication
@@ -187,18 +187,48 @@ its own configured root.
 
 ---
 
+## Command line
+
+Both SDK packages install a `vpsgui` command. They are the same CLI and share
+`~/.vpsgui/config.json`, so it does not matter which one wins on your `PATH`.
+
+```bash
+npm i -g vpsgui
+# or
+pip install vpsgui
+
+vpsgui login vps.example.com
+```
+
+`login` reads the agent token with echo off, verifies it against the agent, and only then writes it
+to disk with mode `0600` - nothing is saved if the credentials do not work.
+
+```bash
+vpsgui status                      # CPU, memory, disk, failing checks
+vpsgui health                      # exits non-zero on a red check
+vpsgui ps                          # docker containers
+vpsgui ls /etc                     # list a directory on the host
+vpsgui exec 'systemctl status nginx'
+```
+
+Several hosts are several profiles; `--profile` works on every command. In CI, set
+`VPSGUI_API_URL` and `VPSGUI_AGENT_TOKEN` instead of logging in - they take precedence over any
+saved profile, so nothing touches the disk.
+
+---
+
 ## SDK Packages
 
 VPSGUI provides official SDK client libraries for programmatic API access.
 
-### Node.js / TypeScript (`vpsgui-sdk`)
+### Node.js / TypeScript (`vpsgui`)
 
 ```bash
-npm install vpsgui-sdk
+npm install vpsgui
 ```
 
 ```typescript
-import { VpsguiClient } from 'vpsgui-sdk';
+import { VpsguiClient } from 'vpsgui';
 
 const client = new VpsguiClient({
   baseUrl: 'https://your-vps-ip/api/v1',

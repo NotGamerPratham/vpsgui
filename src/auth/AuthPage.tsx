@@ -23,7 +23,8 @@ interface AuthPageProps {
  */
 export function AuthPage({ mode = 'login' }: AuthPageProps) {
   const navigate = useNavigate();
-  const { login, bootstrap, refreshSession, isAuthenticated, checking, configured } = useAuthStore();
+  const { login, bootstrap, refreshSession, isAuthenticated, checking, configured, agentOutdated } =
+    useAuthStore();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -95,7 +96,24 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
           </p>
         </div>
 
-        {setupMode && (
+        {agentOutdated && (
+          <div className="space-y-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-400">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span className="font-semibold">The agent on this host is out of date.</span>
+            </div>
+            <p className="leading-relaxed text-rose-300/90">
+              It has no sign-in endpoints, so this form cannot work. The console and the agent are
+              deployed separately: pulling and rebuilding updates{' '}
+              <span className="font-mono">/var/www/vpsgui</span>, but the agent runs from{' '}
+              <span className="font-mono">/opt/vpsgui/agent</span> and is only copied there by the
+              installer.
+            </p>
+            <p className="font-mono text-[11px] text-rose-200">cd /var/www/vpsgui &amp;&amp; sudo ./run.sh</p>
+          </div>
+        )}
+
+        {setupMode && !agentOutdated && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <span>
@@ -105,6 +123,7 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
           </div>
         )}
 
+        {!agentOutdated && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="vpsgui-username" className="text-xs font-semibold text-foreground">
@@ -180,6 +199,7 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
             </span>
           </Button>
         </form>
+        )}
 
         <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
           {mode === 'register' && !setupMode

@@ -56,7 +56,7 @@ export class VpsguiError extends Error {
  *
  * @example
  * ```ts
- * import { VpsguiClient } from 'vpsgui-sdk';
+ * import { VpsguiClient } from 'vpsgui';
  *
  * const client = new VpsguiClient({
  *   baseUrl: 'https://vps.example.com/api/v1',

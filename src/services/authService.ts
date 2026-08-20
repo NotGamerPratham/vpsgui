@@ -19,6 +19,16 @@ export interface AuthStatus {
   /** False when no account exists yet and the dashboard needs first-run setup. */
   configured: boolean;
   minPasswordLength: number;
+  /**
+   * True when the agent answered 404 — it predates dashboard accounts entirely.
+   *
+   * The frontend and the agent are deployed by different steps: `git pull` plus
+   * a build updates /var/www/vpsgui, while the agent runs from
+   * /opt/vpsgui/agent and only `run.sh` copies it. A console newer than its
+   * agent otherwise shows a login form where every request 404s, with nothing
+   * on screen explaining why.
+   */
+  agentOutdated?: boolean;
 }
 
 export interface WhoAmI {
@@ -39,7 +49,14 @@ function describe(e: unknown, fallback: string): string {
 class AuthService {
   /** Whether any account exists. Safe to call unauthenticated. */
   async status(): Promise<AuthStatus> {
-    return apiClient.get<AuthStatus>('/auth/status');
+    try {
+      return await apiClient.get<AuthStatus>('/auth/status');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        return { configured: false, minPasswordLength: 12, agentOutdated: true };
+      }
+      throw e;
+    }
   }
 
   /**
@@ -48,12 +65,20 @@ class AuthService {
    * A 401 here is the normal "not signed in" answer, not a failure, so it is
    * translated rather than thrown - otherwise every first page load would look
    * like an error.
+   *
+   * 404 is translated for the same reason: an agent too old to have `/auth`
+   * routes has no session to report either. Re-throwing it would reject the
+   * `Promise.all` in `refreshSession`, discarding the `agentOutdated` flag
+   * `status()` just worked out and leaving the login page with no explanation
+   * to show.
    */
   async me(): Promise<WhoAmI | null> {
     try {
       return await apiClient.get<WhoAmI>('/auth/me');
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 429)) return null;
+      if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 429)) {
+        return null;
+      }
       throw e;
     }
   }

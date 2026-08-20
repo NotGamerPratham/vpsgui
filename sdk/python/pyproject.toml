@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vpsgui"
-version = "1.1.0"
-description = "Official Python SDK for the VPSGUI REST API - manage VPS nodes, Docker containers, telemetry, files, security, and more."
+version = "1.2.0"
+description = "Official CLI and Python SDK for the VPSGUI agent - sign in to a host, read telemetry, run commands, and drive Docker, files, security and backups."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -31,9 +31,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 keywords = [
-    "vpsgui", "vps", "server", "infrastructure", "docker",
+    "vpsgui", "vps", "server", "infrastructure", "docker", "cli",
     "linux", "monitoring", "telemetry", "devops", "sdk", "api-client",
 ]
+
+[project.scripts]
+vpsgui = "vpsgui.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/NotGamerPratham/vpsgui"

@@ -25,6 +25,8 @@ interface AuthState {
   checking: boolean;
   /** False when no account exists yet and first-run setup is needed. */
   configured: boolean;
+  /** True when the agent is older than this console and has no /auth routes. */
+  agentOutdated: boolean;
   user: UserProfile | null;
   organizations: OrganizationItem[];
   currentOrg: OrganizationItem | null;
@@ -55,6 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   checking: true,
   configured: true,
+  agentOutdated: false,
   user: null,
   organizations: [HOST_ORG],
   currentOrg: HOST_ORG,
@@ -63,13 +66,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   refreshSession: async () => {
     try {
       const [status, who] = await Promise.all([
-        authService.status().catch(() => ({ configured: true, minPasswordLength: 12 })),
+        authService
+          .status()
+          .catch(() => ({ configured: true, minPasswordLength: 12, agentOutdated: false })),
         authService.me(),
       ]);
 
       set({
         checking: false,
         configured: status.configured,
+        agentOutdated: status.agentOutdated === true,
         // A token-authenticated caller is a script, not a signed-in person, so
         // it does not get a dashboard session.
         isAuthenticated: who?.kind === 'session',

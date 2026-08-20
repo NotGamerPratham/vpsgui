@@ -79,11 +79,9 @@ export function AppShell() {
 
 export default function App() {
   return (
-    <BrowserRouter
-      // Opt in to the v7 behaviours now, while the site is new and there is
-      // nothing to migrate later.
-      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-    >
+    // No `future` prop: those flags opted v6 into v7 behaviour, and on v7 they
+    // are simply how the router works — the prop was removed from the type.
+    <BrowserRouter>
       <AppShell />
     </BrowserRouter>
   );

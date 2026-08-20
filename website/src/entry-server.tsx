@@ -1,4 +1,6 @@
-import { StaticRouter } from 'react-router-dom/server';
+// v7 removed the `react-router-dom/server` subpath and moved StaticRouter to
+// the main entry. v6 exports it from both, so this import works on either.
+import { StaticRouter } from 'react-router-dom';
 import { renderToString } from 'react-dom/server';
 
 import { AppShell } from './App';

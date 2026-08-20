@@ -309,6 +309,84 @@ sudo pm2 save`,
     ],
   },
   {
+    id: 'cli',
+    title: 'Command line',
+    group: 'Automation',
+    blocks: [
+      {
+        kind: 'p',
+        text: 'The same client ships as a `vpsgui` command. Install it from either registry - the two packages are the same CLI and share `~/.vpsgui/config.json`, so it does not matter which one ends up on your `PATH`.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        code: `npm i -g vpsgui
+# or
+pip install vpsgui`,
+      },
+      {
+        kind: 'p',
+        text: '`vpsgui login` asks for the host and the agent token, checks them against the agent, and only then writes them to disk. The token is read with echo off, so it never reaches your shell history or a screen recording.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        filename: 'first run',
+        code: `$ vpsgui login vps.example.com
+Agent token: ****************
+Verifying https://vps.example.com/api/v1...
+
+Signed in to vps-1
+agent    1.6.0 on linux
+profile  default
+saved    /home/you/.vpsgui/config.json (mode 0600)`,
+      },
+      {
+        kind: 'table',
+        head: ['Command', 'What it does'],
+        rows: [
+          ['`vpsgui login [url]`', 'Save credentials for a host, after checking they work.'],
+          ['`vpsgui whoami`', 'Show the active profile and confirm the agent still accepts it.'],
+          ['`vpsgui logout`', "Forget this machine's copy of the token."],
+          ['`vpsgui status`', 'CPU, memory, disk, and any failing checks.'],
+          ['`vpsgui health`', 'Every health check, one per line. Exits non-zero on a red check.'],
+          ['`vpsgui ps`', 'Docker containers.'],
+          ['`vpsgui ls [path]`', 'List a directory on the host.'],
+          ['`vpsgui exec <command>`', "Run a shell command. Exits non-zero when the command does."],
+          ['`vpsgui profiles`', 'List saved hosts.'],
+          ['`vpsgui use <profile>`', 'Switch the default host.'],
+        ],
+      },
+      {
+        kind: 'p',
+        text: 'Several hosts are just several profiles. Add `--profile` to any command to act on one without switching.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        code: `vpsgui login vps-2.example.com --profile staging
+vpsgui status --profile staging
+vpsgui exec --profile staging 'systemctl restart nginx'`,
+      },
+      {
+        kind: 'p',
+        text: 'For CI, skip the login step entirely: `VPSGUI_API_URL` and `VPSGUI_AGENT_TOKEN` take precedence over any saved profile, so nothing is written to disk.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        code: `export VPSGUI_API_URL=https://vps.example.com/api/v1
+export VPSGUI_AGENT_TOKEN="$AGENT_TOKEN"
+vpsgui health`,
+      },
+      {
+        kind: 'note',
+        tone: 'danger',
+        text: 'Because the token is root-equivalent, `~/.vpsgui/config.json` is written `0600` and `vpsgui exec` is full remote code execution. `vpsgui logout` only removes the copy on this machine - if the token leaked, rotate it on the host.',
+      },
+    ],
+  },
+  {
     id: 'sdks',
     title: 'SDKs',
     group: 'Automation',
@@ -321,7 +399,7 @@ sudo pm2 save`,
         kind: 'code',
         language: 'typescript',
         filename: 'node',
-        code: `import { VpsguiClient } from 'vpsgui-sdk';
+        code: `import { VpsguiClient } from 'vpsgui';
 
 const client = new VpsguiClient({
   baseUrl: 'https://vps.example.com/api/v1',
@@ -370,8 +448,18 @@ sudo ./run.sh`,
       },
       {
         kind: 'note',
-        tone: 'info',
-        text: 'If `git pull` refuses because of local changes, it is usually a build artifact. `dist/` is untracked; `git status` will show what is actually dirty.',
+        tone: 'warn',
+        text: 'Run the script - do not just rebuild the console. The console lives in `/var/www/vpsgui` but the agent runs from `/opt/vpsgui/agent`, and only `run.sh` copies it there. A `git pull` plus `npm run build` leaves you with a new console calling routes the old agent has never heard of, which shows up as `404`s on whole groups of endpoints.',
+      },
+      {
+        kind: 'p',
+        text: 'Check what actually ended up on the host. The version the agent reports is the one that counts, not the one in the checkout.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        code: `vpsgui whoami
+grep AGENT_VERSION /opt/vpsgui/agent/server.js`,
       },
     ],
   },
@@ -389,6 +477,7 @@ sudo ./run.sh`,
           ['`502 Bad Gateway`', 'nginx is up but the agent is not.', '`sudo pm2 status`, then check `sudo pm2 logs vpsgui-agent`.'],
           ['`403` on POSTs only', 'Origin does not match what the agent expects.', 'Confirm nginx forwards `$http_host`, or set `AGENT_ALLOWED_ORIGINS`.'],
           ['`404` on CSS and JS', 'The web root holds a stale build.', 'Re-run `sudo ./run.sh` and hard-reload.'],
+          ['`404` on `/api/v1/auth/*` or another whole route group', 'The agent is older than the console. Rebuilding the frontend does not touch `/opt/vpsgui/agent`.', 'Re-run `sudo ./run.sh`, which reinstalls the agent, then `sudo pm2 restart vpsgui-agent`.'],
           ['"Path is outside the configured agent file roots"', '`AGENT_FILE_ROOTS` does not cover that path.', 'Widen it in `agent.env` - deliberately, and restart.'],
           ['Docker panels say unavailable', 'No Docker daemon, or the agent user cannot reach the socket.', 'Confirm `docker ps` works as the agent user.'],
         ],

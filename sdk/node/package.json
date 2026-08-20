@@ -1,15 +1,13 @@
 {
-  "name": "vpsgui-sdk",
-  "version": "1.1.0",
-  "description": "Official Node.js/TypeScript SDK for the VPSGUI agent REST API - host telemetry, Docker, files, firewall, secrets, backups and shell execution.",
+  "name": "vpsgui",
+  "version": "1.2.0",
+  "description": "Official CLI and Node.js/TypeScript SDK for the VPSGUI agent - sign in to a host, read telemetry, run commands, and drive Docker, files, firewall, secrets and backups.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "module": "dist/index.mjs",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -18,7 +16,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -32,7 +30,11 @@
     "telemetry",
     "devops",
     "sdk",
-    "api-client"
+    "api-client",
+    "cli",
+    "command-line",
+    "terminal",
+    "ssh"
   ],
   "author": "NotGamerPratham <https://notgamerpratham.com>",
   "license": "MIT",
@@ -50,5 +52,8 @@
   },
   "devDependencies": {
     "typescript": "^5.5.0"
+  },
+  "bin": {
+    "vpsgui": "./dist/cli.js"
   }
 }
