@@ -163,7 +163,7 @@ export function FirewallPage() {
           </form>
 
           <p className="text-[11px] text-amber-400/90 mt-3">
-            Take care not to lock yourself out — denying port 22, or the port serving this page, will
+            Take care not to lock yourself out - denying port 22, or the port serving this page, will
             cut your own access.
           </p>
         </Card>

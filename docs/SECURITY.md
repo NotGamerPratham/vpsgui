@@ -3,7 +3,7 @@
 ## Threat model in one sentence
 
 The `vpsgui-agent` daemon can execute arbitrary shell commands, install packages, control systemd
-units and Docker containers, and read and write files on the host — so **the agent token is
+units and Docker containers, and read and write files on the host - so **the agent token is
 equivalent to a root password**, and anyone who can reach the agent with that token owns the machine.
 
 ## What actually protects the deployment
@@ -14,7 +14,7 @@ There is exactly one authentication control in VPSGUI: the **agent token**.
 | :--- | :--- | :--- |
 | Agent bearer token | **Enforced** | Verified by the agent on every endpoint except `/health`. Constant-time comparison; 10 failed attempts locks an IP out for 5 minutes. |
 | Loopback binding | **Default** | The agent binds `127.0.0.1` unless `AGENT_HOST` is changed. Reach it through the nginx reverse proxy. |
-| File-root confinement | **Opt-in** | File access is restricted to `AGENT_FILE_ROOTS`, resolved through `realpath` so symlinks cannot escape. **Defaults to `/`** — the whole filesystem — because this is a host administration tool. Narrow it to get any confinement benefit. |
+| File-root confinement | **Opt-in** | File access is restricted to `AGENT_FILE_ROOTS`, resolved through `realpath` so symlinks cannot escape. **Defaults to `/`** - the whole filesystem - because this is a host administration tool. Narrow it to get any confinement benefit. |
 | Credential-file deny list | **Enforced** | `shadow`, `gshadow`, `sudoers`, SSH private keys, `*.pem`/`*.key`, and the agent's own token file are refused even inside an allowed root. Override with `AGENT_ALLOW_SENSITIVE_FILES=1`. |
 | Input validation | **Enforced** | Package names, container ids, service names, and action verbs are validated against strict patterns. Child processes are spawned with `execFile` (no shell) except the explicit Terminal endpoint. |
 | Request body limits | **Enforced** | 8 MiB for file writes, 64 KiB for commands; oversized bodies get a 413. |
@@ -36,7 +36,7 @@ Be explicit about this, because earlier revisions of this document claimed other
 - **There is no audit log.** The audit page renders whatever the agent returns from an endpoint the
   agent does not implement, so it is always empty.
 
-If you need multi-user access control, put it in front of VPSGUI — nginx `auth_basic`, an
+If you need multi-user access control, put it in front of VPSGUI - nginx `auth_basic`, an
 authenticating proxy (oauth2-proxy, Authelia, Cloudflare Access), or a VPN.
 
 ## Deployment requirements
@@ -49,9 +49,9 @@ authenticating proxy (oauth2-proxy, Authelia, Cloudflare Access), or a VPN.
 2. **Do not expose the agent port directly.** Keep `AGENT_HOST=127.0.0.1` and let nginx proxy it.
    Firewall port 46509 from the outside regardless.
 3. **Restrict who can reach the web UI.** A VPN, an nginx `allow`/`deny` block, or an
-   authenticating proxy — the token is the only thing between the open internet and a root shell.
+   authenticating proxy - the token is the only thing between the open internet and a root shell.
 4. **Consider narrowing the file roots.** `AGENT_FILE_ROOTS` **defaults to `/`**, so the file
-   manager can read, write, and delete anywhere on the host — including `/etc`, `/boot`, and
+   manager can read, write, and delete anywhere on the host - including `/etc`, `/boot`, and
    `/var/lib`. That is deliberate for a host administration tool, but it means the file browser has
    no confinement unless you set one:
    ```bash
@@ -63,7 +63,7 @@ authenticating proxy (oauth2-proxy, Authelia, Cloudflare Access), or a VPN.
 5. **Disable shell execution if unused.** Set `AGENT_ENABLE_SHELL=0`.
 6. **Protect the token at rest.** The token and all agent settings live in
    `/opt/vpsgui/agent/agent.env` at mode `0600`. Stored secrets are encrypted with AES-256-GCM using
-   the key in `.secrets-key` (also `0600`) — that keeps values out of the store, backups and logs,
+   the key in `.secrets-key` (also `0600`) - that keeps values out of the store, backups and logs,
    but not away from root on this host, which holds the key. If the token leaks, delete it from
    `agent.env` and re-run the installer to issue a new one.
 

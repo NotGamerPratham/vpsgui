@@ -30,7 +30,7 @@ export const docSections: DocSection[] = [
     blocks: [
       {
         kind: 'p',
-        text: 'VPSGUI is two pieces. The **console** is a static React app — it holds no credentials and talks to nothing but the agent. The **agent** (`vpsgui-agent`) is a Node process on the host that does the actual work: reading `/proc`, shelling out, driving systemd and Docker, and touching the filesystem.',
+        text: 'VPSGUI is two pieces. The **console** is a static React app - it holds no credentials and talks to nothing but the agent. The **agent** (`vpsgui-agent`) is a Node process on the host that does the actual work: reading `/proc`, shelling out, driving systemd and Docker, and touching the filesystem.',
       },
       {
         kind: 'p',
@@ -68,10 +68,10 @@ the host: /proc, systemd, docker.sock, the filesystem`,
       {
         kind: 'list',
         items: [
-          'Linux with **Node.js 18 or newer**. Ubuntu, Debian, CentOS/RHEL, Alpine and Arch are all fine.',
+          'Linux with **Node.js 18 or newer**, or **Bun 1.2 or newer**. Ubuntu, Debian, CentOS/RHEL, Alpine and Arch are all fine.',
           'Root, or a user who can `sudo`. The installer writes to `/opt`, `/var/www` and the nginx config.',
           'One of `apt`, `dnf`, `apk` or `pacman` for the package views to do anything.',
-          '`systemd` for service control, and a reachable Docker socket for the Docker views. Both are optional — those panels report unavailable without them.',
+          '`systemd` for service control, and a reachable Docker socket for the Docker views. Both are optional - those panels report unavailable without them.',
         ],
       },
     ],
@@ -126,7 +126,7 @@ the host: /proc, systemd, docker.sock, the filesystem`,
       {
         kind: 'note',
         tone: 'warn',
-        text: 'The sign-in screen is a local profile gate, not authentication. VPSGUI ships no user database, no roles and no permissions — the token plus network reachability is the entire access model.',
+        text: 'The sign-in screen is a local profile gate, not authentication. VPSGUI ships no user database, no roles and no permissions - the token plus network reachability is the entire access model.',
       },
       {
         kind: 'p',
@@ -204,7 +204,7 @@ sudo bash install.sh`,
         rows: [
           ['`PORT`', '`46509`', 'Port the agent listens on.'],
           ['`AGENT_HOST`', '`127.0.0.1`', 'Bind address. Leave it on loopback unless you genuinely mean to expose the agent.'],
-          ['`AGENT_TOKEN`', 'generated', 'The bearer token. Root-equivalent — treat it as a root password.'],
+          ['`AGENT_TOKEN`', 'generated', 'The bearer token. Root-equivalent - treat it as a root password.'],
           ['`AGENT_FILE_ROOTS`', '`/`', 'Comma-separated roots the file manager may touch. Narrow this if you can.'],
           ['`AGENT_ENABLE_SHELL`', '`1`', 'Set to `0` to disable `/terminal/exec` entirely.'],
           ['`AGENT_ALLOW_SENSITIVE_FILES`', '`0`', 'Set to `1` to bypass the credential deny-list. There is rarely a good reason.'],
@@ -243,7 +243,7 @@ sudo bash install.sh`,
       {
         kind: 'note',
         tone: 'warn',
-        text: 'A file that came back `truncated: true` is also returned `editable: false`. Do not write that content back — it would truncate the real file on disk.',
+        text: 'A file that came back `truncated: true` is also returned `editable: false`. Do not write that content back - it would truncate the real file on disk.',
       },
     ],
   },
@@ -271,6 +271,40 @@ sudo pm2 restart vpsgui-agent`,
         code: `sudo systemctl status vpsgui-agent
 sudo journalctl -u vpsgui-agent -n 100 --no-pager
 sudo systemctl restart vpsgui-agent`,
+      },
+    ],
+  },
+  {
+    id: 'bun',
+    title: 'Running the agent on Bun',
+    group: 'Operating it',
+    blocks: [
+      {
+        kind: 'p',
+        text: 'The installer sets up Node because that is what every distribution packages. The agent also runs unmodified on [Bun](https://bun.sh), which starts faster and ships as a single binary.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        code: `curl -fsSL https://bun.sh/install | bash
+sudo bun /opt/vpsgui/agent/server.js`,
+      },
+      {
+        kind: 'p',
+        text: 'To make it permanent, point your supervisor at `bun` instead of `node`. Everything else - `agent.env`, the token, the file roots - is unchanged.',
+      },
+      {
+        kind: 'code',
+        language: 'bash',
+        filename: 'pm2',
+        code: `sudo pm2 delete vpsgui-agent
+sudo pm2 start /opt/vpsgui/agent/server.js --name vpsgui-agent --interpreter bun
+sudo pm2 save`,
+      },
+      {
+        kind: 'note',
+        tone: 'info',
+        text: 'The two runtimes are not quite identical. `fs.realpath` returns a Windows drive root as `F:` on Bun and `F:\\` on Node, which the agent normalises before its path-confinement check - without that, Bun refused to list its own configured root. CI runs the full suite and the agent under both.',
       },
     ],
   },
@@ -314,7 +348,7 @@ with VpsguiClient(
       {
         kind: 'note',
         tone: 'info',
-        text: 'Fields the agent cannot determine come back `null` rather than guessed — `smartHealth` without `smartctl`, database `size` without credentials, `city` from the country-level ipinfo tier. Check before formatting.',
+        text: 'Fields the agent cannot determine come back `null` rather than guessed - `smartHealth` without `smartctl`, database `size` without credentials, `city` from the country-level ipinfo tier. Check before formatting.',
       },
     ],
   },
@@ -355,7 +389,7 @@ sudo ./run.sh`,
           ['`502 Bad Gateway`', 'nginx is up but the agent is not.', '`sudo pm2 status`, then check `sudo pm2 logs vpsgui-agent`.'],
           ['`403` on POSTs only', 'Origin does not match what the agent expects.', 'Confirm nginx forwards `$http_host`, or set `AGENT_ALLOWED_ORIGINS`.'],
           ['`404` on CSS and JS', 'The web root holds a stale build.', 'Re-run `sudo ./run.sh` and hard-reload.'],
-          ['"Path is outside the configured agent file roots"', '`AGENT_FILE_ROOTS` does not cover that path.', 'Widen it in `agent.env` — deliberately, and restart.'],
+          ['"Path is outside the configured agent file roots"', '`AGENT_FILE_ROOTS` does not cover that path.', 'Widen it in `agent.env` - deliberately, and restart.'],
           ['Docker panels say unavailable', 'No Docker daemon, or the agent user cannot reach the socket.', 'Confirm `docker ps` works as the agent user.'],
         ],
       },

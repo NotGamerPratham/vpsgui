@@ -9,8 +9,8 @@ import { apiClient, ApiError } from '../../api/client';
 /**
  * A searchable index of resources the agent actually reports.
  *
- * This page previously rendered four fixed tiles — "4 Nodes", "8 Containers", "40+ Files",
- * "2 Databases" — that were hardcoded and matched no real host, and its search box set state that
+ * This page previously rendered four fixed tiles - "4 Nodes", "8 Containers", "40+ Files",
+ * "2 Databases" - that were hardcoded and matched no real host, and its search box set state that
  * nothing ever read. Both the counts and the results now come from live endpoints.
  */
 interface IndexedResource {
@@ -120,7 +120,7 @@ export function SpotlightExplorerPage() {
         setResources([]);
         setError(
           e instanceof ApiError && e.status === 401
-            ? 'Unauthorized — set a valid Agent Token under Settings.'
+            ? 'Unauthorized - set a valid Agent Token under Settings.'
             : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
         );
       } finally {
@@ -159,7 +159,7 @@ export function SpotlightExplorerPage() {
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Searches Docker containers, systemd services, installed packages, host accounts and
-            detected databases — all read live from the agent.
+            detected databases - all read live from the agent.
           </p>
         </div>
 

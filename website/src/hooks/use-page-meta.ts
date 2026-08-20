@@ -27,7 +27,7 @@ function upsertLink(rel: string, href: string) {
  * Keeps head tags in step with the active route on client navigation.
  *
  * The prerender step already bakes these into each route's static HTML, so a
- * crawler never depends on this running — it exists for people navigating
+ * crawler never depends on this running - it exists for people navigating
  * client-side, whose tab title, canonical and share preview would otherwise be
  * stuck on whichever page they landed on first.
  */

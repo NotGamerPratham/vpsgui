@@ -22,7 +22,7 @@ export const faqs: FaqItem[] = [
     id: 'auth',
     question: 'Does it have user accounts, roles or permissions?',
     answer:
-      'It does not, and this is the most important thing to understand before exposing it. The sign-in screen is a local profile gate stored in your own browser — it is not authentication. VPSGUI ships no user database and no RBAC. The real access control is the agent token plus whatever you put in front of the UI: a VPN, a firewall rule, or an authenticating reverse proxy.',
+      'It does not, and this is the most important thing to understand before exposing it. The sign-in screen is a local profile gate stored in your own browser - it is not authentication. VPSGUI ships no user database and no RBAC. The real access control is the agent token plus whatever you put in front of the UI: a VPN, a firewall rule, or an authenticating reverse proxy.',
   },
   {
     id: 'distros',
@@ -34,7 +34,7 @@ export const faqs: FaqItem[] = [
     id: 'mock',
     question: 'What does "zero mock data" actually mean?',
     answer:
-      'That a reading you see on screen came from your host or is not shown at all. When the agent cannot determine something — SMART health without smartctl, per-process CPU on Windows, a database size it has no credentials for — it returns null and the UI renders an empty state. It never substitutes a placeholder. A fabricated "healthy" about a real disk is worse than a blank.',
+      'That a reading you see on screen came from your host or is not shown at all. When the agent cannot determine something - SMART health without smartctl, per-process CPU on Windows, a database size it has no credentials for - it returns null and the UI renders an empty state. It never substitutes a placeholder. A fabricated "healthy" about a real disk is worse than a blank.',
   },
   {
     id: 'multi-host',

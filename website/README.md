@@ -1,4 +1,4 @@
-# VPSGUI — marketing site
+# VPSGUI - marketing site
 
 The public site for [VPSGUI](https://github.com/NotGamerPratham/vpsgui). It is a
 **separate application** from the console in `../src`: static, dependency-free at
@@ -12,7 +12,7 @@ no API client, no auth code and no agent URL, and the console carries no
 marketing weight.
 
 That separation is also why this directory has its own `package.json` and its own
-Tailwind version — see below.
+Tailwind version - see below.
 
 ## Stack
 
@@ -35,7 +35,7 @@ The console runs Tailwind **v3** with a `tailwind.config.js` and a
 is configured in CSS (`src/index.css`) with no JS config at all.
 
 Vite walks up the directory tree looking for a PostCSS config, so it would find
-the root one and run the v3 plugin over v4 source — which fails on `@layer base`.
+the root one and run the v3 plugin over v4 source - which fails on `@layer base`.
 `vite.config.js` sets `css.postcss: { plugins: [] }` to stop that search. Do not
 remove it.
 
@@ -55,10 +55,31 @@ npm run dev
 npm run build
 ```
 
-`npm run build` does three things in order: typecheck, build the client bundle,
-build an SSR bundle, then run `scripts/prerender.mjs` to render every route to
-static HTML and emit `sitemap.xml`. `npm run build:client` skips the prerender
-if you just want the bundle. `npm run preview` serves the finished `dist/`.
+`npm run build` runs three things: typecheck, the client bundle, then the SSR
+build - and the SSR config (`vite.ssr.config.js`) prerenders every route to
+static HTML and emits `sitemap.xml` from its `closeBundle` hook.
+`npm run build:client` skips the prerender if you only want the bundle, and
+`npm run preview` serves the finished `dist/`.
+
+Prerendering lives in that hook rather than in a separate `node scripts/…`
+command for a specific reason: naming the runtime in the build script meant
+`bun run build` shelled out to the real Node for that one step, so a machine
+with only Bun could not build the site. Running it from inside Vite means
+whichever runtime is executing the build also does the prerender.
+
+### Bun
+
+The site builds under Bun as well as Node, and the output is byte-for-byte
+identical:
+
+```bash
+bun install && bun --bun run build
+```
+
+`--bun` matters. Vite's binary carries a `#!/usr/bin/env node` shebang, which
+Bun honours by default, so a plain `bun run build` quietly builds on Node. The
+prerender step prints which runtime produced the output, which is the quickest
+way to tell the two apart.
 
 The dev server listens on `3007` by default and honours `PORT` if set.
 
@@ -80,8 +101,8 @@ index find the second. Both carry the same canonical, so the duplication costs
 nothing in search terms.
 
 This matters more than it sounds. With only the directory form, a request for
-`/docs` fell through to the SPA fallback and was served **`index.html` — the
-home page** — under the `/docs` URL, with the home page's canonical and title.
+`/docs` fell through to the SPA fallback and was served **`index.html` - the
+home page** - under the `/docs` URL, with the home page's canonical and title.
 That is strictly worse for search than not prerendering at all, and it is
 invisible unless you request the extension-less path specifically.
 
@@ -96,7 +117,7 @@ the not-found page (marked `noindex`). Netlify, Vercel and Cloudflare Pages
 resolve both forms without configuration.
 
 Update `SITE_URL` in `src/data/seo.ts` before deploying anywhere other than
-`vpsgui.dev` — it is the source for every canonical URL and every sitemap entry.
+`vpsgui.dev` - it is the source for every canonical URL and every sitemap entry.
 
 ## Editing content
 
@@ -129,7 +150,7 @@ hero is labelled as an example session against a fictional host, and it shows
 `smartHealth: null` on purpose, because that is what the agent really returns
 when `smartctl` is absent.
 
-## Design rules — claymorphism
+## Design rules - claymorphism
 
 Surfaces are moulded clay: soft, warm, and lit from the top-left.
 
@@ -143,7 +164,7 @@ Surfaces are moulded clay: soft, warm, and lit from the top-left.
 - **Clay utilities never set a radius.** They set colour and shadow only, and the
   markup always names its own `rounded-*`. An earlier version set both, which
   left the winner up to emit order and silently turned 32px chips into circles.
-- **Black and white only — outside the code surfaces.** Every page token sits at
+- **Black and white only - outside the code surfaces.** Every page token sits at
   chroma `0`: greys, pure white, pure black, nothing else. This is enforceable —
   sample every computed `color`, `background-color`, `border-color`, `fill`,
   `stroke` and `box-shadow`, skip anything inside `[class*="bg-terminal"], pre,
@@ -160,8 +181,8 @@ Surfaces are moulded clay: soft, warm, and lit from the top-left.
   (`bg-foreground text-background`) for the most severe. Nothing on this site
   depends on colour alone to be understood, which is WCAG 1.4.1.
 - **Syntax highlighting is real tokenising, not brightness tiers.**
-  `src/lib/highlight.tsx` has four tokenisers — shell, JSON, tabular output, and
-  TypeScript/Python — because running one over all of them produced nonsense
+  `src/lib/highlight.tsx` has four tokenisers - shell, JSON, tabular output, and
+  TypeScript/Python - because running one over all of them produced nonsense
   colours. Two details are what make it read correctly, and both are easy to
   regress:
   - In shell, the *first bare word of each line or pipeline segment* is the
@@ -171,7 +192,7 @@ Surfaces are moulded clay: soft, warm, and lit from the top-left.
     missed.
   - In JSON, a string is a **key** only when the next non-space character is a
     colon. That single check is all that separates `"status"` from `"ok"`.
-- **Type does not shout.** Headings stay weight `500` at `-0.022em` — clay
+- **Type does not shout.** Headings stay weight `500` at `-0.022em` - clay
   already supplies the visual weight. Emphasis is one word in Instrument Serif
   italic (`.accent-word`), never a gradient.
 - **Watch for tokens that collapse.** In monochrome `--primary` *is* the
@@ -183,7 +204,7 @@ Surfaces are moulded clay: soft, warm, and lit from the top-left.
   chip. Centred headings stacked down a page is the template look.
 
 Utilities are declared with `@utility`, not inside `@layer utilities`, so they
-compose with variants — `data-[state=active]:clay` on the active tab silently
+compose with variants - `data-[state=active]:clay` on the active tab silently
 generates nothing under the `@layer` form.
 
 Not everything imported from shadcn stayed: `badge`, `separator` and `card` were
@@ -203,7 +224,7 @@ unfurlers and most AI crawlers do not. So the build prerenders instead.
   They cannot disagree.
 - JSON-LD: `SoftwareApplication` + `WebSite` + `FAQPage` on the home page,
   `TechArticle` + `BreadcrumbList` on the rest. The FAQ markup mirrors the FAQ
-  actually rendered on the page — marking up invisible questions is what earns a
+  actually rendered on the page - marking up invisible questions is what earns a
   manual action.
 - `sitemap.xml` is generated from the same route list. `robots.txt` points at it.
 - The prerender **throws** rather than skipping when a tag it expects is missing.
@@ -217,7 +238,7 @@ fallback into the file a crawler reads.
 ### Hydration
 
 Prerendered HTML must match what React renders on its first client pass, or
-React throws the whole tree away and re-renders — losing the benefit and
+React throws the whole tree away and re-renders - losing the benefit and
 spamming the console. Two things broke this and are worth not reintroducing:
 
 - **Animations that start in a mount effect.** `TerminalDemo` called its first
@@ -228,7 +249,7 @@ spamming the console. Two things broke this and are worth not reintroducing:
   and a light-mode visitor's client said the opposite. The icon is now chosen by
   a `dark:` CSS variant, which needs no state and cannot disagree.
 
-To debug a mismatch, build with React's development bundle — the production one
+To debug a mismatch, build with React's development bundle - the production one
 only prints minified error codes:
 
 ```bash
@@ -236,7 +257,7 @@ npx vite build -c vite.diag.config.js
 ```
 
 Then rebuild the SSR bundle, re-run `scripts/prerender.mjs`, and `npm run
-preview`. Rebuild with `npm run build` when you are done — the diagnostic bundle
+preview`. Rebuild with `npm run build` when you are done - the diagnostic bundle
 is roughly three times the size and must not be deployed.
 
 None of this guarantees a ranking. Technical SEO makes a page eligible and

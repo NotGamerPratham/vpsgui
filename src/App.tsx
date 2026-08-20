@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LinuxOnlyGuard } from './components/common/LinuxOnlyGuard';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -36,7 +36,6 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { AuthPage } from './auth/AuthPage';
 import { DocsPage } from './features/docs/DocsPage';
-import { LandingPage } from './features/landing/LandingPage';
 import { PackagesPage } from './features/system/PackagesPage';
 import { ServicesPage } from './features/system/ServicesPage';
 
@@ -47,8 +46,12 @@ export function App() {
     <LinuxOnlyGuard>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/landing" element={<LandingPage />} />
+            {/* The landing page used to own "/". With it gone the bare domain fell
+                through to the catch-all and rendered a 404, so the root now sends
+                visitors to the dashboard; ProtectedRoute bounces them to /login
+                if they are not signed in. */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
             <Route path="/login" element={<AuthPage mode="login" />} />
             <Route path="/register" element={<AuthPage mode="register" />} />
 

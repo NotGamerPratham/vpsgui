@@ -43,7 +43,7 @@ export function ServicesPage() {
       setServices([]);
       setLoadError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings to list systemd units.'
+          ? 'Unauthorized - set a valid Agent Token under Settings to list systemd units.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -170,13 +170,12 @@ export function ServicesPage() {
               <div className="flex items-center justify-between text-[11px] border-t border-border/40 pt-2 text-muted-foreground">
                 <span>Unit Status:</span>
                 <span
-                  className={`font-mono font-semibold flex items-center gap-1 ${
-                    svc.status === 'active'
+                  className={`font-mono font-semibold flex items-center gap-1 ${svc.status === 'active'
                       ? 'text-emerald-400'
                       : svc.status === 'failed'
-                      ? 'text-rose-400'
-                      : 'text-muted-foreground'
-                  }`}
+                        ? 'text-rose-400'
+                        : 'text-muted-foreground'
+                    }`}
                 >
                   <Radio className={`h-3 w-3 ${svc.status === 'active' ? 'animate-ping' : ''}`} /> {svc.subState}
                 </span>

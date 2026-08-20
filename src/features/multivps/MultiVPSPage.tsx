@@ -72,15 +72,15 @@ export function MultiVPSPage() {
             30000
           );
           const status = res?.success ? 'OK' : 'FAILED';
-          return `[${node.name} — ${status}]\n${res?.output?.trim() || '(no output)'}`;
+          return `[${node.name} - ${status}]\n${res?.output?.trim() || '(no output)'}`;
         } catch (e) {
           const message =
             e instanceof ApiError && e.status === 401
-              ? 'Unauthorized — set a valid Agent Token under Settings.'
+              ? 'Unauthorized - set a valid Agent Token under Settings.'
               : e instanceof Error
-              ? e.message
-              : 'agent unreachable';
-          return `[${node.name} — ERROR]\n${message}`;
+                ? e.message
+                : 'agent unreachable';
+          return `[${node.name} - ERROR]\n${message}`;
         }
       })
     );

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap } from 'lucide-react';
+import { AlertCircle, Loader2, ShieldCheck, Zap } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,25 +10,75 @@ interface AuthPageProps {
   mode?: 'login' | 'register';
 }
 
+/**
+ * Sign-in, and first-run account creation.
+ *
+ * This screen used to collect an email, check nothing, and set a localStorage
+ * flag. The password is now verified by the agent against a scrypt hash, and
+ * the browser receives an HttpOnly cookie it cannot read.
+ *
+ * Fields are never pre-filled. They once shipped populated with
+ * admin@vpsgui.dev / password123, which reads as a working default account and
+ * invites operators to keep it.
+ */
 export function AuthPage({ mode = 'login' }: AuthPageProps) {
   const navigate = useNavigate();
-  const { login } = useAuthStore();
-  // Never pre-fill credentials. These fields shipped populated with admin@vpsgui.dev / password123,
-  // which reads as a working default account and invites operators to keep it.
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { login, bootstrap, refreshSession, isAuthenticated, checking, configured } = useAuthStore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (checking) void refreshSession();
+  }, [checking, refreshSession]);
+
+  useEffect(() => {
+    if (isAuthenticated) navigate('/dashboard', { replace: true });
+  }, [isAuthenticated, navigate]);
+
+  // With no account on the host there is nobody to sign in as, so the form
+  // becomes first-run setup regardless of which route was requested.
+  const setupMode = !configured;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setError('Enter an email address to identify this local profile.');
+    const name = username.trim().toLowerCase();
+    if (!name || !password) {
+      setError('Enter a username and password.');
       return;
     }
+    if (setupMode && password !== confirm) {
+      setError('The two passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
     setError(null);
-    login(trimmed);
+    const message = setupMode ? await bootstrap(name, password) : await login(name, password);
+    setBusy(false);
+
+    if (message) {
+      setError(message);
+      setPassword('');
+      setConfirm('');
+      return;
+    }
     navigate('/dashboard', { replace: true });
   };
+
+  if (checking) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <span className="flex items-center gap-2.5 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Contacting agent…
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background px-4">
@@ -39,43 +89,103 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
           </div>
           <h2 className="text-xl font-bold tracking-wider text-foreground">VPSGUI</h2>
           <p className="text-xs text-muted-foreground">
-            {mode === 'register' ? 'Create a new VPSGUI Organization Workspace' : 'Sign in to your Open Infrastructure Workspace'}
+            {setupMode
+              ? 'Create the first dashboard account for this host'
+              : 'Sign in to your Open Infrastructure Workspace'}
           </p>
         </div>
 
-        {/* Being explicit beats a password field that is silently discarded: the previous form
-            collected a password and never checked it, which implied an authentication step that
-            does not exist. The agent token is the credential that actually gates host access. */}
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-300 leading-relaxed">
-          <span className="font-bold">This is a local profile, not an account.</span> VPSGUI ships no
-          user database, so no password is checked here — this only labels the session on this
-          browser. Host access is gated by the <span className="font-semibold">Agent Token</span> you
-          set under Settings. Put VPSGUI behind HTTPS and a firewall or VPN.
-        </div>
+        {setupMode && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              No account exists on this host yet. Creating the first one requires the agent token to
+              already be saved, so only whoever installed the agent can do this.
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="vpsgui-email" className="text-xs font-semibold text-foreground">
-              Email (profile label)
+          <div className="space-y-1.5">
+            <label htmlFor="vpsgui-username" className="text-xs font-semibold text-foreground">
+              Username
             </label>
             <Input
-              id="vpsgui-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
+              id="vpsgui-username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              placeholder="admin"
+              className="text-xs"
               required
-              className="text-xs mt-1"
             />
           </div>
 
-          {error && <p className="text-[11px] text-rose-400">{error}</p>}
+          <div className="space-y-1.5">
+            <label htmlFor="vpsgui-password" className="text-xs font-semibold text-foreground">
+              Password
+            </label>
+            <Input
+              id="vpsgui-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={setupMode ? 'new-password' : 'current-password'}
+              className="text-xs"
+              required
+            />
+            {setupMode && (
+              <p className="text-[11px] text-muted-foreground">
+                At least 12 characters. It is hashed with scrypt on the host and never stored in the
+                browser.
+              </p>
+            )}
+          </div>
 
-          <Button type="submit" className="w-full text-xs bg-primary font-bold">
-            {mode === 'register' ? 'Create Local Profile' : 'Continue to Workspace'}
+          {setupMode && (
+            <div className="space-y-1.5">
+              <label htmlFor="vpsgui-confirm" className="text-xs font-semibold text-foreground">
+                Confirm password
+              </label>
+              <Input
+                id="vpsgui-confirm"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                className="text-xs"
+                required
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span className="break-words">{error}</span>
+            </div>
+          )}
+
+          <Button type="submit" disabled={busy} className="w-full text-xs gap-1.5 bg-primary font-bold">
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <span>
+              {busy
+                ? setupMode
+                  ? 'Creating account…'
+                  : 'Signing in…'
+                : setupMode
+                  ? 'Create account'
+                  : 'Sign in'}
+            </span>
           </Button>
         </form>
+
+        <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+          {mode === 'register' && !setupMode
+            ? 'Accounts are created on the host, not from this screen. Ask whoever runs the agent.'
+            : 'Sessions last 12 hours and end when the agent restarts.'}
+        </p>
       </Card>
     </div>
   );

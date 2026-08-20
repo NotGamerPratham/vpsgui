@@ -3,7 +3,7 @@
  * Developed by NotGamerPratham (https://notgamerpratham.com)
  *
  * OPTIONAL transport. The bundled vpsgui-agent daemon is a plain HTTP server and does NOT serve a
- * WebSocket endpoint — live telemetry is delivered by `services/telemetryPoller.ts` instead.
+ * WebSocket endpoint - live telemetry is delivered by `services/telemetryPoller.ts` instead.
  *
  * This module stays dormant unless VITE_WS_URL is explicitly configured, which is the case only
  * when a custom backend that speaks the telemetry protocol is deployed. Previously it unconditionally

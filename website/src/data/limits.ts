@@ -22,7 +22,7 @@ export const limits: Array<{ claim: string; detail: string }> = [
   {
     claim: 'It is not an SSH client.',
     detail:
-      'The terminal runs commands through the agent over HTTP, not over SSH. That means no interactive programs, no port forwarding and no key-based session — it is command in, output back.',
+      'The terminal runs commands through the agent over HTTP, not over SSH. That means no interactive programs, no port forwarding and no key-based session - it is command in, output back.',
   },
   {
     claim: 'It has not been through a third-party audit.',

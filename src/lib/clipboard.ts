@@ -2,7 +2,7 @@
  * Clipboard helper that also works on insecure origins.
  *
  * `navigator.clipboard` is only exposed in secure contexts (HTTPS, or localhost). A VPSGUI instance
- * served over plain HTTP — which is the default until an operator sets up TLS — therefore has no
+ * served over plain HTTP - which is the default until an operator sets up TLS - therefore has no
  * async clipboard API at all, and callers that assumed it existed either threw a TypeError or told
  * the user to "copy manually" without showing them anything to copy.
  *
@@ -15,7 +15,7 @@ export type CopyResult = 'copied' | 'failed';
 function legacyCopy(text: string): boolean {
   const textarea = document.createElement('textarea');
   textarea.value = text;
-  // Keep it out of view and out of the layout, but still focusable — display:none or
+  // Keep it out of view and out of the layout, but still focusable - display:none or
   // visibility:hidden make the selection unusable and the copy silently fails.
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
@@ -49,7 +49,7 @@ export async function copyToClipboard(text: string): Promise<CopyResult> {
       await navigator.clipboard.writeText(text);
       return 'copied';
     } catch (e) {
-      // Permission denied or a transient failure — the legacy path may still succeed.
+      // Permission denied or a transient failure - the legacy path may still succeed.
     }
   }
   return legacyCopy(text) ? 'copied' : 'failed';

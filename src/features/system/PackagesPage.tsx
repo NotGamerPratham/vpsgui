@@ -68,7 +68,7 @@ export function PackagesPage() {
       setLanguages([]);
       setLoadError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings to read installed packages.'
+          ? 'Unauthorized - set a valid Agent Token under Settings to read installed packages.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -78,7 +78,7 @@ export function PackagesPage() {
   const handleInstall = async (name: string, isLanguage: boolean) => {
     const packageName = isLanguage ? LANGUAGE_APT_PACKAGE[name] : name;
     if (!packageName) {
-      setInstallError(`${name} has no apt package available for 1-click install — use "Copy Cmd" instead.`);
+      setInstallError(`${name} has no apt package available for 1-click install - use "Copy Cmd" instead.`);
       setTimeout(() => setInstallError(null), 4000);
       return;
     }
@@ -192,11 +192,11 @@ export function PackagesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {filteredLanguages.map((lang) => {
             const aptName = aptNameFor(lang);
-            // `apt install node` fails — the Debian package is `nodejs`. Fall back to a pointer to
+            // `apt install node` fails - the Debian package is `nodejs`. Fall back to a pointer to
             // the upstream installer for runtimes with no apt package at all (Bun, Deno).
             const installCmd = aptName
               ? `sudo apt update && sudo apt install -y ${aptName}`
-              : `# ${lang.name} has no apt package — see the official installer for ${lang.name}`;
+              : `# ${lang.name} has no apt package - see the official installer for ${lang.name}`;
             return (
               <motion.div key={lang.name} whileHover={{ y: -3 }} transition={{ duration: 0.15 }}>
                 <Card className="bg-card/80 border-border/70 hover:border-cyan-500/40 transition-all flex flex-col justify-between h-full">

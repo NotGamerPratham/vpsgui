@@ -1,5 +1,6 @@
 import React from 'react';
-import { Search, Plus, Palette, Bell, Globe, Server, Menu } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Palette, Bell, Globe, Server, Menu, LogOut } from 'lucide-react';
 import { useUIStore } from '../store/useUIStore';
 import { useServerStore } from '../store/useServerStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -20,10 +21,16 @@ export function TopNav() {
   } = useUIStore();
 
   const { nodes } = useServerStore();
-  const { currentOrg, organizations, setCurrentOrg } = useAuthStore();
+  const { currentOrg, organizations, setCurrentOrg, user, logout } = useAuthStore();
   const { unreadCount } = useNotificationStore();
 
   const activeNode = nodes[0];
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <header className="flex h-14 w-full items-center justify-between border-b border-border bg-card/80 px-3 sm:px-4 backdrop-blur-md z-20">
@@ -41,8 +48,10 @@ export function TopNav() {
         <div className="flex items-center rounded-lg bg-muted/60 px-2.5 py-1 border border-border/80 text-xs font-mono">
           <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-pulse shrink-0" />
           <Server className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-          <span className="font-bold text-foreground truncate max-w-[90px] sm:max-w-none">{activeNode?.name || 'vps128'}</span>
-          <span className="hidden sm:inline ml-1 text-muted-foreground">({activeNode?.network?.publicIp || '127.0.0.1'})</span>
+          <span className="font-bold text-foreground truncate max-w-[90px] sm:max-w-none">{activeNode?.name || 'No host'}</span>
+          {activeNode?.network?.publicIp && (
+            <span className="hidden sm:inline ml-1 text-muted-foreground">({activeNode.network.publicIp})</span>
+          )}
         </div>
 
         {/* Organization Switcher */}
@@ -117,6 +126,19 @@ export function TopNav() {
             ))}
           </Select>
         </div>
+
+        {/* Sign out. There was no way to end a session from the UI at all - the
+            only exit was clearing site data. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleSignOut}
+          title={user ? `Sign out ${user.name}` : 'Sign out'}
+          aria-label="Sign out"
+          className="h-8 w-8 text-muted-foreground hover:text-rose-400 shrink-0"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
 
         {/* Real-Time Notifications Drawer Button */}
         <Button

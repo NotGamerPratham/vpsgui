@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "[VPSGUI] Starting setup & production deployment..."
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "[VPSGUI] Error: run as root (sudo ./run.sh) — this installs a service and writes to /var/www." >&2
+  echo "[VPSGUI] Error: run as root (sudo ./run.sh) - this installs a service and writes to /var/www." >&2
   exit 1
 fi
 
@@ -40,7 +40,7 @@ npm run build
 #
 # When the repository is itself checked out at /var/www/vpsgui, the build output and the web root are
 # the SAME directory. The `rm -rf` then deleted the assets that had just been built and the copy
-# found an empty source — leaving nginx serving a web root with no JS or CSS at all.
+# found an empty source - leaving nginx serving a web root with no JS or CSS at all.
 echo "[VPSGUI] Publishing build to ${WEB_ROOT}..."
 mkdir -p "${WEB_ROOT}"
 
@@ -63,7 +63,7 @@ if ! ls "${WEB_ROOT}"/assets/*.js >/dev/null 2>&1; then
 fi
 
 # nginx serves as an unprivileged user (www-data/nginx), not as root. Everything it must read needs
-# world-read, and every directory on the path needs world-execute to be traversable — otherwise
+# world-read, and every directory on the path needs world-execute to be traversable - otherwise
 # nginx answers 403 Forbidden for the site root with no clue why.
 # `a+rX` sets execute on directories only, never on regular files.
 echo "[VPSGUI] Granting the nginx worker read access to ${WEB_ROOT}..."
@@ -82,9 +82,9 @@ done
 #
 # The agent install must actually run and must actually succeed. Previously the publish step above
 # could abort under `set -e`, so this never executed and the deploy silently left a freshly built UI
-# talking to a stale daemon — which shows up as new pages 404ing on endpoints the old agent lacks.
+# talking to a stale daemon - which shows up as new pages 404ing on endpoints the old agent lacks.
 #
-# AGENT_PROCESS_MANAGER selects the supervisor. install.sh installs pm2 (via npm — pm2 is not an apt
+# AGENT_PROCESS_MANAGER selects the supervisor. install.sh installs pm2 (via npm - pm2 is not an apt
 # package) when missing, and tears the other supervisor down first so they cannot race for the port.
 AGENT_PROCESS_MANAGER="${AGENT_PROCESS_MANAGER:-pm2}"
 export AGENT_PROCESS_MANAGER
@@ -92,7 +92,7 @@ export AGENT_PROCESS_MANAGER
 echo "[VPSGUI] Installing the VPSGUI telemetry agent (supervisor: ${AGENT_PROCESS_MANAGER})..."
 if ! bash "${SCRIPT_DIR}/agent/install.sh"; then
   echo "" >&2
-  echo "[VPSGUI] AGENT INSTALL FAILED — the web assets were published but the agent was NOT updated." >&2
+  echo "[VPSGUI] AGENT INSTALL FAILED - the web assets were published but the agent was NOT updated." >&2
   echo "[VPSGUI] The UI will call endpoints the running agent does not implement (404) and writes" >&2
   echo "[VPSGUI] may be rejected (403). Resolve the above error and re-run before using this deploy." >&2
   exit 1
@@ -107,7 +107,7 @@ if command -v nginx >/dev/null 2>&1; then
 
   # Record enough state to undo everything if the config test fails. The symlink is created before
   # `nginx -t` can run, so without a rollback a bad config stays enabled and nginx fails to start on
-  # its next restart — taking every other site on the box down with it.
+  # its next restart - taking every other site on the box down with it.
   LINK_EXISTED=0
   [ -L "${NGINX_LINK}" ] && LINK_EXISTED=1
   if [ -f "${NGINX_SITE}" ]; then
@@ -159,7 +159,7 @@ if command -v nginx >/dev/null 2>&1; then
       mv "${NGINX_BACKUP}" "${NGINX_SITE}"
     fi
     if nginx -t >/dev/null 2>&1; then
-      echo "[VPSGUI] Rolled back — the previous nginx config is valid again and nginx will still start." >&2
+      echo "[VPSGUI] Rolled back - the previous nginx config is valid again and nginx will still start." >&2
     else
       echo "[VPSGUI] WARNING: nginx config is STILL invalid after rollback. Run 'nginx -t' and fix it" >&2
       echo "[VPSGUI] before nginx is restarted, or it will fail to start." >&2

@@ -14,8 +14,10 @@ export function Breadcrumbs() {
   const pathNames = location.pathname.split('/').filter((x) => x);
 
   const copySshCommand = async () => {
-    if (!selectedNode?.network) return;
-    const cmd = `ssh root@${selectedNode.network.publicIp || '127.0.0.1'} -p ${selectedNode.network.sshPort || 22}`;
+    // Without a real address this produced `ssh root@127.0.0.1`, which points at
+    // the operator's own machine rather than the server.
+    if (!selectedNode?.network?.publicIp) return;
+    const cmd = `ssh root@${selectedNode.network.publicIp} -p ${selectedNode.network.sshPort || 22}`;
     if ((await copyToClipboard(cmd)) === 'copied') {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -58,13 +60,22 @@ export function Breadcrumbs() {
           <div className="flex items-center space-x-1.5 bg-muted/40 rounded px-2 py-0.5 font-mono border border-border/40">
             <Server className="h-3 w-3 text-primary" />
             <span className="text-foreground font-medium">{selectedNode.name}</span>
-            <span className="text-muted-foreground">({selectedNode.network.publicIp})</span>
+            {selectedNode.network.publicIp && (
+              <span className="text-muted-foreground">({selectedNode.network.publicIp})</span>
+            )}
           </div>
 
+          {/* Disabled rather than hidden, so the reason is visible: without a
+              public IP there is no command worth copying. */}
           <button
             onClick={copySshCommand}
-            className="flex items-center space-x-1 text-muted-foreground hover:text-primary transition-colors bg-muted/30 px-2 py-0.5 rounded border border-border/40"
-            title="Copy SSH Connection string"
+            disabled={!selectedNode.network.publicIp}
+            className="flex items-center space-x-1 text-muted-foreground hover:text-primary transition-colors bg-muted/30 px-2 py-0.5 rounded border border-border/40 disabled:opacity-40 disabled:hover:text-muted-foreground"
+            title={
+              selectedNode.network.publicIp
+                ? 'Copy SSH connection string'
+                : 'The agent has not reported a public IP for this host'
+            }
           >
             {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
             <span className="font-mono">{copied ? 'Copied SSH' : 'Copy SSH'}</span>

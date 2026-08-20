@@ -114,7 +114,8 @@ const authFailures = new Map(); // ip -> { count, lockedUntil }
  * that is the one our own nginx appended from the real peer. Leftmost entries are client-supplied
  * and trivially forged, which would let an attacker evade the lockout or lock out a third party.
  */
-function clientIp(req) {
+function clientIp(req)
+{
   const peer = req.socket.remoteAddress || 'unknown';
   const isLoopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
   if (!isLoopback) return peer;
@@ -148,13 +149,289 @@ function recordAuthFailure(ip)
   authFailures.set(ip, entry);
 }
 
-function isAuthorized(req)
+// ---------------------------------------------------------------------------
+// Dashboard accounts and sessions
+//
+// The sign-in screen used to be a localStorage flag - anyone could set it in
+// devtools and reach every page. This makes it real: accounts live on the host,
+// passwords are hashed with scrypt, and the browser holds an opaque session
+// cookie rather than a credential.
+//
+// The store is a 0600 JSON file rather than SQLite on purpose. The agent has no
+// runtime dependencies, and `node:sqlite` needs Node 22.5 while the documented
+// floor is Node 18 - adding either a native module or a version bump to hold a
+// handful of rows would cost more than it buys.
+//
+// The static AGENT_TOKEN keeps working alongside this, because the SDKs and any
+// scripts depend on it. It remains root-equivalent.
+// ---------------------------------------------------------------------------
+
+const USERS_DB_FILE = path.join(__dirname, 'users.db');
+
+/** scrypt cost. N=16384/r=8 needs ~16 MB per hash, which is inside Node's 32 MB default. */
+const SCRYPT_N = 16384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_KEYLEN = 64;
+
+const MIN_PASSWORD_LENGTH = 12;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_COOKIE = 'vpsgui_session';
+
+const scryptAsync = promisify(crypto.scrypt);
+
+/**
+ * Derive a password hash.
+ *
+ * Stored as `scrypt$N$r$p$salt$hash` so the parameters travel with the hash and
+ * can be raised later without invalidating existing accounts.
+ */
+async function hashPassword(password, saltHex)
+{
+  const salt = saltHex ? Buffer.from(saltHex, 'hex') : crypto.randomBytes(16);
+  const derived = await scryptAsync(password, salt, SCRYPT_KEYLEN, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+    // scrypt needs roughly 128*N*r bytes; the default cap would reject N=16384.
+    maxmem: 64 * 1024 * 1024,
+  });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString('hex')}$${derived.toString('hex')}`;
+}
+
+/** Constant-time verification against a stored `scrypt$...` string. */
+async function verifyPassword(password, stored)
+{
+  if (typeof stored !== 'string') return false;
+  const parts = stored.split('$');
+  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
+
+  const [, n, r, p, saltHex, hashHex] = parts;
+  let derived;
+  try {
+    derived = await scryptAsync(password, Buffer.from(saltHex, 'hex'), hashHex.length / 2, {
+      N: Number(n),
+      r: Number(r),
+      p: Number(p),
+      maxmem: 64 * 1024 * 1024,
+    });
+  } catch (e) {
+    return false;
+  }
+
+  const expected = Buffer.from(hashHex, 'hex');
+  if (expected.length !== derived.length) return false;
+  return crypto.timingSafeEqual(derived, expected);
+}
+
+/** Read the account store. A missing file means "no accounts yet", not an error. */
+async function readUsers()
+{
+  try {
+    const raw = await fsp.readFile(USERS_DB_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.users) ? parsed.users : [];
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      console.error(`[VPSGUI Agent] Could not read ${USERS_DB_FILE}: ${e.message}`);
+    }
+    return [];
+  }
+}
+
+/**
+ * Write the account store.
+ *
+ * Written to a temp file and renamed so a crash mid-write cannot leave a
+ * truncated store that locks everyone out. Mode 0600: it holds password hashes.
+ */
+async function writeUsers(users)
+{
+  const tmp = `${USERS_DB_FILE}.tmp`;
+  const payload = JSON.stringify({ version: 1, users }, null, 2);
+  await fsp.writeFile(tmp, payload, { encoding: 'utf-8', mode: 0o600 });
+  await fsp.rename(tmp, USERS_DB_FILE);
+  // rename preserves the temp file's mode, but be explicit in case it existed.
+  await fsp.chmod(USERS_DB_FILE, 0o600).catch(() => { });
+}
+
+/** Usernames are compared case-insensitively so "Admin" and "admin" are one account. */
+function normaliseUsername(value)
+{
+  return String(value || '').trim().toLowerCase();
+}
+
+function validateCredentials(username, password)
+{
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    return 'Username must be 3-32 characters: letters, digits, dot, underscore or hyphen';
+  }
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  if (password.length > 1024) return 'Password is too long';
+  return null;
+}
+
+/**
+ * A real hash, of a random string nobody knows, verified against when the
+ * submitted username does not exist.
+ *
+ * Without it an unknown username returns immediately while a known one pays for
+ * a full scrypt derivation, and that difference is enough to enumerate accounts.
+ * Computed once, lazily, so startup is not delayed by it.
+ */
+let decoyHashPromise = null;
+function decoyPasswordHash()
+{
+  if (!decoyHashPromise) {
+    decoyHashPromise = hashPassword(crypto.randomBytes(32).toString('hex'));
+  }
+  return decoyHashPromise;
+}
+
+/* --- Sessions -------------------------------------------------------------
+ * Held in memory only. A restart signs everyone out, which is the safer
+ * default and avoids writing session material to disk at all. The map stores a
+ * SHA-256 of the token, so a memory dump does not yield usable cookies.
+ * ------------------------------------------------------------------------ */
+
+const sessions = new Map(); // sha256(token) -> { userId, username, role, expiresAt }
+
+function sessionKey(token)
+{
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function createSession(user)
+{
+  const token = crypto.randomBytes(32).toString('base64url');
+  sessions.set(sessionKey(token), {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  });
+  return token;
+}
+
+function lookupSession(token)
+{
+  if (!token) return null;
+  const key = sessionKey(token);
+  const entry = sessions.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    sessions.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+function destroySession(token)
+{
+  if (token) sessions.delete(sessionKey(token));
+}
+
+/** Drop every session belonging to one user, e.g. after a password change. */
+function destroySessionsForUser(userId)
+{
+  for (const [key, entry] of sessions) {
+    if (entry.userId === userId) sessions.delete(key);
+  }
+}
+
+setInterval(() =>
+{
+  const now = Date.now();
+  for (const [key, entry] of sessions) {
+    if (entry.expiresAt <= now) sessions.delete(key);
+  }
+}, 60000).unref();
+
+/* --- Cookie plumbing ----------------------------------------------------- */
+
+function parseCookies(req)
+{
+  const header = req.headers.cookie;
+  if (!header) return {};
+  const out = {};
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return out;
+}
+
+/**
+ * True when the request reached us over TLS.
+ *
+ * The agent itself is plain HTTP on loopback; nginx terminates TLS and reports
+ * it in X-Forwarded-Proto. Marking the cookie Secure on a plain-HTTP deployment
+ * would stop it being sent at all, so it is conditional.
+ */
+function requestIsHttps(req)
+{
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  return proto === 'https';
+}
+
+function setSessionCookie(res, req, token)
+{
+  const attrs = [
+    `${SESSION_COOKIE}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    // Strict is what makes this CSRF-resistant: a cross-site POST carries no
+    // cookie at all, so no separate CSRF token is needed.
+    'SameSite=Strict',
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+  ];
+  if (requestIsHttps(req)) attrs.push('Secure');
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+function clearSessionCookie(res, req)
+{
+  const attrs = [`${SESSION_COOKIE}=`, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=0'];
+  if (requestIsHttps(req)) attrs.push('Secure');
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+/**
+ * True when the caller presents the static agent token.
+ *
+ * Unchanged: this is what the SDKs and any scripts use, and it remains
+ * root-equivalent. Dashboard sessions are checked separately.
+ */
+function hasAgentToken(req)
 {
   const header = req.headers['authorization'] || '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
   if (!match) return false;
   const providedDigest = crypto.createHash('sha256').update(match[1].trim()).digest();
   return crypto.timingSafeEqual(providedDigest, AGENT_TOKEN_DIGEST);
+}
+
+/**
+ * Resolve who is calling: a signed-in dashboard user, or the static token.
+ *
+ * Returns null when neither applies. The session cookie is HttpOnly, so a
+ * cross-site script cannot read it, and SameSite=Strict means a cross-site
+ * request never carries it in the first place.
+ */
+function authenticateRequest(req)
+{
+  const session = lookupSession(parseCookies(req)[SESSION_COOKIE]);
+  if (session) return { kind: 'session', user: session };
+  if (hasAgentToken(req)) return { kind: 'token', user: null };
+  return null;
+}
+
+function isAuthorized(req)
+{
+  return authenticateRequest(req) !== null;
 }
 
 // Drop lockout entries that have expired so the map cannot grow without bound.
@@ -214,7 +491,8 @@ function cpuTimesSnapshot()
 }
 
 /** Per-interface cumulative byte counters from /proc/net/dev (Linux only). */
-function perInterfaceBytes() {
+function perInterfaceBytes()
+{
   if (os.platform() !== 'linux') return null;
   try {
     const data = fs.readFileSync('/proc/net/dev', 'utf-8');
@@ -234,7 +512,8 @@ function perInterfaceBytes() {
   }
 }
 
-function netBytesSnapshot() {
+function netBytesSnapshot()
+{
   const byIface = perInterfaceBytes();
   if (!byIface) return null;
   let rx = 0;
@@ -252,7 +531,8 @@ let lastIfaceBytes = perInterfaceBytes();
 let lastIfaceSampleAt = Date.now();
 let ifaceSpeeds = Object.create(null);
 
-function sampleInterfaceSpeeds() {
+function sampleInterfaceSpeeds()
+{
   const current = perInterfaceBytes();
   if (!current) return;
   const now = Date.now();
@@ -308,7 +588,8 @@ function sample()
   lastSampleAt = now;
 }
 
-setInterval(() => {
+setInterval(() =>
+{
   sample();
   sampleInterfaceSpeeds();
 }, 2000).unref();
@@ -585,13 +866,14 @@ async function getRealDockerImages()
  *
  * Defaults to the whole filesystem. VPSGUI is a host administration tool and operators expect to
  * reach any path; a narrow list simply produced "Path is outside the configured agent file roots"
- * for ordinary work. Narrow it via AGENT_FILE_ROOTS to reduce blast radius — for example
+ * for ordinary work. Narrow it via AGENT_FILE_ROOTS to reduce blast radius - for example
  * AGENT_FILE_ROOTS=/etc,/var/www,/home,/opt,/srv.
  *
  * The credential deny list (shadow, sudoers, SSH private keys, the agent's own token and secret
  * key) still applies regardless of the roots, so those stay unreadable even at '/'.
  */
-function defaultFileRoots() {
+function defaultFileRoots()
+{
   if (os.platform() === 'win32') return [path.parse(process.cwd()).root];
   return ['/'];
 }
@@ -599,7 +881,7 @@ function defaultFileRoots() {
 const FILE_ROOTS = (process.env.AGENT_FILE_ROOTS
   ? process.env.AGENT_FILE_ROOTS.split(',').map((p) => p.trim()).filter(Boolean)
   : defaultFileRoots()
-).map((p) => path.resolve(p));
+).map((p) => normaliseRoot(path.resolve(p)));
 
 // Credential material that the file browser refuses to hand out even inside an allowed root.
 const SENSITIVE_PATTERNS = [
@@ -615,6 +897,9 @@ const SENSITIVE_PATTERNS = [
   /(^|[\\/])agent\.env$/i,
   /(^|[\\/])\.secrets\.json$/i,
   /(^|[\\/])\.secrets-key$/i,
+  // Dashboard account store. scrypt hashes rather than plaintext, but still
+  // credential material, and reachable by path once AGENT_FILE_ROOTS is "/".
+  /(^|[\\/])users\.db$/i,
 ];
 
 function isSensitivePath(resolved)
@@ -626,14 +911,14 @@ function isSensitivePath(resolved)
 /**
  * Paths owned by the distribution and the running system rather than by the operator.
  *
- * Editing one of these is legitimate — changing sshd_config or an nginx vhost is the whole point of
- * the tool — but it is the kind of edit that takes a host off the network if it goes wrong. The flag
+ * Editing one of these is legitimate - changing sshd_config or an nginx vhost is the whole point of
+ * the tool - but it is the kind of edit that takes a host off the network if it goes wrong. The flag
  * exists so the UI can say so before the write, not to block it.
  */
 const SYSTEM_PREFIXES = os.platform() === 'win32'
   ? [process.env.SystemRoot || 'C:\Windows', 'C:\Program Files', 'C:\Program Files (x86)']
   : ['/bin', '/boot', '/dev', '/etc', '/lib', '/lib32', '/lib64', '/libx32', '/proc', '/run',
-     '/sbin', '/sys', '/usr', '/var/lib', '/var/log'];
+    '/sbin', '/sys', '/usr', '/var/lib', '/var/log'];
 
 /**
  * True when `resolved` sits inside a system-owned tree. Expects an already-resolved real path.
@@ -642,22 +927,40 @@ const SYSTEM_PREFIXES = os.platform() === 'win32'
  * "C:\WINDOWS" while a directory listing yields "C:\Windows", so a case-sensitive match flagged
  * nothing under the Windows directory at all.
  */
-function isSystemPath(resolved) {
+function isSystemPath(resolved)
+{
   const fold = (value) => (os.platform() === 'win32' ? value.toLowerCase() : value);
   const target = fold(resolved);
 
-  return SYSTEM_PREFIXES.some((prefix) => {
+  return SYSTEM_PREFIXES.some((prefix) =>
+  {
     const root = fold(path.resolve(prefix));
     if (target === root) return true;
     return target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
   });
 }
 
-function isInsideRoot(resolved) {
-  return FILE_ROOTS.some((root) => {
+/**
+ * Put a drive root back into its canonical "X:\\" form.
+ *
+ * Node's realpath returns "F:\\" for a Windows drive root; Bun's returns "F:".
+ * Both are the same directory, but the bare form fails every prefix comparison
+ * below, so running the agent under Bun refused to list a drive root at all.
+ * POSIX is unaffected: "/" is its own separator and has no bare variant.
+ */
+function normaliseRoot(value)
+{
+  return /^[A-Za-z]:$/.test(value) ? value + path.sep : value;
+}
+
+function isInsideRoot(rawResolved)
+{
+  const resolved = normaliseRoot(rawResolved);
+  return FILE_ROOTS.some((root) =>
+  {
     if (resolved === root) return true;
     // A root that is already a directory root ("/" on POSIX, "C:\" on Windows) ends in a separator.
-    // Appending another produced "//", which matched nothing — configuring AGENT_FILE_ROOTS=/
+    // Appending another produced "//", which matched nothing - configuring AGENT_FILE_ROOTS=/
     // rejected every path except "/" itself. The separator is still required for non-root entries so
     // that "/etc" does not also match a sibling like "/etcetera".
     const prefix = root.endsWith(path.sep) ? root : root + path.sep;
@@ -703,7 +1006,12 @@ async function resolveSafePath(requestedPath, { mustExist = true } = {})
     }
   }
 
-  const realResolved = probe === resolved ? realProbe : path.join(realProbe, path.relative(probe, resolved));
+  // normaliseRoot matters here as well as in the containment check: on Windows a
+  // bare "F:" means "the current directory on drive F", not the drive root, so
+  // handing it to stat() would silently operate on the wrong directory.
+  const realResolved = normaliseRoot(
+    probe === resolved ? realProbe : path.join(realProbe, path.relative(probe, resolved)),
+  );
   if (!isInsideRoot(realResolved)) {
     return { error: 'Path resolves outside the configured agent file roots', status: 403 };
   }
@@ -879,7 +1187,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 /**
  * Mounted filesystems via `df -PT -B1`.
  *
- * Pseudo-filesystems (tmpfs, devtmpfs, overlay, squashfs...) are filtered out — they are not disks
+ * Pseudo-filesystems (tmpfs, devtmpfs, overlay, squashfs...) are filtered out - they are not disks
  * and listing them as storage is misleading.
  */
 const PSEUDO_FS = new Set([
@@ -888,7 +1196,8 @@ const PSEUDO_FS = new Set([
   'fusectl', 'bpf', 'ramfs', 'mqueue', 'hugetlbfs', 'autofs', 'binfmt_misc', 'nsfs',
 ]);
 
-async function getStoragePartitions() {
+async function getStoragePartitions()
+{
   if (os.platform() === 'win32') return [];
   // -P forces one line per filesystem; -T adds the fs type; -B1 gives exact bytes.
   const output = await tryRun('df', ['-PT', '-B1'], { timeout: 8000 });
@@ -898,7 +1207,8 @@ async function getStoragePartitions() {
     .trim()
     .split('\n')
     .slice(1)
-    .map((line) => {
+    .map((line) =>
+    {
       const cols = line.trim().split(/\s+/);
       if (cols.length < 7) return null;
       // Mount points can contain spaces; everything from column 7 onward is the path.
@@ -930,7 +1240,8 @@ async function getStoragePartitions() {
 }
 
 /** Network interfaces from the OS, enriched with live throughput where /proc/net/dev exists. */
-function getNetworkInterfaces() {
+function getNetworkInterfaces()
+{
   const results = [];
   for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
     if (!addrs || addrs.length === 0) continue;
@@ -959,7 +1270,8 @@ function getNetworkInterfaces() {
 }
 
 /** ufw rules, parsed from `ufw status numbered`. Empty when ufw is absent or inactive. */
-async function getFirewallRules() {
+async function getFirewallRules()
+{
   if (os.platform() !== 'linux') return [];
   const output = await tryRun('ufw', ['status', 'numbered'], { timeout: 8000 });
   if (!output) return [];
@@ -995,7 +1307,8 @@ async function getFirewallRules() {
  * Only ever reads authorized_keys (public material). Private keys stay behind the
  * credential-file deny list.
  */
-async function getSshKeys() {
+async function getSshKeys()
+{
   if (os.platform() !== 'linux') return [];
 
   const candidates = [{ user: 'root', home: '/root' }];
@@ -1016,7 +1329,8 @@ async function getSshKeys() {
     } catch (e) {
       continue;
     }
-    content.split('\n').forEach((line, idx) => {
+    content.split('\n').forEach((line, idx) =>
+    {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) return;
       const parts = trimmed.split(/\s+/);
@@ -1054,7 +1368,8 @@ async function getSshKeys() {
  * Split an nginx config dump into top-level `server { ... }` blocks by brace depth.
  * A regex cannot do this correctly because blocks nest (server > location > if).
  */
-function extractServerBlocks(config) {
+function extractServerBlocks(config)
+{
   const blocks = [];
   const re = /\bserver\s*\{/g;
   let match;
@@ -1072,7 +1387,8 @@ function extractServerBlocks(config) {
 }
 
 /** Read a certificate's expiry via openssl. null when unreadable. */
-async function certExpiry(certPath) {
+async function certExpiry(certPath)
+{
   const out = await tryRun('openssl', ['x509', '-enddate', '-noout', '-in', certPath], { timeout: 5000 });
   if (!out) return null;
   const match = /notAfter=(.+)/.exec(out.trim());
@@ -1087,7 +1403,8 @@ async function certExpiry(certPath) {
  * This reports what nginx is actually serving rather than a separate list the agent would have to
  * keep in sync. Empty when nginx is absent or the config cannot be dumped.
  */
-async function getProxyRules() {
+async function getProxyRules()
+{
   if (os.platform() === 'win32') return [];
   const config = await tryRun('nginx', ['-T'], { timeout: 10000 });
   if (!config) return [];
@@ -1121,6 +1438,161 @@ async function getProxyRules() {
   return rules;
 }
 
+/**
+ * Where a new vhost should live on this host.
+ *
+ * Debian-family nginx uses sites-available + a symlink into sites-enabled;
+ * RHEL-family just globs conf.d. Detecting which is present beats writing to
+ * both and hoping.
+ */
+async function nginxVhostTarget(name)
+{
+  const available = '/etc/nginx/sites-available';
+  const enabled = '/etc/nginx/sites-enabled';
+  const hasSites = await fsp
+    .stat(enabled)
+    .then((st) => st.isDirectory())
+    .catch(() => false);
+
+  if (hasSites) {
+    return { file: path.join(available, name), link: path.join(enabled, name) };
+  }
+  return { file: path.join('/etc/nginx/conf.d', `${name}.conf`), link: null };
+}
+
+/** Reload nginx through whichever mechanism this host provides. */
+async function reloadNginx()
+{
+  const viaSystemd = await tryRun('systemctl', ['reload', 'nginx'], { timeout: 15000 });
+  if (viaSystemd !== null) return true;
+  return (await tryRun('nginx', ['-s', 'reload'], { timeout: 15000 })) !== null;
+}
+
+/**
+ * Create an nginx reverse-proxy vhost.
+ *
+ * The "Add Proxy Host" button was disabled because rules were read-only. This
+ * makes it real, with the same discipline run.sh uses for its own vhost: write,
+ * test, and delete the file again if `nginx -t` fails. A config that does not
+ * parse must never be left on disk, because the next unrelated reload would
+ * then fail and take every site on the box down with it.
+ */
+async function createProxyRule(body)
+{
+  const domain = String(body?.domain || '').trim();
+  const upstream = String(body?.upstream || '').trim();
+  const listenPort = Number.parseInt(body?.listenPort ?? 80, 10);
+  const websockets = body?.websockets !== false;
+
+  // A domain goes straight into a config file that runs as root. Anything
+  // outside this set could close the server block and inject directives.
+  if (!/^(\*\.)?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/.test(domain)) {
+    return { status: 400, body: { success: false, error: 'Domain must be a hostname such as app.example.com' } };
+  }
+  if (domain.length > 253) {
+    return { status: 400, body: { success: false, error: 'Domain is too long' } };
+  }
+  if (!/^https?:\/\/[A-Za-z0-9._-]+(:\d{1,5})?(\/[A-Za-z0-9._~\-/]*)?$/.test(upstream)) {
+    return {
+      status: 400,
+      body: { success: false, error: 'Upstream must look like http://127.0.0.1:3000' },
+    };
+  }
+  if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
+    return { status: 400, body: { success: false, error: 'listenPort must be between 1 and 65535' } };
+  }
+
+  if (os.platform() !== 'linux') {
+    return { status: 400, body: { success: false, error: 'Proxy rules are only managed on Linux hosts' } };
+  }
+
+  const name = domain.replace(/^\*\./, 'wildcard.').replace(/[^A-Za-z0-9.-]/g, '');
+  const { file, link } = await nginxVhostTarget(name);
+
+  if (await fsp.stat(file).then(() => true).catch(() => false)) {
+    return { status: 409, body: { success: false, error: `A vhost already exists at ${file}` } };
+  }
+
+  const wsLines = websockets
+    ? [
+      '        proxy_http_version 1.1;',
+      '        proxy_set_header Upgrade $http_upgrade;',
+      '        proxy_set_header Connection "upgrade";',
+    ]
+    : [];
+
+  const conf = [
+    '# Managed by VPSGUI. Edit freely; it is a plain nginx config.',
+    'server {',
+    `    listen ${listenPort};`,
+    `    listen [::]:${listenPort};`,
+    `    server_name ${domain};`,
+    '',
+    '    location / {',
+    `        proxy_pass ${upstream};`,
+    '        proxy_set_header Host $host;',
+    '        proxy_set_header X-Real-IP $remote_addr;',
+    '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
+    '        proxy_set_header X-Forwarded-Proto $scheme;',
+    ...wsLines,
+    '    }',
+    '}',
+    '',
+  ].join('\n');
+
+  const created = [];
+  try {
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, conf, { encoding: 'utf-8', mode: 0o644 });
+    created.push(file);
+
+    if (link && !(await fsp.stat(link).then(() => true).catch(() => false))) {
+      await fsp.symlink(file, link);
+      created.push(link);
+    }
+
+    // `nginx -t` exits non-zero on a bad config, which makes run() throw. A
+    // thrown error therefore means "invalid or could not be verified", and
+    // either way the file must not survive: the next unrelated reload would
+    // fail and take every site on the box down with it.
+    let testOutput = null;
+    try {
+      await run('nginx', ['-t'], { timeout: 15000 });
+    } catch (e) {
+      testOutput = (e && (e.stderr || e.stdout || e.message)) || 'nginx -t failed';
+      for (const created_path of created.reverse()) {
+        await fsp.rm(created_path, { force: true }).catch(() => { });
+      }
+      return {
+        status: 400,
+        body: {
+          success: false,
+          error: 'nginx rejected the generated config; nothing was left on disk',
+          output: String(testOutput).slice(0, 2000),
+        },
+      };
+    }
+
+    const reloaded = await reloadNginx();
+    return {
+      status: 200,
+      body: {
+        success: true,
+        file,
+        enabled: Boolean(link),
+        reloaded,
+        // Saying so explicitly beats implying the rule is live when it is not.
+        note: reloaded ? null : 'Config is valid but nginx could not be reloaded; reload it manually.',
+      },
+    };
+  } catch (e) {
+    for (const created_path of created.reverse()) {
+      await fsp.rm(created_path, { force: true }).catch(() => { });
+    }
+    return { status: 500, body: { success: false, error: e.message } };
+  }
+}
+
 // Database engines detectable from listening sockets. Reporting row/key counts would require
 // credentials for each engine, which the agent deliberately does not hold.
 const DB_ENGINES = [
@@ -1134,7 +1606,8 @@ const DB_ENGINES = [
 ];
 
 /** Database servers detected by their listening TCP ports. */
-async function getDatabases() {
+async function getDatabases()
+{
   if (os.platform() === 'win32') return [];
   // -H omits the header; without it the "State" column would be parsed as a port.
   const output = await tryRun('ss', ['-tlnH'], { timeout: 8000 });
@@ -1256,7 +1729,8 @@ const UNIMPLEMENTED_FEATURES = [];
 const NOLOGIN_SHELLS = new Set(['/usr/sbin/nologin', '/sbin/nologin', '/bin/false', '/usr/bin/false']);
 
 /** Real host accounts from /etc/passwd, enriched with group membership and last login. */
-async function getSystemUsers() {
+async function getSystemUsers()
+{
   if (os.platform() !== 'linux') return [];
 
   let passwd;
@@ -1297,7 +1771,8 @@ async function getSystemUsers() {
   return passwd
     .split('\n')
     .filter(Boolean)
-    .map((line) => {
+    .map((line) =>
+    {
       const [username, , uidRaw, gidRaw, gecos, home, shell] = line.split(':');
       const uid = Number.parseInt(uidRaw, 10);
       if (!username || !Number.isFinite(uid)) return null;
@@ -1327,7 +1802,8 @@ async function getSystemUsers() {
  * A real audit trail of SSH and sudo activity. The agent keeps no action history of its own, so
  * this reports what the host actually recorded rather than inventing application-level events.
  */
-async function getAuditLogs() {
+async function getAuditLogs()
+{
   if (os.platform() !== 'linux') return [];
 
   const output = await tryRun(
@@ -1389,7 +1865,8 @@ async function getAuditLogs() {
 }
 
 /** Live health checks computed from real host state. No check reports a status it did not measure. */
-async function getHealthMatrix() {
+async function getHealthMatrix()
+{
   const now = new Date().toISOString();
   const checks = [];
   const telemetry = await getRealTelemetry();
@@ -1440,7 +1917,7 @@ async function getHealthMatrix() {
     const running = containers.filter((c) => c.state === 'running').length;
     push(
       'health-docker', 'container', 'Docker engine', os.hostname(), 'green',
-      `Engine ${dockerVersion.trim()} — ${running}/${containers.length} containers running`
+      `Engine ${dockerVersion.trim()} - ${running}/${containers.length} containers running`
     );
   }
 
@@ -1451,7 +1928,8 @@ async function getHealthMatrix() {
  * Infrastructure topology derived from what the host actually runs: the node itself, its Docker
  * containers, and the database engines detected on listening ports.
  */
-async function getTopology() {
+async function getTopology()
+{
   const [containers, databases, telemetry] = await Promise.all([
     getRealDockerContainers(),
     getDatabases(),
@@ -1506,8 +1984,127 @@ async function getTopology() {
   return layers;
 }
 
-/** systemd timers — the host's real scheduled-job mechanism. */
-async function getQueueJobs() {
+/**
+ * Detail for one topology node.
+ *
+ * The map used to call an endpoint that did not exist, take the 404, and fill
+ * the panel from whatever the browser already had - including a hardcoded
+ * "Active 100%" routing figure and a "Security Inspection" line reading
+ * "Agent Reported" when no agent had reported anything.
+ *
+ * Every field here is measured or null. Null renders as "--", which is the
+ * honest answer for latency on a node there is nothing to ping.
+ */
+async function getTopologyNodeDetail(nodeId)
+{
+  const id = String(nodeId || '').trim();
+  if (!id) return null;
+
+  /** ufw is the only firewall the agent reads, so it is the only one claimed. */
+  const describeFirewall = async () =>
+  {
+    if (os.platform() !== 'linux') return null;
+    const output = await tryRun('ufw', ['status'], { timeout: 8000 });
+    if (!output) return 'ufw not available';
+    if (/^Status:\s*active/im.test(output)) {
+      const rules = await getFirewallRules();
+      return `ufw active, ${rules.length} rule${rules.length === 1 ? '' : 's'}`;
+    }
+    return 'ufw installed but inactive';
+  };
+
+  if (id === 'internet') {
+    return {
+      id,
+      kind: 'edge',
+      routing: 'Inbound',
+      // Nothing to measure: this node is a label for "everything outside".
+      latency: null,
+      throughput: null,
+      security: await describeFirewall(),
+      detail: { publicIp: await resolvePublicIp() },
+    };
+  }
+
+  if (id === 'host') {
+    const telemetry = await getRealTelemetry();
+    const interfaces = getNetworkInterfaces();
+
+    return {
+      id,
+      kind: 'host',
+      routing: 'Active',
+      // Latency needs a target. The agent is not going to invent one.
+      latency: null,
+      // netRxKbps/netTxKbps are sampled rates, so this really is throughput
+      // rather than a cumulative counter relabelled as one.
+      throughput: `${telemetry.netRxKbps} kbps in / ${telemetry.netTxKbps} kbps out`,
+      security: await describeFirewall(),
+      detail: {
+        hostname: telemetry.hostname,
+        uptimeSeconds: telemetry.uptimeSeconds,
+        cpuCores: telemetry.cpuCores,
+        loadAverage: telemetry.loadAverage,
+        interfaces: interfaces.map((i) => ({ name: i.name, ipv4: i.ipv4 })),
+      },
+    };
+  }
+
+  if (id.startsWith('container-')) {
+    const containerId = id.slice('container-'.length);
+    const containers = await getRealDockerContainers();
+    const match = containers.find((c) => c.id === containerId || c.name === containerId);
+    if (!match) return null;
+
+    return {
+      id,
+      kind: 'container',
+      routing: match.state === 'running' ? 'Running' : match.state || 'Stopped',
+      latency: null,
+      // Per-container network rates would need `docker stats --no-stream` per
+      // container on every poll; cpu and memory are already sampled, so those
+      // are what get reported.
+      throughput: null,
+      security:
+        match.ports && match.ports.length
+          ? `Published: ${Array.isArray(match.ports) ? match.ports.join(', ') : match.ports}`
+          : 'No published ports',
+      detail: {
+        image: match.image,
+        state: match.state,
+        status: match.status,
+        ports: match.ports,
+        cpuPercent: match.cpuPercent ?? null,
+        memoryUsageMb: match.memoryUsageMb ?? null,
+      },
+    };
+  }
+
+  if (id.startsWith('db-')) {
+    const port = Number.parseInt(id.slice('db-'.length), 10);
+    const databases = await getDatabases();
+    const match = databases.find((db) => db.port === port);
+    if (!match) return null;
+
+    return {
+      id,
+      kind: 'database',
+      routing: `Listening on ${match.port}`,
+      latency: null,
+      throughput: null,
+      // The agent detects the engine by its listening port only. It holds no
+      // credentials, so anything about the data itself stays null.
+      security: 'Detected by listening port; not authenticated',
+      detail: { engine: match.engine, port: match.port, size: null, tables: null, keys: null },
+    };
+  }
+
+  return null;
+}
+
+/** systemd timers - the host's real scheduled-job mechanism. */
+async function getQueueJobs()
+{
   if (os.platform() !== 'linux') return [];
   const output = await tryRun('systemctl', ['list-timers', '--all', '--no-legend', '--no-pager'], { timeout: 8000 });
   if (!output) return [];
@@ -1538,13 +2135,15 @@ async function getQueueJobs() {
 }
 
 /** Cron entries from the system crontab, /etc/cron.d and root's crontab. */
-async function getAutomationWorkflows() {
+async function getAutomationWorkflows()
+{
   if (os.platform() !== 'linux') return [];
 
   const workflows = [];
   const seen = new Set();
 
-  const addEntry = (source, line) => {
+  const addEntry = (source, line) =>
+  {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) return;
     // Skip environment assignments such as PATH= or SHELL=.
@@ -1614,9 +2213,10 @@ const SOURCE_SPEC = /^(any|[0-9a-fA-F:.]+(\/\d{1,3})?)$/;
  * Build the ufw argument vector for a rule change.
  *
  * Returns { args } or { error }. Every component is validated against a strict pattern and passed
- * as a separate argv entry — nothing is interpolated into a shell string.
+ * as a separate argv entry - nothing is interpolated into a shell string.
  */
-function buildUfwArgs({ action, port, protocol, source, ruleNumber }) {
+function buildUfwArgs({ action, port, protocol, source, ruleNumber })
+{
   if (typeof action !== 'string' || !UFW_ACTIONS[action]) {
     return { error: 'Invalid firewall action' };
   }
@@ -1655,7 +2255,8 @@ function buildUfwArgs({ action, port, protocol, source, ruleNumber }) {
 }
 
 /** Apply a ufw rule change. */
-async function applyFirewallAction(body) {
+async function applyFirewallAction(body)
+{
   // Validate BEFORE the platform check: a malformed request is a client error on any host,
   // and putting the guard first made every bad payload look like a 200 "not supported".
   const built = buildUfwArgs(body || {});
@@ -1675,9 +2276,10 @@ async function applyFirewallAction(body) {
 /**
  * Create a directory inside the configured file roots.
  */
-async function createDirectory(targetPath) {
+async function createDirectory(targetPath)
+{
   const safe = await resolveSafePath(targetPath, { mustExist: false });
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error, roots: FILE_ROOTS } };
 
   try {
     await fsp.mkdir(safe.path, { recursive: true, mode: 0o755 });
@@ -1693,9 +2295,10 @@ async function createDirectory(targetPath) {
  * Recursive deletion is opt-in per request so a mis-click on a directory cannot wipe a tree, and
  * the roots themselves are never removable.
  */
-async function deletePath(targetPath, recursive) {
+async function deletePath(targetPath, recursive)
+{
   const safe = await resolveSafePath(targetPath);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error, roots: FILE_ROOTS } };
 
   if (FILE_ROOTS.some((root) => root === safe.path)) {
     return { status: 403, body: { success: false, error: 'Refusing to delete a configured file root' } };
@@ -1726,12 +2329,13 @@ async function deletePath(targetPath, recursive) {
 }
 
 /** Rename or move a path. BOTH endpoints are confined, so a move cannot escape the roots. */
-async function renamePath(fromPath, toPath) {
+async function renamePath(fromPath, toPath)
+{
   const from = await resolveSafePath(fromPath);
-  if (from.error) return { status: from.status, body: { success: false, error: from.error , roots: FILE_ROOTS } };
+  if (from.error) return { status: from.status, body: { success: false, error: from.error, roots: FILE_ROOTS } };
 
   const to = await resolveSafePath(toPath, { mustExist: false });
-  if (to.error) return { status: to.status, body: { success: false, error: to.error , roots: FILE_ROOTS } };
+  if (to.error) return { status: to.status, body: { success: false, error: to.error, roots: FILE_ROOTS } };
 
   if (await fsp.stat(to.path).then(() => true).catch(() => false)) {
     // rename() would silently clobber the destination.
@@ -1763,11 +2367,13 @@ const DEPLOY_SCAN_DEPTH = 3;
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'dist', 'build', '.cache', 'tmp', 'proc', 'sys']);
 
 /** Find git checkouts under DEPLOY_ROOTS, breadth-limited so the scan stays fast. */
-async function findGitRepos() {
+async function findGitRepos()
+{
   const found = [];
   const seen = new Set();
 
-  async function walk(dir, depth) {
+  async function walk(dir, depth)
+  {
     if (depth > DEPLOY_SCAN_DEPTH || found.length >= 50) return;
     let entries;
     try {
@@ -1803,12 +2409,14 @@ async function findGitRepos() {
  * right now: the commit each checkout is on, whether it has local modifications, and how far it has
  * drifted from its remote.
  */
-async function getDeployments() {
+async function getDeployments()
+{
   if (os.platform() === 'win32') return [];
   const repos = await findGitRepos();
 
   return Promise.all(
-    repos.map(async (repo, index) => {
+    repos.map(async (repo, index) =>
+    {
       const git = (args) => tryRun('git', ['-C', repo, ...args], { timeout: 8000 });
 
       const [branch, sha, subject, when, remote, status, tracking] = await Promise.all([
@@ -1840,7 +2448,7 @@ async function getDeployments() {
         dirtyCount,
         ahead,
         behind,
-        // Derived purely from measured state — nothing here is a placeholder.
+        // Derived purely from measured state - nothing here is a placeholder.
         status: dirtyCount > 0 ? 'modified' : behind > 0 ? 'behind' : 'clean',
       };
     })
@@ -1848,7 +2456,8 @@ async function getDeployments() {
 }
 
 /** `git pull --ff-only` in a checkout, refusing anything that would need a merge commit. */
-async function pullDeployment(repoPath) {
+async function pullDeployment(repoPath)
+{
   if (typeof repoPath !== 'string' || !repoPath.trim()) {
     return { status: 400, body: { success: false, output: 'A repository path is required' } };
   }
@@ -1877,7 +2486,8 @@ const ARCHIVE_SUFFIX = '.tar.gz';
 const ARCHIVE_NAME = /^[a-zA-Z0-9._-]{1,120}$/;
 
 /** tar.gz archives previously created by this agent. */
-async function getBackups() {
+async function getBackups()
+{
   if (os.platform() === 'win32') return [];
 
   let entries;
@@ -1914,11 +2524,12 @@ async function getBackups() {
 }
 
 /** Create a tar.gz of a directory inside the agent's file roots. */
-async function createBackup(sourcePath, label) {
+async function createBackup(sourcePath, label)
+{
   // Confine the source BEFORE the platform check, so an escape attempt is a 403 on any host rather
   // than being masked by a "not supported here" 400.
   const safe = await resolveSafePath(sourcePath);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error, roots: FILE_ROOTS } };
 
   if (os.platform() === 'win32') {
     return { status: 400, body: { success: false, error: 'Backups require a Linux host with tar.' } };
@@ -1950,7 +2561,8 @@ async function createBackup(sourcePath, label) {
 }
 
 /** Delete an archive from the backup directory. */
-async function deleteBackup(name) {
+async function deleteBackup(name)
+{
   if (typeof name !== 'string' || !ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
     return { status: 400, body: { success: false, error: 'Invalid archive name' } };
   }
@@ -1964,13 +2576,14 @@ async function deleteBackup(name) {
 }
 
 /** Extract an archive back over a destination inside the file roots. */
-async function restoreBackup(name, destination) {
+async function restoreBackup(name, destination)
+{
   if (typeof name !== 'string' || !ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
     return { status: 400, body: { success: false, error: 'Invalid archive name' } };
   }
 
   const safe = await resolveSafePath(destination);
-  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error , roots: FILE_ROOTS } };
+  if (safe.error) return { status: safe.status, body: { success: false, error: safe.error, roots: FILE_ROOTS } };
 
   const archive = path.join(BACKUP_DIR, name);
   if (!(await fsp.stat(archive).catch(() => null))) {
@@ -1994,13 +2607,14 @@ const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,64}$/;
 /**
  * Load (or create) the AES key used to encrypt secret values.
  *
- * IMPORTANT — what this does and does not protect against. Values are encrypted at rest with
+ * IMPORTANT - what this does and does not protect against. Values are encrypted at rest with
  * AES-256-GCM, so they do not appear in plaintext in the store, in backups of it, or in anything
  * that happens to read the file. It does NOT protect against root on this host: the agent runs as
  * root and must be able to decrypt, so the key sits beside the data. Use a dedicated secret manager
  * if you need protection from a compromised host.
  */
-async function getSecretsKey() {
+async function getSecretsKey()
+{
   try {
     const existing = await fsp.readFile(SECRETS_KEY_FILE, 'utf-8');
     const buf = Buffer.from(existing.trim(), 'hex');
@@ -2010,11 +2624,12 @@ async function getSecretsKey() {
   }
   const key = crypto.randomBytes(32);
   await fsp.writeFile(SECRETS_KEY_FILE, key.toString('hex'), { mode: 0o600 });
-  await fsp.chmod(SECRETS_KEY_FILE, 0o600).catch(() => {});
+  await fsp.chmod(SECRETS_KEY_FILE, 0o600).catch(() => { });
   return key;
 }
 
-async function readSecretStore() {
+async function readSecretStore()
+{
   try {
     const raw = await fsp.readFile(SECRETS_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
@@ -2024,12 +2639,14 @@ async function readSecretStore() {
   }
 }
 
-async function writeSecretStore(entries) {
+async function writeSecretStore(entries)
+{
   await fsp.writeFile(SECRETS_FILE, JSON.stringify(entries, null, 2), { mode: 0o600 });
-  await fsp.chmod(SECRETS_FILE, 0o600).catch(() => {});
+  await fsp.chmod(SECRETS_FILE, 0o600).catch(() => { });
 }
 
-function encryptValue(key, plaintext) {
+function encryptValue(key, plaintext)
+{
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const enc = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
@@ -2040,14 +2657,16 @@ function encryptValue(key, plaintext) {
   };
 }
 
-function decryptValue(key, record) {
+function decryptValue(key, record)
+{
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(record.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(record.tag, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(record.data, 'base64')), decipher.final()]).toString('utf-8');
 }
 
-/** Secret metadata. Values are never included — reveal is a separate, explicit request. */
-async function getSecrets() {
+/** Secret metadata. Values are never included - reveal is a separate, explicit request. */
+async function getSecrets()
+{
   const entries = await readSecretStore();
   return entries.map((e) => ({
     id: e.name,
@@ -2061,7 +2680,8 @@ async function getSecrets() {
   }));
 }
 
-async function upsertSecret({ name, value, type, environment }) {
+async function upsertSecret({ name, value, type, environment })
+{
   if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
     return { status: 400, body: { success: false, error: 'Name must match [A-Za-z_][A-Za-z0-9_]{0,64}' } };
   }
@@ -2090,7 +2710,8 @@ async function upsertSecret({ name, value, type, environment }) {
   return { status: 200, body: { success: true, name } };
 }
 
-async function deleteSecret(name) {
+async function deleteSecret(name)
+{
   if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
     return { status: 400, body: { success: false, error: 'Invalid secret name' } };
   }
@@ -2103,7 +2724,8 @@ async function deleteSecret(name) {
   return { status: 200, body: { success: true } };
 }
 
-async function revealSecret(name) {
+async function revealSecret(name)
+{
   if (typeof name !== 'string' || !SECRET_NAME.test(name)) {
     return { status: 400, body: { success: false, error: 'Invalid secret name' } };
   }
@@ -2116,7 +2738,7 @@ async function revealSecret(name) {
     return { status: 200, body: { success: true, name, value: decryptValue(key, record) } };
   } catch (e) {
     // A GCM tag mismatch means the store was tampered with or the key no longer matches.
-    return { status: 500, body: { success: false, error: 'Could not decrypt — the key may have changed' } };
+    return { status: 500, body: { success: false, error: 'Could not decrypt - the key may have changed' } };
   }
 }
 
@@ -2130,7 +2752,8 @@ async function revealSecret(name) {
 const IPINFO_TOKEN = (process.env.AGENT_IPINFO_TOKEN || '').trim();
 
 /** Fetch JSON with a timeout, returning null on any failure rather than throwing. */
-async function fetchJson(url, timeoutMs = 8000) {
+async function fetchJson(url, timeoutMs = 8000)
+{
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -2147,12 +2770,38 @@ async function fetchJson(url, timeoutMs = 8000) {
 /**
  * Geolocate an IP address, proxied so the ipinfo.io token never reaches the browser.
  *
- * ipinfo's /lite endpoint is country-level only — it returns no city or region — so those fields
+ * ipinfo's /lite endpoint is country-level only - it returns no city or region - so those fields
  * come back null when it is the source, rather than being filled in from somewhere else and
  * presented as if ipinfo had supplied them. Without a token the agent falls back to ipapi.co,
  * which is keyless and does report a city.
  */
-async function lookupIpInfo(targetIp) {
+/**
+ * The host's own public address, resolved once and cached.
+ *
+ * The agent asking ipify server-side gets the *server's* egress address, which
+ * is exactly the answer wanted. The browser asking the same service gets the
+ * browser's address - which is why this must not be delegated to the client:
+ * doing so reported the operator's home IP as the server's public IP.
+ *
+ * Cached because /node is polled; a failure returns null rather than a guess.
+ */
+const PUBLIC_IP_TTL_MS = 60 * 60 * 1000;
+let publicIpCache = { value: null, at: 0 };
+
+async function resolvePublicIp()
+{
+  const now = Date.now();
+  if (publicIpCache.value && now - publicIpCache.at < PUBLIC_IP_TTL_MS) {
+    return publicIpCache.value;
+  }
+  const self = await fetchJson('https://api.ipify.org?format=json');
+  const ip = (self && typeof self.ip === 'string' && self.ip.trim()) || null;
+  if (ip) publicIpCache = { value: ip, at: now };
+  return ip;
+}
+
+async function lookupIpInfo(targetIp)
+{
   let ip = typeof targetIp === 'string' ? targetIp.trim() : '';
 
   // Resolve the host's own public address when none was supplied. A private or loopback address is
@@ -2170,7 +2819,7 @@ async function lookupIpInfo(targetIp) {
     if (data) {
       return {
         ip: data.ip || ip,
-        // Not provided by the lite endpoint — null rather than invented.
+        // Not provided by the lite endpoint - null rather than invented.
         city: null,
         region: null,
         country: data.country || null,
@@ -2250,7 +2899,10 @@ async function getNodePayload()
     },
     network: {
       ipAddress: primaryIpAddress(),
-      publicIp: null, // resolved client-side; the agent cannot know its NAT address
+      // Resolved server-side. Leaving this null made the UI fall back to a
+      // browser-side lookup, which reported the operator's own device IP as
+      // the server's public address.
+      publicIp: await resolvePublicIp(),
       hostname: os.hostname(),
       sshPort: 22,
     },
@@ -2322,7 +2974,8 @@ function sendJson(res, status, payload)
   res.end(JSON.stringify(payload));
 }
 
-function applyCors(req, res) {
+function applyCors(req, res)
+{
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser client, or a same-origin GET
 
@@ -2413,6 +3066,184 @@ async function handleRequest(req, res)
     sendJson(res, 429, { error: 'Too many failed authentication attempts. Try again later.' });
     return;
   }
+  // ---- Dashboard accounts -------------------------------------------------
+  // These sit ahead of the authorization gate because signing in cannot itself
+  // require being signed in. Each one does its own checking.
+
+  // Whether any account exists yet, so the UI can offer first-run setup instead
+  // of a login form nobody can pass. Reveals no account details.
+  if (method === 'GET' && pathname === '/api/v1/auth/status') {
+    const users = await readUsers();
+    sendJson(res, 200, {
+      configured: users.length > 0,
+      // A deployment with no accounts is protected only by the agent token, and
+      // the UI says so rather than implying the dashboard is locked down.
+      minPasswordLength: MIN_PASSWORD_LENGTH,
+    });
+    return;
+  }
+
+  // Create the first account. Allowed only while the store is empty AND the
+  // caller holds the agent token, which the operator already has from the
+  // installer - so this is never an open registration endpoint on a reachable
+  // host.
+  if (method === 'POST' && pathname === '/api/v1/auth/bootstrap') {
+    if (isLockedOut(ip)) {
+      sendJson(res, 429, { error: 'Too many failed attempts. Try again later.' });
+      return;
+    }
+    const existing = await readUsers();
+    if (existing.length > 0) {
+      sendJson(res, 409, { error: 'An account already exists. Sign in instead.' });
+      return;
+    }
+    if (!hasAgentToken(req)) {
+      recordAuthFailure(ip);
+      sendJson(res, 401, { error: 'Creating the first account requires the agent token' });
+      return;
+    }
+
+    const parsed = await parseJsonBody(req, 8 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { error: parsed.error });
+      return;
+    }
+    const username = normaliseUsername(parsed.body?.username);
+    const password = parsed.body?.password;
+    const invalid = validateCredentials(username, password);
+    if (invalid) {
+      sendJson(res, 400, { error: invalid });
+      return;
+    }
+
+    const user = {
+      id: crypto.randomUUID(),
+      username,
+      role: 'owner',
+      passwordHash: await hashPassword(password),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await writeUsers([user]);
+    console.log(`[VPSGUI Agent] Dashboard account created: ${username}`);
+
+    const token = createSession(user);
+    setSessionCookie(res, req, token);
+    sendJson(res, 200, { user: { id: user.id, username: user.username, role: user.role } });
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/v1/auth/login') {
+    if (isLockedOut(ip)) {
+      sendJson(res, 429, { error: 'Too many failed sign-in attempts. Try again later.' });
+      return;
+    }
+    const parsed = await parseJsonBody(req, 8 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { error: parsed.error });
+      return;
+    }
+
+    const username = normaliseUsername(parsed.body?.username);
+    const password = String(parsed.body?.password ?? '');
+    const users = await readUsers();
+    const user = users.find((u) => u.username === username);
+
+    // Verify against a decoy hash when the username is unknown, so the response
+    // takes the same time either way and cannot be used to enumerate accounts.
+    const ok = user
+      ? await verifyPassword(password, user.passwordHash)
+      : await verifyPassword(password, await decoyPasswordHash()).then(() => false);
+
+    if (!ok) {
+      recordAuthFailure(ip);
+      // One message for both cases, for the same reason.
+      sendJson(res, 401, { error: 'Incorrect username or password' });
+      return;
+    }
+
+    authFailures.delete(ip);
+    const token = createSession(user);
+    setSessionCookie(res, req, token);
+    sendJson(res, 200, { user: { id: user.id, username: user.username, role: user.role } });
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/v1/auth/logout') {
+    destroySession(parseCookies(req)[SESSION_COOKIE]);
+    clearSessionCookie(res, req);
+    sendJson(res, 200, { success: true });
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/api/v1/auth/me') {
+    const who = authenticateRequest(req);
+    if (!who) {
+      sendJson(res, 401, { error: 'Not signed in' });
+      return;
+    }
+    sendJson(res, 200, {
+      // A token-authenticated caller is a script, not a person; say so rather
+      // than inventing a user record for it.
+      kind: who.kind,
+      user: who.user
+        ? { id: who.user.userId, username: who.user.username, role: who.user.role }
+        : null,
+    });
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/api/v1/auth/password') {
+    const who = authenticateRequest(req);
+    if (!who || who.kind !== 'session') {
+      sendJson(res, 401, { error: 'Sign in to change your password' });
+      return;
+    }
+    if (isLockedOut(ip)) {
+      sendJson(res, 429, { error: 'Too many failed attempts. Try again later.' });
+      return;
+    }
+
+    const parsed = await parseJsonBody(req, 8 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { error: parsed.error });
+      return;
+    }
+
+    const users = await readUsers();
+    const index = users.findIndex((u) => u.id === who.user.userId);
+    if (index < 0) {
+      sendJson(res, 401, { error: 'Account no longer exists' });
+      return;
+    }
+
+    const current = String(parsed.body?.currentPassword ?? '');
+    const next = parsed.body?.newPassword;
+    if (!(await verifyPassword(current, users[index].passwordHash))) {
+      recordAuthFailure(ip);
+      sendJson(res, 401, { error: 'Current password is incorrect' });
+      return;
+    }
+    const invalid = validateCredentials(users[index].username, next);
+    if (invalid) {
+      sendJson(res, 400, { error: invalid });
+      return;
+    }
+
+    users[index].passwordHash = await hashPassword(next);
+    users[index].updatedAt = new Date().toISOString();
+    await writeUsers(users);
+
+    // Every other session for this account dies with the old password; the
+    // caller gets a fresh one so they are not signed out of the tab they are in.
+    destroySessionsForUser(users[index].id);
+    const token = createSession(users[index]);
+    setSessionCookie(res, req, token);
+    authFailures.delete(ip);
+    sendJson(res, 200, { success: true });
+    return;
+  }
+
   if (!isAuthorized(req)) {
     recordAuthFailure(ip);
     sendJson(res, 401, { error: 'Unauthorized: missing or invalid agent token' });
@@ -2473,6 +3304,17 @@ async function handleRequest(req, res)
     sendJson(res, 200, await getSshKeys());
     return;
   }
+  if (method === 'POST' && pathname === '/api/v1/proxy/rules') {
+    const parsed = await parseJsonBody(req, 16 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+    const result = await createProxyRule(parsed.body);
+    sendJson(res, result.status, result.body);
+    return;
+  }
+
   if (method === 'GET' && pathname === '/api/v1/proxy/rules') {
     sendJson(res, 200, await getProxyRules());
     return;
@@ -2498,6 +3340,18 @@ async function handleRequest(req, res)
     sendJson(res, 200, await getHealthMatrix());
     return;
   }
+  // Per-node detail. Matched before the bare /topology route would swallow it.
+  if (method === 'GET' && pathname.startsWith('/api/v1/topology/node/')) {
+    const nodeId = decodeURIComponent(pathname.slice('/api/v1/topology/node/'.length));
+    const detail = await getTopologyNodeDetail(nodeId);
+    if (!detail) {
+      sendJson(res, 404, { error: `Unknown topology node: ${nodeId}` });
+      return;
+    }
+    sendJson(res, 200, detail);
+    return;
+  }
+
   if (method === 'GET' && pathname === '/api/v1/topology') {
     sendJson(res, 200, await getTopology());
     return;
@@ -2518,7 +3372,7 @@ async function handleRequest(req, res)
       platform: os.platform(),
       // Lets the UI explain an empty page instead of implying the host simply has none.
       unimplementedFeatures: UNIMPLEMENTED_FEATURES,
-      // Whether a token is set — never the token itself.
+      // Whether a token is set - never the token itself.
       ipinfoConfigured: Boolean(IPINFO_TOKEN),
     });
     return;

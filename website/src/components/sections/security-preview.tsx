@@ -16,7 +16,7 @@ export function SecurityPreview() {
             The agent token is a <span className="accent-word">root password</span>.
           </>
         }
-        lede="Not a metaphor. The agent runs shell commands, installs packages and writes files, so anyone holding that token owns the machine. There is no user database and no RBAC — network reach plus the token is the whole access model."
+        lede="Not a metaphor. The agent runs shell commands, installs packages and writes files, so anyone holding that token owns the machine. There is no user database and no RBAC - network reach plus the token is the whole access model."
       />
 
       <Reveal className="mt-10">

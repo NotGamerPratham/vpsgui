@@ -77,7 +77,7 @@ export function SecretsPage() {
 
     setBusy(s.id);
     setError(null);
-    // Decryption is a separate, explicit request — the list endpoint never returns values.
+    // Decryption is a separate, explicit request - the list endpoint never returns values.
     const result = await securityService.revealSecret(s.name);
     if (result.success && result.value !== undefined) {
       setRevealed((prev) => ({ ...prev, [s.name]: result.value as string }));

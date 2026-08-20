@@ -91,7 +91,7 @@ function techArticle(headline: string, description: string, path: string) {
 export const routeSeo: RouteSeo[] = [
   {
     path: '/',
-    title: 'VPSGUI — run your Linux servers from a browser tab',
+    title: 'VPSGUI - run your Linux servers from a browser tab',
     description:
       'Open-source, self-hosted control plane for Linux servers and Docker. Live telemetry from /proc, a host shell, file manager, firewall, secrets and backups. MIT licensed, no account required.',
     canonical: `${SITE_URL}/`,
@@ -114,7 +114,7 @@ export const routeSeo: RouteSeo[] = [
   },
   {
     path: '/docs',
-    title: 'Documentation — install, configure and troubleshoot VPSGUI',
+    title: 'Documentation - install, configure and troubleshoot VPSGUI',
     description:
       'Install VPSGUI, configure the agent, put it behind TLS, add more hosts and troubleshoot it. Full environment-variable reference and built-in limits.',
     canonical: `${SITE_URL}/docs`,
@@ -134,7 +134,7 @@ export const routeSeo: RouteSeo[] = [
   },
   {
     path: '/api',
-    title: 'API reference — all 46 VPSGUI agent endpoints',
+    title: 'API reference - all 46 VPSGUI agent endpoints',
     description:
       'Every REST endpoint the VPSGUI agent serves: telemetry, processes, Docker, files, firewall, secrets, network, storage, backups, deployments and terminal.',
     canonical: `${SITE_URL}/api`,
@@ -154,7 +154,7 @@ export const routeSeo: RouteSeo[] = [
   },
   {
     path: '/security',
-    title: 'Security model — what VPSGUI protects and what it does not',
+    title: 'Security model - what VPSGUI protects and what it does not',
     description:
       'The VPSGUI agent token is root-equivalent. What the agent enforces, what the operator must do, the threat scenarios, and a hardening checklist.',
     canonical: `${SITE_URL}/security`,

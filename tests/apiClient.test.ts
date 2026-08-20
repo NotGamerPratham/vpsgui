@@ -2,7 +2,7 @@
  * ApiClient tests.
  *
  * The previous suite asserted `expect(apiClient).toBeDefined()` and swallowed every error in a
- * try/catch with an `expect` that only ran on the failure path — it passed whether or not the
+ * try/catch with an `expect` that only ran on the failure path - it passed whether or not the
  * client worked. These stub global fetch and assert on real behaviour.
  */
 

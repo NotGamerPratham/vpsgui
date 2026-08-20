@@ -2,7 +2,7 @@ import type { NavLink } from '@/types';
 
 /**
  * Single source of truth for every outbound link and headline claim on the
- * site. Nothing here is aspirational — if a number appears on the page it is
+ * site. Nothing here is aspirational - if a number appears on the page it is
  * countable in the repository, and if a package is listed it is published.
  */
 export const site = {

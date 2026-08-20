@@ -8,7 +8,7 @@ import { useEffect } from 'react';
 export default function NotFoundPage() {
   // Not in routeSeo: a 404 should never be indexed, and it has no canonical.
   useEffect(() => {
-    document.title = 'Page not found — VPSGUI';
+    document.title = 'Page not found - VPSGUI';
     const robots = document.createElement('meta');
     robots.name = 'robots';
     robots.content = 'noindex, follow';

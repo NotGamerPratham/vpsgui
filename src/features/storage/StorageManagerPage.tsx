@@ -17,7 +17,7 @@ interface Partition {
   usagePercent: number;
   /**
    * null unless a SMART source is available. The agent does not run smartctl, so it reports null
-   * rather than claiming "passed" — this page used to print an unconditional green PASSED badge.
+   * rather than claiming "passed" - this page used to print an unconditional green PASSED badge.
    */
   smartHealth: 'passed' | 'warning' | 'failing' | null;
 }
@@ -38,7 +38,7 @@ export function StorageManagerPage() {
       setPartitions([]);
       setError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -132,9 +132,8 @@ export function StorageManagerPage() {
                       </span>
                     ) : (
                       <span
-                        className={`inline-flex items-center text-xs font-semibold ${
-                          part.smartHealth === 'passed' ? 'text-emerald-400' : 'text-amber-400'
-                        }`}
+                        className={`inline-flex items-center text-xs font-semibold ${part.smartHealth === 'passed' ? 'text-emerald-400' : 'text-amber-400'
+                          }`}
                       >
                         <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {part.smartHealth.toUpperCase()}
                       </span>

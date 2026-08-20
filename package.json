@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "agent:start": "node agent/server.js",
+    "agent:start:bun": "bun agent/server.js",
     "deploy:vps": "bash run.sh"
   },
   "dependencies": {

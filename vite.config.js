@@ -25,6 +25,22 @@ export default defineConfig({
       '/api/v1': {
         target: process.env.VITE_AGENT_ORIGIN || 'http://127.0.0.1:46509',
         changeOrigin: true,
+        configure: (proxy) =>
+        {
+          // Drop the browser's Origin before forwarding.
+          //
+          // The agent treats a request whose Origin hostname differs from its
+          // Host hostname as cross-origin and answers 403. Behind nginx the two
+          // agree, but this proxy rewrites Host to 127.0.0.1:46509 while the
+          // browser's Origin stays localhost:3001 - so every POST from `npm run
+          // dev` was refused, while GETs (which browsers send without Origin)
+          // worked. A server-side proxy has no origin of its own, and the bearer
+          // token remains the actual access control.
+          proxy.on('proxyReq', (proxyReq) =>
+          {
+            proxyReq.removeHeader('origin');
+          });
+        },
       },
     },
   },

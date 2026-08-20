@@ -114,8 +114,10 @@ export function CommandPalette() {
                   >
                     <div className="flex items-center">
                       <Server className="h-4 w-4 mr-2.5 text-primary" />
-                      <span className="font-medium text-foreground">{nodes[0]?.name || 'vps128'}</span>
-                      <span className="ml-2 font-mono text-[10px] text-muted-foreground">({nodes[0]?.network?.publicIp || '127.0.0.1'})</span>
+                      <span className="font-medium text-foreground">{nodes[0]?.name || 'No host connected'}</span>
+                      {nodes[0]?.network?.publicIp && (
+                        <span className="ml-2 font-mono text-[10px] text-muted-foreground">({nodes[0].network.publicIp})</span>
+                      )}
                     </div>
                     <span
                       className={`text-[10px] font-mono px-2 py-0.5 rounded border ${

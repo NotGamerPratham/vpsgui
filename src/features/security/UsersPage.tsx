@@ -10,7 +10,7 @@ import { apiClient, ApiError } from '../../api/client';
  * Matches the agent's GET /users payload: real accounts parsed from /etc/passwd.
  *
  * This page previously described "Organization Team & RBAC Roles" with Email, Role and MFA columns.
- * VPSGUI has no user database, no roles and no MFA — those columns could only ever be blank or
+ * VPSGUI has no user database, no roles and no MFA - those columns could only ever be blank or
  * invented. A Linux host does have real accounts, so that is what this shows.
  */
 interface SystemUser {
@@ -22,7 +22,7 @@ interface SystemUser {
   fullName: string;
   home: string;
   shell: string;
-  /** UID below 1000 (and not root) — a service account rather than a person. */
+  /** UID below 1000 (and not root) - a service account rather than a person. */
   isSystem: boolean;
   /** False when the login shell is nologin/false. */
   canLogin: boolean;
@@ -47,7 +47,7 @@ export function UsersPage() {
       setUsers([]);
       setError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }

@@ -33,7 +33,7 @@ describe('serverService.getNodes', () => {
     expect(Array.isArray(serverService.getNodes())).toBe(true);
   });
 
-  it('returns exactly one node — VPSGUI manages a single host', () => {
+  it('returns exactly one node - VPSGUI manages a single host', () => {
     expect(serverService.getNodes()).toHaveLength(1);
   });
 });

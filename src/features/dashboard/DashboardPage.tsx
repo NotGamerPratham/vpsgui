@@ -22,6 +22,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { TelemetryPoint } from '../../types/monitoring';
+import { dockerService } from '../../services/dockerService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -45,6 +46,30 @@ export function DashboardPage() {
 
   const [telemetry, setTelemetry] = useState<TelemetryPoint[]>([]);
   const [latestData, setLatestData] = useState<{ cpuPercent: number; ramPercent: number; tempC?: number; netRxKbps?: number; netTxKbps?: number } | null>(null);
+  // The Docker card used to be hardcoded to "Host Engine Active" with no data
+  // source at all - it said that on hosts with no Docker installed.
+  const [docker, setDocker] = useState<{ running: number; total: number } | null>(null);
+  const [dockerError, setDockerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    dockerService.fetchContainers().then(({ containers, error }) => {
+      if (cancelled) return;
+      if (error) {
+        setDockerError(error);
+        setDocker(null);
+        return;
+      }
+      setDockerError(null);
+      setDocker({
+        running: containers.filter((c) => c.state === 'running').length,
+        total: containers.length,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     fetchNodesFromApi();
@@ -107,9 +132,19 @@ export function DashboardPage() {
               <span>Host VPS Command Center</span>
             </h1>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ repeat: Infinity, repeatType: 'reverse', duration: 1.5 }}>
+              {/* Every value here is the agent's or absent. It used to invent the
+                  hostname "vps128" and the address 127.0.0.1, and to say
+                  "Active" with a pinging green icon even when the host was not
+                  online - three claims about a real machine that nothing had
+                  reported. */}
               <Badge variant={isOnline ? 'success' : 'outline'} className="font-mono text-[10px] gap-1 px-2 py-0.5 shadow-sm">
-                <Radio className="h-3 w-3 animate-ping text-emerald-400" />
-                <span>{hostNode?.name || 'vps128'} ({hostNode?.network?.publicIp || '127.0.0.1'}) Active</span>
+                <Radio className={`h-3 w-3 ${isOnline ? 'animate-ping text-emerald-400' : 'text-muted-foreground'}`} />
+                <span>
+                  {hostNode?.name || 'Host not identified'}
+                  {hostNode?.network?.publicIp ? ` (${hostNode.network.publicIp})` : ''}
+                  {' '}
+                  {hostNode ? (isOnline ? 'Active' : hostNode.status) : 'Awaiting agent'}
+                </span>
               </Badge>
             </motion.div>
           </div>
@@ -137,11 +172,15 @@ export function DashboardPage() {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Host VPS Status</p>
                 <h3 className="text-xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  {hostNode?.name || 'vps128'}
+                  {hostNode?.name || '—'}
                 </h3>
                 <p className="text-[11px] text-muted-foreground flex items-center mt-1 font-mono">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
-                  {hostNode?.network?.publicIp || '127.0.0.1'}
+                  {/* The dot tracked nothing - it was always green. */}
+                  <span
+                    className={`h-2 w-2 rounded-full mr-1.5 ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/50'
+                      }`}
+                  />
+                  {hostNode?.network?.publicIp || 'Public IP not reported'}
                 </p>
               </div>
               <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
@@ -214,11 +253,32 @@ export function DashboardPage() {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Docker Services</p>
                 <h3 className="text-2xl font-extrabold text-foreground mt-1 flex items-baseline gap-1.5 font-mono">
-                  Host Docker
+                  {docker ? docker.running : '—'}
+                  {docker && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      / {docker.total} running
+                    </span>
+                  )}
                 </h3>
-                <p className="text-[11px] text-emerald-400 font-semibold flex items-center mt-1">
-                  <Zap className="h-3 w-3 mr-1 fill-emerald-400" /> Host Engine Active
-                </p>
+                {/* Previously a hardcoded "Host Engine Active" with a green
+                    bolt, shown even on hosts with no Docker installed. */}
+                {dockerError ? (
+                  <p className="text-[11px] text-muted-foreground flex items-center mt-1">
+                    Docker unavailable
+                  </p>
+                ) : docker ? (
+                  <p
+                    className={`text-[11px] font-semibold flex items-center mt-1 ${docker.running > 0 ? 'text-emerald-400' : 'text-muted-foreground'
+                      }`}
+                  >
+                    <Zap
+                      className={`h-3 w-3 mr-1 ${docker.running > 0 ? 'fill-emerald-400' : ''}`}
+                    />
+                    {docker.running > 0 ? 'Engine responding' : 'No containers running'}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground mt-1">Querying engine…</p>
+                )}
               </div>
               <div className="h-11 w-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
                 <Container className="h-5 w-5" />
@@ -240,8 +300,10 @@ export function DashboardPage() {
             <Terminal className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-foreground">Host SSH Shell</h4>
-            <p className="text-[10px] text-muted-foreground">VPS terminal</p>
+            {/* Not SSH: commands run through the agent over HTTP, and there is
+                no SSH client anywhere in the product. */}
+            <h4 className="text-xs font-bold text-foreground">Host Terminal</h4>
+            <p className="text-[10px] text-muted-foreground">Run commands via agent</p>
           </div>
         </motion.button>
 
@@ -303,9 +365,20 @@ export function DashboardPage() {
               <p className="text-xs text-muted-foreground">Real-time CPU load & RAM allocation stream from active host agent</p>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="font-mono text-[10px] gap-1.5 bg-primary/10 border-primary/30 text-primary">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Live Agent Telemetry
+              {/* Claimed "Live Agent Telemetry" with a pulsing dot even when no
+                  telemetry had ever arrived. */}
+              <Badge
+                variant="outline"
+                className={`font-mono text-[10px] gap-1.5 ${telemetry.length > 0
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'border-border text-muted-foreground'
+                  }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${telemetry.length > 0 ? 'bg-primary animate-pulse' : 'bg-muted-foreground/50'
+                    }`}
+                />
+                {telemetry.length > 0 ? 'Live agent telemetry' : 'Awaiting telemetry'}
               </Badge>
             </div>
           </CardHeader>

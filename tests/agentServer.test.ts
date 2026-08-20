@@ -111,7 +111,7 @@ describe('agent: authentication', () => {
 
 describe('agent: host inventory endpoints', () => {
   // These four backed pages that previously 404'd on every load, so the UI could only ever show
-  // an empty state. They must return arrays (possibly empty on platforms lacking the tool) — not 404.
+  // an empty state. They must return arrays (possibly empty on platforms lacking the tool) - not 404.
   it.each(['/storage/partitions', '/network/interfaces', '/security/firewall', '/security/ssh-keys'])(
     'implements %s and returns an array',
     async (endpoint) => {
@@ -208,7 +208,7 @@ describe('agent: filesystem confinement', () => {
   });
 
   it('does not treat a sibling directory as inside the root', async () => {
-    // "/etc" must not match "/etcetera" — the separator in the prefix check guards against this.
+    // "/etc" must not match "/etcetera" - the separator in the prefix check guards against this.
     const sibling = `${sandboxRoot}-sibling`;
     await fs.mkdir(sibling, { recursive: true });
     try {
@@ -335,7 +335,7 @@ describe('agent: filesystem-root configuration', () => {
     // AGENT_FILE_ROOTS now defaults to "/", so these files are reachable by path. Serving any of
     // them would hand over the bearer token or every stored secret in a single request.
     const target = path.join(process.cwd(), 'agent', filename);
-    await fs.writeFile(target, 'canary', 'utf-8').catch(() => {});
+    await fs.writeFile(target, 'canary', 'utf-8').catch(() => { });
     try {
       const read = await fetch(`${ROOT_BASE}/api/v1/files/read?path=${encodeURIComponent(target)}`, {
         headers: AUTH,
@@ -350,7 +350,7 @@ describe('agent: filesystem-root configuration', () => {
       });
       expect(write.status).toBe(403);
     } finally {
-      await fs.rm(target, { force: true }).catch(() => {});
+      await fs.rm(target, { force: true }).catch(() => { });
     }
   });
 
@@ -519,7 +519,7 @@ describe('agent: failed-auth lockout is per-client', () => {
     // Behind nginx every request arrives from 127.0.0.1, so keying the lockout on the socket
     // address made it global: one browser with a stale token 429'd the entire application for
     // everyone. The agent trusts X-Forwarded-For only from a loopback peer, and uses the rightmost
-    // hop — the one our own nginx appended.
+    // hop - the one our own nginx appended.
     for (let i = 0; i < 15; i++) {
       await fetch(`${BASE}/api/v1/system/telemetry`, {
         headers: { ...badAuth, 'X-Forwarded-For': '203.0.113.10' },
@@ -708,7 +708,7 @@ describe('agent: secrets are encrypted at rest', () => {
   const SECRET_VALUE = 'plaintext-canary-value-9f3a';
 
   afterAll(async () => {
-    await post('security/secrets/delete', { name: 'TEST_SECRET' }).catch(() => {});
+    await post('security/secrets/delete', { name: 'TEST_SECRET' }).catch(() => { });
   });
 
   it('never writes the plaintext value to disk', async () => {
@@ -798,7 +798,7 @@ describe('agent: IP geolocation proxy', () => {
   });
 
   it('returns a stable shape and never fabricates a location', async () => {
-    // Network-dependent, so the values are not asserted — only that every field is present and
+    // Network-dependent, so the values are not asserted - only that every field is present and
     // that a field the provider did not supply is null rather than a plausible-looking guess.
     const res = await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`, { headers: AUTH });
     expect(res.status).toBe(200);

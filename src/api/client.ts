@@ -16,8 +16,8 @@ export class ApiError extends Error {
   /**
    * The parsed error body, when the agent sent one.
    *
-   * Several endpoints return context alongside `error` — a confinement failure
-   * reports the configured `roots`, for instance — and that context is what
+   * Several endpoints return context alongside `error` - a confinement failure
+   * reports the configured `roots`, for instance - and that context is what
    * lets the UI explain how to fix the problem rather than just restating it.
    */
   readonly details: Record<string, unknown> | null;

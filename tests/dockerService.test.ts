@@ -2,7 +2,7 @@
  * DockerService tests.
  *
  * The previous suite only checked `expect(dockerService).toBeDefined()` and that the fetch helpers
- * returned arrays — assertions that held even when the service swallowed every error into an empty
+ * returned arrays - assertions that held even when the service swallowed every error into an empty
  * list, which is exactly the bug that made an unreachable Docker socket look like a host with no
  * containers.
  */

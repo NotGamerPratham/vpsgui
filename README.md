@@ -1,4 +1,4 @@
-# VPSGUI — Open Infrastructure Workspace
+# VPSGUI - Open Infrastructure Workspace
 
 <p align="center">
   <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80" alt="VPSGUI Infrastructure Banner" width="100%" />
@@ -35,15 +35,43 @@ root password.** Anyone who can reach the agent with that token owns the machine
 - Keep the agent on **loopback** (the default) behind the bundled nginx reverse proxy. Do not expose
   port 46509 to the internet.
 - Put the UI behind a **VPN, firewall, or authenticating proxy**. The sign-in page is a local profile
-  gate, not authentication — VPSGUI ships no user database, roles, or permissions.
+  gate, not authentication - VPSGUI ships no user database, roles, or permissions.
 
 See [docs/SECURITY.md](docs/SECURITY.md) for the full model and the hardening knobs.
+
+### Dashboard sign-in
+
+The sign-in screen is now real authentication, not a local profile gate.
+
+- Accounts live in `/opt/vpsgui/agent/users.db` - a `0600` JSON file. Passwords
+  are hashed with **scrypt** (N=16384, r=8, per-user random salt) and compared in
+  constant time. Nothing stores a password in plaintext, and the file is on the
+  agent's credential deny-list, so the file manager refuses it even with
+  `AGENT_FILE_ROOTS=/`.
+- The browser gets an **HttpOnly, SameSite=Strict** session cookie it cannot
+  read, so an injected script cannot steal the session and a cross-site request
+  never carries it. Sessions last 12 hours, are held in memory only (a restart
+  signs everyone out), and are stored as a SHA-256 digest rather than the token.
+- Failed sign-ins share the agent's lockout: 10 attempts locks that client out
+  for 5 minutes. Unknown usernames are verified against a decoy hash so the
+  response time cannot be used to enumerate accounts.
+- **Creating the first account requires the agent token**, and is only possible
+  while no account exists. There is no open registration endpoint.
+
+Create it from the browser on first visit, or directly:
+
+```bash
+curl -X POST http://127.0.0.1:46509/api/v1/auth/bootstrap   -H "Authorization: Bearer $(sudo grep -oP 'AGENT_TOKEN=\K.*' /opt/vpsgui/agent/agent.env)"   -H 'Content-Type: application/json'   -d '{"username":"admin","password":"choose-something-long"}'
+```
+
+The agent token keeps working alongside this for the SDKs and scripts, and it
+remains root-equivalent - dashboard accounts do not replace it or reduce it.
 
 ---
 
 ## Setup
 
-Requires **Node.js 18+**. Clone, then run the deploy script as root — it installs dependencies,
+Requires **Node.js 18+**. Clone, then run the deploy script as root - it installs dependencies,
 builds the frontend, publishes it to `/var/www/vpsgui/dist`, installs the agent as a systemd
 service, and configures nginx:
 
@@ -52,7 +80,7 @@ git clone https://github.com/NotGamerPratham/vpsgui.git && cd vpsgui && sudo ./r
 ```
 
 To install only the agent on an additional Linux host, download and **read the script before running
-it as root** — piping a remote script straight into `sudo bash` executes whatever the URL returns at
+it as root** - piping a remote script straight into `sudo bash` executes whatever the URL returns at
 that moment, with no chance to inspect it:
 
 ```bash
@@ -126,6 +154,36 @@ VPSGUI/
    ```bash
    chmod +x run.sh && ./run.sh
    ```
+
+---
+
+## Node or Bun
+
+Everything here runs on **Node.js 18+** or on **Bun 1.2+**. Node is the default
+and what `run.sh` installs on a server; Bun is supported for local development
+and is roughly three times faster to build.
+
+```bash
+bun install && bun run test && bun --bun run build
+```
+
+`bun run <script>` executes the package scripts, but note two details:
+
+- **`bun run` does not shim `node`.** A script that names `node` explicitly —
+  such as `agent:start` - still launches Node. Use `bun run agent:start:bun` on a
+  machine that has only Bun.
+- **`--bun` is what makes Bun run the tooling.** Vite's binary carries a
+  `#!/usr/bin/env node` shebang, which Bun honours by default, so a plain
+  `bun run build` quietly builds on Node. `bun --bun run build` runs Vite itself
+  on Bun.
+
+The build output is byte-for-byte identical either way, and CI runs the whole
+suite plus the agent under both runtimes.
+
+The one place they genuinely differed: `fs.realpath` on a Windows drive root
+returns `F:\` on Node and `F:` on Bun. The agent normalises that before its
+path-confinement check - without it, running the agent on Bun refused to list
+its own configured root.
 
 ---
 

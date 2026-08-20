@@ -13,7 +13,7 @@ export interface FirewallRuleInput {
 
 function describeError(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 401) return 'Unauthorized — set a valid Agent Token under Settings.';
+    if (e.status === 401) return 'Unauthorized - set a valid Agent Token under Settings.';
     if (e.status === 0) return `Agent unreachable: ${e.message}`;
     return e.message;
   }
@@ -24,7 +24,7 @@ function describeError(e: unknown): string {
  * Firewall rules and audit events come from real host sources (ufw and the systemd journal).
  *
  * Secrets are stored on the host encrypted with AES-256-GCM. That protects the values from being
- * read out of the store, a backup, or a log — but not from root on the host, which holds the key.
+ * read out of the store, a backup, or a log - but not from root on the host, which holds the key.
  */
 class SecurityService {
   /** Live ufw rules. The error is surfaced so an empty list is not mistaken for "no rules". */
@@ -50,7 +50,7 @@ class SecurityService {
     }
   }
 
-  /** Secret metadata. Values are never included — reveal is a separate request. */
+  /** Secret metadata. Values are never included - reveal is a separate request. */
   async fetchSecrets(): Promise<{ secrets: SecretItem[]; error: string | null }> {
     try {
       const res = await apiClient.get<SecretItem[]>('/security/secrets');

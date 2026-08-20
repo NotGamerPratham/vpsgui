@@ -29,6 +29,6 @@ export const quickstartSteps: QuickstartStep[] = [
     title: 'Add more hosts',
     body: 'For each extra machine, download the agent installer, read it, then run it as root. Add the resulting host to the console you already have.',
     command: agentInstallCommand,
-    note: 'Read the script before running it — piping a remote URL into sudo bash executes whatever it returns at that moment.',
+    note: 'Read the script before running it - piping a remote URL into sudo bash executes whatever it returns at that moment.',
   },
 ];

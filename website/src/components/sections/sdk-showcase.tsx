@@ -17,7 +17,7 @@ export function SdkShowcase() {
             write.
           </>
         }
-        lede="There is no private channel between the UI and the agent — the browser calls the same 46 endpoints you can. SDKs are published for Node and Python, and curl is a perfectly good third option."
+        lede="There is no private channel between the UI and the agent - the browser calls the same 46 endpoints you can. SDKs are published for Node and Python, and curl is a perfectly good third option."
       />
 
       <Reveal className="mt-12">
@@ -59,7 +59,7 @@ export function SdkShowcase() {
       <Reveal delay={0.06} className="mt-5">
         <p className="max-w-2xl text-xs leading-relaxed text-subtle">
           Each sample reads the token from the environment. It grants root-equivalent control of the
-          host, so it belongs in a secret store — not in a committed file, an image layer or a
+          host, so it belongs in a secret store - not in a committed file, an image layer or a
           frontend bundle.
         </p>
       </Reveal>

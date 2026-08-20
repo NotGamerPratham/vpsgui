@@ -45,7 +45,7 @@ export function SecurityGrid({
                 </span>
 
                 {/* Without hue, the two kinds are told apart by a word and by an
-                    inverted chip — never by colour alone. */}
+                    inverted chip - never by colour alone. */}
                 <span
                   className={cn(
                     'rounded-md px-1.5 py-0.5 font-mono text-[0.6875rem] tracking-wide uppercase',

@@ -13,7 +13,7 @@ import SecurityPage from '@/pages/security';
  * Pages are imported eagerly rather than through React.lazy.
  *
  * The build prerenders every route to static HTML (scripts/prerender.mjs), and
- * renderToString cannot resolve a lazy boundary — it would emit the Suspense
+ * renderToString cannot resolve a lazy boundary - it would emit the Suspense
  * fallback into the file a crawler reads. Eager imports cost roughly 10 kB gzip
  * of shared bundle and buy correct HTML on every route, which is the better
  * trade for a four-page site.

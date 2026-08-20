@@ -89,7 +89,7 @@ export function FileManagerPage() {
       setIsTruncated(result.truncated);
       setSelectedIsSystem(result.system === true);
       // The agent resolves symlinks before answering, so prefer the path it
-      // reports over the one we asked for — /etc/os-release is really in /usr.
+      // reports over the one we asked for - /etc/os-release is really in /usr.
       if (result.path && result.path !== file.path) {
         setSelectedFile({ ...file, path: result.path });
       }
@@ -179,7 +179,7 @@ export function FileManagerPage() {
   };
 
   const performSave = async () => {
-    // Refuse to write back a partially loaded file — that would truncate it on disk.
+    // Refuse to write back a partially loaded file - that would truncate it on disk.
     if (!selectedFile || !canSave) return;
     setPendingRisk(null);
     setSaveState('saving');
@@ -247,10 +247,10 @@ export function FileManagerPage() {
               {saveState === 'saving'
                 ? 'Saving...'
                 : saveState === 'saved'
-                ? 'Saved!'
-                : saveState === 'error'
-                ? 'Save Failed'
-                : `Save File${isDirty ? ' *' : ''}`}
+                  ? 'Saved!'
+                  : saveState === 'error'
+                    ? 'Save Failed'
+                    : `Save File${isDirty ? ' *' : ''}`}
             </span>
           </Button>
         </div>
@@ -287,11 +287,10 @@ export function FileManagerPage() {
 
       {currentRisk && (
         <div
-          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
-            currentRisk.severity === 'critical'
+          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${currentRisk.severity === 'critical'
               ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
               : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-          }`}
+            }`}
         >
           {currentRisk.severity === 'critical' ? (
             <ShieldAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -346,50 +345,49 @@ export function FileManagerPage() {
                 const ItemIcon = itemIcon.Icon;
                 return (
                   <div key={item.path} className="group flex items-center gap-1">
-                  <button
-                    onClick={() => handleSelectFile(item)}
-                    disabled={item.readable === false}
-                    title={
-                      item.readable === false
-                        ? 'Blocked by the agent (credential file)'
-                        : `${itemIcon.label} — ${item.path}${item.system ? ' (system path)' : ''}`
-                    }
-                    className={`flex flex-1 min-w-0 items-center space-x-2 rounded px-2 py-1 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      isSelected ? 'bg-primary/20 text-primary font-bold' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                    }`}
-                  >
-                    <ItemIcon
-                      aria-hidden
-                      className={`h-3.5 w-3.5 shrink-0 ${itemIcon.className}`}
-                    />
-                    <span className="truncate">{item.name}</span>
-                    {/* Marks distribution-owned paths in the tree, so the warning
-                        is not the first time you hear about it. */}
-                    {item.system && (
-                      <ShieldAlert
-                        aria-label="System path"
-                        className="h-3 w-3 shrink-0 text-amber-400/70"
+                    <button
+                      onClick={() => handleSelectFile(item)}
+                      disabled={item.readable === false}
+                      title={
+                        item.readable === false
+                          ? 'Blocked by the agent (credential file)'
+                          : `${itemIcon.label} - ${item.path}${item.system ? ' (system path)' : ''}`
+                      }
+                      className={`flex flex-1 min-w-0 items-center space-x-2 rounded px-2 py-1 text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isSelected ? 'bg-primary/20 text-primary font-bold' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        }`}
+                    >
+                      <ItemIcon
+                        aria-hidden
+                        className={`h-3.5 w-3.5 shrink-0 ${itemIcon.className}`}
                       />
-                    )}
-                  </button>
+                      <span className="truncate">{item.name}</span>
+                      {/* Marks distribution-owned paths in the tree, so the warning
+                        is not the first time you hear about it. */}
+                      {item.system && (
+                        <ShieldAlert
+                          aria-label="System path"
+                          className="h-3 w-3 shrink-0 text-amber-400/70"
+                        />
+                      )}
+                    </button>
 
-                  {/* Revealed on hover so the tree stays readable; both call real agent endpoints. */}
-                  <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                    <button
-                      onClick={() => handleRename(item)}
-                      title={`Rename ${item.name}`}
-                      className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item)}
-                      title={`Delete ${item.name}`}
-                      className="rounded p-1 text-muted-foreground hover:text-rose-400 hover:bg-muted/60"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </span>
+                    {/* Revealed on hover so the tree stays readable; both call real agent endpoints. */}
+                    <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={() => handleRename(item)}
+                        title={`Rename ${item.name}`}
+                        className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item)}
+                        title={`Delete ${item.name}`}
+                        className="rounded p-1 text-muted-foreground hover:text-rose-400 hover:bg-muted/60"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </span>
                   </div>
                 );
               })

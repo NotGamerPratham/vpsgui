@@ -28,7 +28,7 @@ export function AutomationPage() {
       setWorkflows([]);
       setError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -42,7 +42,7 @@ export function AutomationPage() {
   /**
    * Run a cron entry's command immediately, through the agent's shell endpoint.
    *
-   * This genuinely executes on the host, so it is confirmed first — a maintenance job run out of
+   * This genuinely executes on the host, so it is confirmed first - a maintenance job run out of
    * schedule can be destructive.
    */
   const handleRunNow = async (wf: AutomationWorkflow) => {
@@ -73,10 +73,10 @@ export function AutomationPage() {
           success: false,
           output:
             e instanceof ApiError && e.status === 401
-              ? 'Unauthorized — set a valid Agent Token under Settings.'
+              ? 'Unauthorized - set a valid Agent Token under Settings.'
               : e instanceof Error
-              ? e.message
-              : 'Execution failed',
+                ? e.message
+                : 'Execution failed',
         },
       }));
     } finally {
@@ -97,7 +97,7 @@ export function AutomationPage() {
           <p className="text-xs text-muted-foreground mt-0.5">
             Entries from <code className="font-mono">/etc/crontab</code>,{' '}
             <code className="font-mono">/etc/cron.d</code> and root&apos;s crontab. Editing schedules
-            is not supported — use the File Manager or Terminal.
+            is not supported - use the File Manager or Terminal.
           </p>
         </div>
 
@@ -174,11 +174,10 @@ export function AutomationPage() {
 
                 {result && (
                   <div
-                    className={`rounded border p-2.5 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto ${
-                      result.success
+                    className={`rounded border p-2.5 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto ${result.success
                         ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                         : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1 font-sans font-semibold">
                       <Terminal className="h-3 w-3" />

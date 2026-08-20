@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import { Database, Plus } from 'lucide-react';
 import { Card } from '../../components/ui/card';
@@ -9,7 +10,7 @@ import { apiClient } from '../../api/client';
  * Matches the agent's GET /databases payload.
  *
  * The agent detects engines by their listening TCP port. Reporting on-disk size or table/key counts
- * would require credentials for each engine, which the agent deliberately does not hold — those
+ * would require credentials for each engine, which the agent deliberately does not hold - those
  * fields are null rather than invented.
  */
 interface DatabaseInstance {
@@ -23,6 +24,7 @@ interface DatabaseInstance {
 }
 
 export function DatabasesPage() {
+  const navigate = useNavigate();
   const [dbs, setDbs] = useState<DatabaseInstance[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,9 +48,17 @@ export function DatabasesPage() {
           </p>
         </div>
 
-        <Button disabled title="The agent detects databases but cannot provision them — install an engine from the Catalog or Terminal" className="gap-1.5 text-xs bg-primary">
+        {/* The agent detects engines from listening ports and holds no
+            credentials, so it cannot create a database inside one. What it can
+            do is get an engine running, which is what this now leads to —
+            better than a disabled button that explains itself in a tooltip. */}
+        <Button
+          onClick={() => navigate('/catalog?q=database')}
+          title="Browse ready-to-run database images in the Catalog"
+          className="gap-1.5 text-xs bg-primary"
+        >
           <Plus className="h-4 w-4" />
-          <span>Create Database</span>
+          <span>Add a database engine</span>
         </Button>
       </div>
 

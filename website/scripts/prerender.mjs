@@ -3,7 +3,7 @@
  *
  * A client-rendered SPA serves every crawler the same empty <div id="root">.
  * Google will execute JS eventually, but on a second pass and unreliably, and
- * most other crawlers — Bing, social unfurlers, the AI ones — do not execute it
+ * most other crawlers - Bing, social unfurlers, the AI ones - do not execute it
  * at all. This step renders each route to real HTML at build time and writes
  * the per-route <title>, description, canonical and JSON-LD into the file.
  *
@@ -21,20 +21,21 @@ const ssrDist = resolve(root, 'dist-ssr');
 
 const templatePath = resolve(dist, 'index.html');
 if (!existsSync(templatePath)) {
-  throw new Error('dist/index.html is missing — run `vite build` before prerendering.');
+  throw new Error('dist/index.html is missing - run `vite build` before prerendering.');
 }
 
 const template = readFileSync(templatePath, 'utf8');
 
 const serverEntry = resolve(ssrDist, 'entry-server.js');
 if (!existsSync(serverEntry)) {
-  throw new Error('dist-ssr/entry-server.js is missing — run the SSR build before prerendering.');
+  throw new Error('dist-ssr/entry-server.js is missing - run the SSR build before prerendering.');
 }
 
 const { render, routeSeo, jsonLdDocument } = await import(pathToFileURL(serverEntry).href);
 
 /** Escape for use inside an HTML attribute value. */
-function attr(value) {
+function attr(value)
+{
   return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -43,7 +44,8 @@ function attr(value) {
 }
 
 /** Escape for use inside element text. */
-function text(value) {
+function text(value)
+{
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
@@ -52,7 +54,8 @@ function text(value) {
  * appear raw is `</script`. Escaping the slash keeps the JSON valid while
  * making the string impossible to read as a closing tag.
  */
-function jsonLdSafe(value) {
+function jsonLdSafe(value)
+{
   return JSON.stringify(value).replaceAll('</', '<\\/');
 }
 
@@ -63,10 +66,12 @@ function jsonLdSafe(value) {
  * so each route shipped the homepage's description. Matching the whole tag and
  * then testing its contents is formatting-proof.
  */
-function replaceMeta(html, attrName, key, content) {
+function replaceMeta(html, attrName, key, content)
+{
   let replaced = false;
 
-  const out = html.replace(/<meta\b[^>]*>/g, (tag) => {
+  const out = html.replace(/<meta\b[^>]*>/g, (tag) =>
+  {
     if (replaced) return tag;
     // Attribute may be quoted with either quote style and split over lines.
     const carries = new RegExp(`${attrName}\\s*=\\s*["']${key}["']`).test(tag);
@@ -78,18 +83,20 @@ function replaceMeta(html, attrName, key, content) {
   if (!replaced) {
     throw new Error(
       `prerender: no <meta ${attrName}="${key}"> in dist/index.html. ` +
-        'Add it to index.html or drop it from the prerender list — silently ' +
-        'skipping it would ship the wrong tag on every route.',
+      'Add it to index.html or drop it from the prerender list - silently ' +
+      'skipping it would ship the wrong tag on every route.',
     );
   }
 
   return out;
 }
 
-function replaceCanonical(html, href) {
+function replaceCanonical(html, href)
+{
   let replaced = false;
 
-  const out = html.replace(/<link\b[^>]*>/g, (tag) => {
+  const out = html.replace(/<link\b[^>]*>/g, (tag) =>
+  {
     if (replaced || !/rel\s*=\s*["']canonical["']/.test(tag)) return tag;
     replaced = true;
     return `<link rel="canonical" href="${attr(href)}" />`;
@@ -99,7 +106,8 @@ function replaceCanonical(html, href) {
   return out;
 }
 
-function buildHead(html, seo) {
+function buildHead(html, seo)
+{
   let out = html;
 
   if (!/<title>[\s\S]*?<\/title>/.test(out)) {
@@ -133,7 +141,7 @@ for (const seo of routeSeo) {
   if (!appHtml || appHtml.length < 500) {
     throw new Error(
       `prerender: ${seo.path} rendered ${appHtml.length} bytes, which means the route ` +
-        'produced no real markup. Check that it is registered in AppShell.',
+      'produced no real markup. Check that it is registered in AppShell.',
     );
   }
 
@@ -148,7 +156,7 @@ for (const seo of routeSeo) {
   // extension-less URL resolves. `dist/docs.html` covers hosts that append
   // `.html`; `dist/docs/index.html` covers hosts that look for a directory
   // index. Emitting only the directory form meant `/docs` fell through to the
-  // SPA fallback and served the *home page* — same URL, wrong content, wrong
+  // SPA fallback and served the *home page* - same URL, wrong content, wrong
   // canonical, which is worse for search than not prerendering at all.
   const outPaths =
     seo.path === '/'
@@ -194,7 +202,9 @@ ${urls}
 // the deploy directory a second time.
 rmSync(ssrDist, { recursive: true, force: true });
 
-console.log('prerendered:');
+console.log(
+  `prerendered with ${typeof Bun !== 'undefined' ? 'bun ' + Bun.version : 'node ' + process.version}:`,
+);
 for (const entry of written) {
   console.log(
     `  ${entry.path.padEnd(12)} ${String(entry.bytes).padStart(7)} bytes  x${entry.files}`,

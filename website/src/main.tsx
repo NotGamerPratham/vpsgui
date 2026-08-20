@@ -17,7 +17,7 @@ const tree = (
 );
 
 // The build prerenders every route, so in production the root already holds
-// markup and must be hydrated — createRoot would discard it and repaint. The
+// markup and must be hydrated - createRoot would discard it and repaint. The
 // dev server serves an empty root, where hydration has nothing to attach to.
 if (container.hasChildNodes()) {
   hydrateRoot(container, tree);

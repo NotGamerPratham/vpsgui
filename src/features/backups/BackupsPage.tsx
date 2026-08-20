@@ -39,7 +39,7 @@ export function BackupsPage() {
       setBackups([]);
       setError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -126,7 +126,7 @@ export function BackupsPage() {
               None of that exists. What the agent really does is create local tar.gz archives. */}
           <p className="text-xs text-muted-foreground mt-0.5">
             <code className="font-mono">tar.gz</code> archives of a directory, written to the agent&apos;s
-            backup directory. There is no scheduler and no offsite upload — pair this with cron, or
+            backup directory. There is no scheduler and no offsite upload - pair this with cron, or
             use restic/borg for incremental and remote backups.
           </p>
         </div>

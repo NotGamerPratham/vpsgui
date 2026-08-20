@@ -8,7 +8,7 @@ type Line =
   | { kind: 'command'; text: string }
   /**
    * `lang` picks the tokeniser for the line. Command output is not all one
-   * language — a JSON body and a `docker ps` table need different rules, and
+   * language - a JSON body and a `docker ps` table need different rules, and
    * running the shell tokeniser over either produced nonsense colours.
    */
   | { kind: 'output'; text: string; lang?: 'json' | 'table' };
@@ -16,7 +16,7 @@ type Line =
 /**
  * An illustrative session against a fictional host, not a recording of anyone's
  * server. The shape of the JSON matches what /api/v1/system/telemetry really
- * returns, including `smartHealth: null` — the agent reports null for anything
+ * returns, including `smartHealth: null` - the agent reports null for anything
  * it cannot determine, and the demo would be dishonest if it hid that.
  */
 const SESSION: Line[] = [
@@ -106,7 +106,7 @@ export function TerminalDemo({ className }: { className?: string }) {
 
     // Deferred, not called inline. Running it synchronously fired the first
     // setTyped during the hydration commit, so the client had already typed a
-    // line while the prerendered HTML still showed an empty transcript — React
+    // line while the prerendered HTML still showed an empty transcript - React
     // reported that as a text-content mismatch and threw the whole root away.
     // The delay also gives the terminal a beat before it starts.
     timer = window.setTimeout(() => run(0), START_DELAY_MS);

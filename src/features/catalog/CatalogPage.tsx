@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, Search, ShieldCheck, Copy, Check } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -11,7 +12,10 @@ import { copyToClipboard } from '../../lib/clipboard';
 export function CatalogPage() {
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<CatalogCategory | 'all'>('all');
-  const [search, setSearch] = useState('');
+  // Lets other pages deep-link into a pre-filtered catalog rather than dropping
+  // the visitor at the top of an unfiltered list.
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get('q') || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,7 +52,14 @@ export function CatalogPage() {
 
   const filtered = catalogItems.filter((item) => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.description.toLowerCase().includes(search.toLowerCase());
+    // Tags are matched too, so a deep link like ?q=database finds every engine
+    // rather than only the one whose description happens to contain the word.
+    const needle = search.toLowerCase();
+    const matchesSearch =
+      !needle ||
+      item.name.toLowerCase().includes(needle) ||
+      item.description.toLowerCase().includes(needle) ||
+      (item.tags || []).some((tag) => tag.toLowerCase().includes(needle));
     return matchesCategory && matchesSearch;
   });
 
@@ -74,9 +85,8 @@ export function CatalogPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all whitespace-nowrap ${
-                selectedCategory === cat.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all whitespace-nowrap ${selectedCategory === cat.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
             >
               {cat.label}
             </button>
@@ -127,7 +137,7 @@ export function CatalogPage() {
             </div>
 
             <div className="border-t border-border/60 pt-3 flex items-center justify-between gap-2">
-              {/* Shows the publisher and image reference — facts the catalog actually carries.
+              {/* Shows the publisher and image reference - facts the catalog actually carries.
                   Star ratings and deploy counts would need a registry the agent does not query,
                   and `downloadsCount.toLocaleString()` threw outright once they became null. */}
               <div className="flex items-center space-x-1.5 text-[11px] text-muted-foreground font-mono min-w-0">

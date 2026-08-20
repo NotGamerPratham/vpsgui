@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 /**
  * With the palette monochrome, hue can no longer carry severity. Each tone gets
  * a word, an icon and a different border weight, and the most severe one
- * inverts its label chip — three non-colour channels instead of one colour.
+ * inverts its label chip - three non-colour channels instead of one colour.
  */
 const NOTE_STYLE = {
   info: { icon: Info, label: 'Note', border: 'border-l-2 border-border', chip: 'text-subtle' },
@@ -141,7 +141,7 @@ export default function DocsPage() {
 
       <div className="mx-auto w-full max-w-6xl px-5 pb-24 sm:px-8">
         <div className="gap-12 lg:grid lg:grid-cols-[15rem_1fr]">
-          {/* Sidebar. Hidden below lg — the content order already reads top to
+          {/* Sidebar. Hidden below lg - the content order already reads top to
               bottom, so a duplicated nav on mobile is just noise before it. */}
           <aside className="hidden lg:block">
             <nav
@@ -196,7 +196,7 @@ export default function DocsPage() {
                 <h2 className="text-[1.0625rem]">Still stuck?</h2>
                 <p className="mt-2.5 text-[0.9375rem] leading-relaxed text-muted-foreground">
                   The long-form docs live in the repository, and anything not answered there is
-                  worth an issue — that is how entries end up on this page.
+                  worth an issue - that is how entries end up on this page.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-[0.875rem]">
                   <a

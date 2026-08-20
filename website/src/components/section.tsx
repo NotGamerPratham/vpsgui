@@ -30,7 +30,7 @@ interface SectionHeadingProps {
 }
 
 /**
- * Left-aligned. Clay changes the surfaces, not the editorial structure — a page
+ * Left-aligned. Clay changes the surfaces, not the editorial structure - a page
  * of centred headings still reads as a template regardless of how it is shaded.
  */
 export function SectionHeading({ index, label, title, lede, className }: SectionHeadingProps) {

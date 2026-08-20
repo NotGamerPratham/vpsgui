@@ -83,8 +83,7 @@ export function DiagnosticsPage() {
             '',
             ...PROBE_PORTS.map(
               ({ port, label }, i) =>
-                `Port ${String(port).padEnd(6)} (${label.padEnd(12)}): ${
-                  probes[i].status === 'ok' ? 'RESPONDED' : 'NO RESPONSE'
+                `Port ${String(port).padEnd(6)} (${label.padEnd(12)}): ${probes[i].status === 'ok' ? 'RESPONDED' : 'NO RESPONSE'
                 } (${probes[i].latencyMs}ms)`
             ),
           ].join('\n')
@@ -98,7 +97,7 @@ export function DiagnosticsPage() {
           [
             `Public IP geolocation for ${host}`,
             '',
-            `IP        : ${info.ip}`,
+            `IP        : ${info.ip ?? 'could not be determined'}`,
             `City      : ${info.city ?? notReported}`,
             `Region    : ${info.region ?? notReported}`,
             `Country   : ${info.country ?? 'unknown'} ${info.countryCode ? `(${info.countryCode})` : ''}`,
@@ -108,7 +107,7 @@ export function DiagnosticsPage() {
             '',
             info.source
               ? `Source: ${info.source}`
-              : 'Source: none — no provider answered.',
+              : 'Source: none - no provider answered.',
           ].join('\n')
         );
       }
@@ -129,7 +128,7 @@ export function DiagnosticsPage() {
             <span>Network Diagnostics</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Cloudflare DoH lookups, HTTP round-trip timing, and IP geolocation — everything a browser
+            Cloudflare DoH lookups, HTTP round-trip timing, and IP geolocation - everything a browser
             can measure directly. For ICMP ping, traceroute, and real port scans, use the Terminal page.
           </p>
         </div>
@@ -142,9 +141,8 @@ export function DiagnosticsPage() {
               <button
                 key={t}
                 onClick={() => setTool(t)}
-                className={`px-3 py-1 text-xs font-semibold rounded-md uppercase font-mono ${
-                  tool === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-md uppercase font-mono ${tool === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                  }`}
               >
                 {TOOL_LABELS[t]}
               </button>

@@ -69,10 +69,10 @@ export function TerminalPage() {
     } catch (err) {
       const message =
         err instanceof ApiError && err.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : err instanceof Error
-          ? err.message
-          : 'Failed to execute command on host daemon';
+            ? err.message
+            : 'Failed to execute command on host daemon';
       appendOutput([promptLine, `[Error]: ${message}`]);
     } finally {
       setIsExecuting(false);
@@ -118,7 +118,7 @@ export function TerminalPage() {
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Commands execute on <span className="font-mono text-primary font-bold">{hostLabel}</span> through the
-            vpsgui-agent HTTP daemon. This is not an interactive SSH session — each command runs
+            vpsgui-agent HTTP daemon. This is not an interactive SSH session - each command runs
             independently, so shell state (cd, exports) does not persist between commands.
           </p>
         </div>

@@ -95,7 +95,7 @@ export function ServersPage() {
         </div>
 
         <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-          <span>Active Host Node: <strong className="text-foreground">{filteredNodes[0]?.name || 'vps128'}</strong></span>
+          <span>Active Host Node: <strong className="text-foreground">{filteredNodes[0]?.name || '—'}</strong></span>
         </div>
       </div>
 

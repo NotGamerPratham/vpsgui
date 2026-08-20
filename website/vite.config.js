@@ -16,7 +16,7 @@ export default defineConfig({
   css: {
     // Vite searches parent directories for a PostCSS config, and the repo root
     // has one wired to the console's Tailwind v3. This site is on v4 via the
-    // plugin above, so an explicit empty config stops that search — without it
+    // plugin above, so an explicit empty config stops that search - without it
     // the v3 plugin runs first and rejects @layer base.
     postcss: { plugins: [] },
   },

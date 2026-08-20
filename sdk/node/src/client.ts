@@ -52,7 +52,7 @@ export class VpsguiError extends Error {
  * Official VPSGUI Node.js/TypeScript SDK.
  *
  * Every endpoint except `health()` requires the agent token, which grants root-equivalent control
- * of the host — treat it as a root password and never commit it.
+ * of the host - treat it as a root password and never commit it.
  *
  * @example
  * ```ts
@@ -173,7 +173,7 @@ export class VpsguiClient {
 
 /** @internal */
 abstract class Resource {
-  constructor(protected readonly client: VpsguiClient) {}
+  constructor(protected readonly client: VpsguiClient) { }
 }
 
 class NodesResource extends Resource {
@@ -251,7 +251,7 @@ class DockerResource extends Resource {
 }
 
 class FilesResource extends Resource {
-  /** Directory entries. Contents are NOT included — use `read` for that. */
+  /** Directory entries. Contents are NOT included - use `read` for that. */
   list(path: string): Promise<FileItem[]> {
     return this.client.request('GET', `/files?path=${encodeURIComponent(path)}`);
   }
@@ -298,7 +298,7 @@ class SecurityResource extends Resource {
     return this.client.request('GET', '/security/audit-logs');
   }
 
-  /** Secret metadata. Values are never included — use `revealSecret`. */
+  /** Secret metadata. Values are never included - use `revealSecret`. */
   listSecrets(): Promise<SecretItem[]> {
     return this.client.request('GET', '/security/secrets');
   }

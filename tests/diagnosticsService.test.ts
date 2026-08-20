@@ -1,7 +1,7 @@
 /**
  * DiagnosticsService tests.
  *
- * The old suite asserted `expect(res.status).toBe('ok')` after pinging 127.0.0.1 — and passed
+ * The old suite asserted `expect(res.status).toBe('ok')` after pinging 127.0.0.1 - and passed
  * regardless, because the implementation returned 'ok' with the message "verified" on the failure
  * path whenever the target merely looked like a hostname. These tests pin the corrected behaviour:
  * a failure is reported as a failure.

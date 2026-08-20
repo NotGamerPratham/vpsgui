@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 
 /**
  * Minimal inline formatter for the doc content in src/data/docs.ts.
- * Supports `code`, **bold**, and [text](url) — nothing else, deliberately.
+ * Supports `code`, **bold**, and [text](url) - nothing else, deliberately.
  *
  * Returns React elements rather than HTML, so nothing in the content file can
  * inject markup even if it later comes from somewhere less trusted.

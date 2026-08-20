@@ -46,6 +46,74 @@ jobs:
       - name: Build
         run: npm run build
 
+  bun:
+    name: Bun runs the same suite
+    runs-on: ubuntu-latest
+
+    # Bun is supported alongside Node, not instead of it. This job exists because
+    # the two runtimes are not identical in practice: Bun's fs.realpath returned
+    # a Windows drive root without its trailing separator, which made the agent's
+    # path-confinement check refuse the configured root outright. Nothing but
+    # actually running the agent under Bun catches that class of divergence.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # No bun.lock is committed: package-lock.json stays the single source of
+      # truth, and two lockfiles drift. Bun resolves from package.json here.
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build the console
+        run: bun run build
+
+      # --bun forces Bun to execute Vite too. Without it, Bun honours the
+      # `#!/usr/bin/env node` shebang on the Vite binary and the build silently
+      # runs on Node, which would make this job prove nothing.
+      - name: Build the website end to end under Bun
+        working-directory: website
+        run: |
+          bun install
+          bun --bun run build
+          test -f dist/index.html
+          test -f dist/docs/index.html
+          test -f dist/docs.html
+          test -f dist/sitemap.xml
+
+      - name: Agent starts under Bun and confines paths correctly
+        env:
+          AGENT_TOKEN: ci-token-0123456789abcdef
+          AGENT_HOST: 127.0.0.1
+          PORT: '46510'
+        run: |
+          bun agent/server.js &
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:46510/api/v1/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:46510/api/v1/health | grep -q '"status":"ok"'
+
+          # The configured root must be listable. This is the assertion that
+          # fails when realpath normalisation regresses.
+          curl -fsS -H 'Authorization: Bearer ci-token-0123456789abcdef' \
+            'http://127.0.0.1:46510/api/v1/files?path=%2F' | grep -q '"name"'
+
+          # And the token must still be enforced under Bun.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:46510/api/v1/system/telemetry)
+          if [ "$code" != "401" ]; then
+            echo "FAIL: unauthenticated telemetry returned $code, expected 401" >&2
+            exit 1
+          fi
+
   agent-smoke:
     name: Agent starts and gates access
     runs-on: ubuntu-latest

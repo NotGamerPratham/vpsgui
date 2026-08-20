@@ -66,7 +66,7 @@ export function getTelemetryHaltReason(): string | null {
   return haltedReason;
 }
 
-/** Clear a halt and resume polling — call after the agent token is updated. */
+/** Clear a halt and resume polling - call after the agent token is updated. */
 export function resumeTelemetryPolling(): void {
   if (!haltedReason) return;
   haltedReason = null;

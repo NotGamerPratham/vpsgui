@@ -1,5 +1,5 @@
 export type NodeType = 'linux' | 'windows' | 'docker_host' | 'vm' | 'k8s_cluster' | 'bare_metal' | 'raspberry_pi' | 'nas' | 'edge';
-/** 'unknown' covers the window before the agent has answered — it is not a claim about the host. */
+/** 'unknown' covers the window before the agent has answered - it is not a claim about the host. */
 export type NodeStatus = 'online' | 'offline' | 'degraded' | 'maintenance' | 'provisioning' | 'unknown';
 
 export interface NodeHardware {

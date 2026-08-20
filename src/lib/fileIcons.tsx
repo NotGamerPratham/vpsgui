@@ -113,7 +113,7 @@ for (const { exts, spec } of BY_EXTENSION) {
 
 /**
  * Files with no extension that are still recognisable by name. A server is full
- * of these — `Dockerfile`, `Makefile`, `authorized_keys` — and falling back to a
+ * of these - `Dockerfile`, `Makefile`, `authorized_keys` - and falling back to a
  * blank page icon for all of them wastes the most useful column in the tree.
  */
 const BY_NAME: Record<string, FileIconSpec> = {

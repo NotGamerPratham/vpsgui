@@ -2,7 +2,7 @@
  * Types for the VPSGUI agent REST API.
  *
  * These mirror what the agent actually returns. Fields the agent cannot determine are `null` rather
- * than absent or invented — for example `smartHealth` (needs smartctl), per-process `cpuPercent` on
+ * than absent or invented - for example `smartHealth` (needs smartctl), per-process `cpuPercent` on
  * Windows, and `city`/`region` from ipinfo's country-level /lite tier.
  */
 
@@ -69,7 +69,7 @@ export interface TelemetryPoint {
 export interface ProcessItem {
   pid: number;
   user: string;
-  /** null on Windows — tasklist reports no per-process CPU. */
+  /** null on Windows - tasklist reports no per-process CPU. */
   cpuPercent: number | null;
   memoryPercent: number;
   memoryMb: number;
@@ -103,7 +103,7 @@ export interface NodeSpec {
   os: { name: string; family: string; version: string; kernel: string; uptimeSeconds: number };
   network: {
     ipAddress: string;
-    /** null — the agent cannot know its own NAT address; resolve it client-side. */
+    /** null - the agent cannot know its own NAT address; resolve it client-side. */
     publicIp: string | null;
     hostname: string;
     sshPort: number;
@@ -195,7 +195,7 @@ export interface FirewallRuleInput {
   port?: string;
   protocol?: 'tcp' | 'udp' | 'any';
   source?: string;
-  /** Required for `delete` — ufw removes rules by their number in `ufw status numbered`. */
+  /** Required for `delete` - ufw removes rules by their number in `ufw status numbered`. */
   ruleNumber?: number;
 }
 
@@ -230,7 +230,7 @@ export interface SystemUser {
   fullName: string;
   home: string;
   shell: string;
-  /** UID below 1000 and not root — a service account rather than a person. */
+  /** UID below 1000 and not root - a service account rather than a person. */
   isSystem: boolean;
   canLogin: boolean;
   groups: string[];
@@ -275,7 +275,7 @@ export interface StoragePartition {
   usedBytes: number;
   freeBytes: number;
   usagePercent: number;
-  /** null — SMART needs smartctl and raw device access, which the agent does not use. */
+  /** null - SMART needs smartctl and raw device access, which the agent does not use. */
   smartHealth: 'passed' | 'warning' | 'failing' | null;
 }
 
@@ -309,7 +309,7 @@ export interface DatabaseInstance {
   name: string;
   engine: string;
   port: number;
-  /** null — reporting these would require credentials the agent does not hold. */
+  /** null - reporting these would require credentials the agent does not hold. */
   size: string | null;
   tables: number | null;
   keys: number | null;
@@ -335,7 +335,7 @@ export interface CatalogItem {
   iconName: string;
   publisher: string;
   official: boolean;
-  /** null — the agent queries no registry, so popularity metrics are not available. */
+  /** null - the agent queries no registry, so popularity metrics are not available. */
   downloadsCount: number | null;
   rating: number | null;
   tags: string[];

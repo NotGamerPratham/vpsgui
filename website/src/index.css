@@ -3,7 +3,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Design tokens — claymorphism
+   Design tokens - claymorphism
 
    Clay reads as a soft solid catching light from the top-left. That means every
    raised surface carries three shadows at once, not one: a wide drop beneath it,
@@ -12,7 +12,7 @@
 
    Black and white only: every token sits at chroma 0. That removes colour as a
    signalling channel, so severity is carried by explicit labels, border weight
-   and inverted fills instead — which is what WCAG 1.4.1 asks for anyway.
+   and inverted fills instead - which is what WCAG 1.4.1 asks for anyway.
 --------------------------------------------------------------------------- */
 
 :root {
@@ -67,7 +67,7 @@
 
   /* ---- Syntax colours: the one exception to the monochrome rule -----------
      The page chrome is black and white. A terminal, though, is a depiction of
-     another program's output, and that output is genuinely coloured — rendering
+     another program's output, and that output is genuinely coloured - rendering
      it in greys would be showing you something the real shell does not do.
      These apply only inside .bg-terminal surfaces and are identical in both
      themes, because the terminal is dark either way. Each is checked for at
@@ -117,7 +117,7 @@
   --destructive: oklch(0.97 0 0);
   --warning: oklch(0.72 0 0);
 
-  /* On a dark surface the highlight is a faint sheen, not white — a bright
+  /* On a dark surface the highlight is a faint sheen, not white - a bright
      inset would read as plastic wrap rather than moulded material. */
   --clay-hi: oklch(1 0 0 / 0.06);
   --clay-lo: oklch(0 0 0 / 0.45);
@@ -247,7 +247,7 @@
 }
 
 /* Registered with @utility, not @layer utilities, so they compose with variants.
-   A class declared inside @layer utilities cannot be prefixed — `hover:clay` or
+   A class declared inside @layer utilities cannot be prefixed - `hover:clay` or
    `data-[state=active]:clay` would silently generate nothing. */
 
 @utility accent-word {

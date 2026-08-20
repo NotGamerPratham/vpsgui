@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /**
  * Clipboard write with a visible confirmation. navigator.clipboard is undefined
  * on plain-HTTP origins, so the execCommand path is a real fallback rather than
- * legacy cruft — a reader on http://192.168.x.x would otherwise get a button
+ * legacy cruft - a reader on http://192.168.x.x would otherwise get a button
  * that silently does nothing.
  */
 export function useCopy(resetAfterMs = 2000) {

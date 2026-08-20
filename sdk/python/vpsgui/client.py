@@ -237,7 +237,7 @@ class _Docker(_Resource):
 
 class _Files(_Resource):
     def list(self, path: str) -> List[Dict[str, Any]]:
-        """Directory entries. Contents are NOT included — use :meth:`read`."""
+        """Directory entries. Contents are NOT included - use :meth:`read`."""
         return self._c.request("GET", f"/files?path={quote(path, safe='')}")
 
     def read(self, path: str) -> Dict[str, Any]:
@@ -291,7 +291,7 @@ class _Security(_Resource):
         return self._c.request("GET", "/security/audit-logs")
 
     def list_secrets(self) -> List[Dict[str, Any]]:
-        """Metadata only — values are never returned here. Use :meth:`reveal_secret`."""
+        """Metadata only - values are never returned here. Use :meth:`reveal_secret`."""
         return self._c.request("GET", "/security/secrets")
 
     def save_secret(

@@ -8,8 +8,9 @@ export interface DnsRecordResult {
 }
 
 export interface IpInfoResult {
-  ip: string;
-  /** null when the provider does not report it — ipinfo's /lite tier is country-level only. */
+  /** null when neither the agent nor a lookup could establish the address. */
+  ip: string | null;
+  /** null when the provider does not report it - ipinfo's /lite tier is country-level only. */
   city?: string | null;
   region?: string | null;
   country?: string | null;
@@ -54,7 +55,7 @@ class DiagnosticsService {
   /**
    * HTTP reachability probe with round-trip timing.
    *
-   * This is not ICMP ping — browsers cannot send ICMP. It measures how long an HTTP request to the
+   * This is not ICMP ping - browsers cannot send ICMP. It measures how long an HTTP request to the
    * target takes, which is the closest honest approximation available from a web page. A failure is
    * reported as a failure; the previous version returned status 'ok' with the message "verified"
    * whenever the target merely *looked* like a hostname, so unreachable hosts appeared healthy.
@@ -108,8 +109,10 @@ class DiagnosticsService {
    * deliberately does not live in the frontend: every VITE_* value is inlined into the public
    * client bundle at build time, so anyone loading the page could read it.
    *
-   * Falls back to a direct keyless lookup when the agent is unreachable or has no token, so the
-   * Diagnostics page still works without one.
+   * The browser-side fallback only ever geolocates an IP it was *given*. It must never ask a
+   * service "what is my IP", because the answer is the operator's own device - this previously
+   * surfaced a home broadband address as the VPS's public IP right across the dashboard. When the
+   * target is unknown and the agent cannot answer, the honest result is null.
    */
   async getIpInfo(targetIp?: string): Promise<IpInfoResult> {
     try {
@@ -122,19 +125,20 @@ class DiagnosticsService {
       // Agent unreachable or no token configured; fall through to the browser-side lookup.
     }
 
-    try {
-      let ip = targetIp;
-      if (!ip || ip === 'localhost' || ip === '127.0.0.1') {
-        const ipResponse = await fetch('https://api.ipify.org?format=json');
-        ip = (await ipResponse.json()).ip;
-      }
+    // Only the agent can answer "which address is this host seen as". Without a
+    // target and without the agent, say so instead of substituting the browser's.
+    if (!targetIp || targetIp === 'localhost' || targetIp === '127.0.0.1') {
+      return { ip: null, source: null };
+    }
 
-      const geoResponse = await fetch(`https://ipapi.co/${encodeURIComponent(ip || '')}/json/`);
+    try {
+      const ip = targetIp;
+      const geoResponse = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
       const geoData = await geoResponse.json();
-      if (geoData?.error) return { ip: ip || 'Unknown', source: null };
+      if (geoData?.error) return { ip, source: null };
 
       return {
-        ip: ip || 'Unknown',
+        ip,
         city: geoData.city || null,
         region: geoData.region || null,
         country: geoData.country_name || null,
@@ -144,7 +148,7 @@ class DiagnosticsService {
         source: 'ipapi.co',
       };
     } catch (e) {
-      return { ip: targetIp || 'Unavailable', source: null };
+      return { ip: targetIp || null, source: null };
     }
   }
 

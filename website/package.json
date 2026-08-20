@@ -3,10 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Marketing and documentation site for VPSGUI — the open infrastructure workspace.",
+  "description": "Marketing and documentation site for VPSGUI \u2014 the open infrastructure workspace.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
+    "build": "tsc --noEmit && vite build && vite build -c vite.ssr.config.js",
     "build:client": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

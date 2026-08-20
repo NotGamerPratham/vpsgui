@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
  * The page is prerendered, so the server has no idea which theme the visitor
  * stored. Rendering the icon and label from state meant the server emitted
  * "Switch to light theme" while a light-mode visitor's client emitted the
- * opposite — a hydration mismatch that threw the whole root away. The inline
+ * opposite - a hydration mismatch that threw the whole root away. The inline
  * script in index.html has already put `.dark` on <html> before first paint, so
  * a `dark:` variant picks the right glyph with no JavaScript and no disagreement.
  */

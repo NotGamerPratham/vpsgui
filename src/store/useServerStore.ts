@@ -58,7 +58,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   },
 
   /**
-   * Not supported — see serverService.createNode.
+   * Not supported - see serverService.createNode.
    *
    * This used to optimistically prepend the returned node, but saveNodes() truncates the inventory
    * to one entry, so the "added" node disappeared on the next load. It now surfaces the real
@@ -88,7 +88,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   /**
    * Reboot the host for real, via the agent.
    *
-   * This previously only rewrote local state — status to 'maintenance', uptime to 5 seconds — so
+   * This previously only rewrote local state - status to 'maintenance', uptime to 5 seconds - so
    * the UI reported a reboot that never happened and the fake uptime persisted to localStorage.
    * Callers must confirm with the user first; this issues an actual `systemctl reboot`.
    */

@@ -15,7 +15,7 @@ Requires Node.js 18+ (uses the built-in `fetch`).
 
 Every endpoint except `health()` requires the agent token, and that token grants **root-equivalent
 control of the host**: shell execution, package installs, and filesystem read/write. Read it from
-the environment, never commit it, and only talk to the agent over HTTPS — it travels in the
+the environment, never commit it, and only talk to the agent over HTTPS - it travels in the
 `Authorization` header.
 
 ## Usage
@@ -77,14 +77,14 @@ try {
 
 Fields the agent cannot determine are `null` rather than guessed. Check before formatting:
 
-- `smartHealth` — needs `smartctl` and raw device access
-- `cpuPercent` on a process — Windows `tasklist` reports none
-- `city` / `region` from `ipInfo()` — ipinfo's `/lite` tier is country-level
-- `size` / `tables` / `keys` on a database — would need per-engine credentials
-- `downloadsCount` / `rating` on a catalog item — the agent queries no registry
+- `smartHealth` - needs `smartctl` and raw device access
+- `cpuPercent` on a process - Windows `tasklist` reports none
+- `city` / `region` from `ipInfo()` - ipinfo's `/lite` tier is country-level
+- `size` / `tables` / `keys` on a database - would need per-engine credentials
+- `downloadsCount` / `rating` on a catalog item - the agent queries no registry
 
 `read()` also returns `truncated: true` and `editable: false` for a file that exceeded the read cap.
-**Do not write that content back** — it would truncate the file on disk.
+**Do not write that content back** - it would truncate the file on disk.
 
 ## License
 

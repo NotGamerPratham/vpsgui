@@ -15,7 +15,7 @@ import type { Feature } from '@/types';
 /**
  * Descriptions here match what the agent actually implements. Where a feature
  * has a real limit (no SSH client, country-level geolocation) the copy says so
- * rather than rounding up — an operator who discovers the gap after install is
+ * rather than rounding up - an operator who discovers the gap after install is
  * an operator who stops trusting the rest of the page.
  */
 export const features: Feature[] = [
@@ -23,7 +23,7 @@ export const features: Feature[] = [
     id: 'telemetry',
     title: 'Telemetry straight off the kernel',
     description:
-      'CPU, memory, load, disk and network read from /proc and /sys on every poll. Anything the host cannot answer comes back null and renders as an empty state — never as a plausible-looking number.',
+      'CPU, memory, load, disk and network read from /proc and /sys on every poll. Anything the host cannot answer comes back null and renders as an empty state - never as a plausible-looking number.',
     icon: Activity,
   },
   {

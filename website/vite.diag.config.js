@@ -11,7 +11,7 @@
  *   node scripts/prerender.mjs
  *   npm run preview
  *
- * Then read the console. Rebuild with `npm run build` afterwards — the bundle
+ * Then read the console. Rebuild with `npm run build` afterwards - the bundle
  * this produces is ~3x larger and must never be deployed.
  */
 import path from 'node:path';

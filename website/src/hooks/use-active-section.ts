@@ -25,7 +25,7 @@ export function useActiveSection(ids: string[], offset = 96) {
           return;
         }
 
-        // Nothing in the band — fall back to the last heading scrolled past, so
+        // Nothing in the band - fall back to the last heading scrolled past, so
         // the sidebar never blanks out mid-section.
         const passed = ids
           .map((id) => document.getElementById(id))

@@ -21,7 +21,7 @@ export interface TelemetryResult {
 function classify(e: unknown): { kind: 'auth' | 'network'; message: string } {
   if (e instanceof ApiError) {
     if (e.status === 401 || e.status === 403) {
-      return { kind: 'auth', message: 'Unauthorized — set a valid Agent Token under Settings.' };
+      return { kind: 'auth', message: 'Unauthorized - set a valid Agent Token under Settings.' };
     }
     if (e.status === 429) {
       return {

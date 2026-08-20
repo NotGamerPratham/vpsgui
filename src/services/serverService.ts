@@ -16,8 +16,8 @@ class ServerService {
    * Placeholder node used before the agent has answered.
    *
    * Every hardware and OS figure is zero/empty rather than invented. The previous version returned
-   * a plausible-looking machine — "vps128", 4 cores, 16 GB RAM, 80 GB NVMe, "QEMU Virtual CPU",
-   * "Ubuntu Linux VPS" — which the dashboard then displayed as though it were the real host. On a
+   * a plausible-looking machine - "vps128", 4 cores, 16 GB RAM, 80 GB NVMe, "QEMU Virtual CPU",
+   * "Ubuntu Linux VPS" - which the dashboard then displayed as though it were the real host. On a
    * 16-core / 32 GB machine it silently reported 4 cores and 16 GB.
    */
   getDefaultHostNode(): NodeSpec {
@@ -107,7 +107,7 @@ class ServerService {
    * Discover the host running vpsgui-agent.
    *
    * Reports exactly what the agent returns. When the agent is unreachable it returns the
-   * awaiting-agent placeholder rather than filling the gaps with invented specs — a dashboard that
+   * awaiting-agent placeholder rather than filling the gaps with invented specs - a dashboard that
    * confidently states "4 cores / 16 GB" for a machine it never reached is worse than a blank one.
    */
   async autoDiscoverHostNode(): Promise<NodeSpec[]> {
@@ -151,7 +151,11 @@ class ServerService {
       os: agentData.os ?? { name: '', family: '', version: '', kernel: '', uptimeSeconds: 0 },
       network: {
         ipAddress: agentData.network?.ipAddress || hostIp,
-        publicIp: agentData.network?.publicIp || geo.ip || hostIp,
+        // Never `geo.ip`: geolocation is enrichment, not a source of the host's
+        // identity. Falling through to it meant that whenever the agent could
+        // not report a public IP, the dashboard displayed whatever address the
+        // geolocation lookup happened to return.
+        publicIp: agentData.network?.publicIp || hostIp,
         hostname: agentData.network?.hostname || agentData.name || hostIp,
         sshPort: agentData.network?.sshPort ?? 22,
         bandwidthUsageGb: 0,
@@ -172,7 +176,7 @@ class ServerService {
   /**
    * Fetch the node payload from the agent.
    *
-   * Goes through apiClient so the agent token is attached — /node now requires authentication, and
+   * Goes through apiClient so the agent token is attached - /node now requires authentication, and
    * a bare fetch() would 401 and silently fall back to placeholder hardware.
    */
   async queryAgent(_ipAddress?: string): Promise<Partial<NodeSpec> | null> {
@@ -193,7 +197,7 @@ class ServerService {
   /**
    * Not supported.
    *
-   * VPSGUI manages exactly one host — the machine running the agent — and getNodes()/saveNodes()
+   * VPSGUI manages exactly one host - the machine running the agent - and getNodes()/saveNodes()
    * both truncate the inventory to a single entry. This used to return the default host node while
    * ignoring the payload entirely, so "add node" appeared to succeed, showed a node with the wrong
    * name, and then silently lost it on the next reload.
@@ -201,7 +205,7 @@ class ServerService {
   async createNode(_payload: AddNodePayload): Promise<never> {
     throw new Error(
       'Adding additional nodes is not supported: VPSGUI manages the single host running the agent. ' +
-        'Deploy a separate VPSGUI instance on each host.'
+      'Deploy a separate VPSGUI instance on each host.'
     );
   }
 
@@ -225,16 +229,16 @@ class ServerService {
         : { success: false, message: res?.output || 'Reboot command failed' };
     } catch (e) {
       if (e instanceof ApiError && e.status === 0) {
-        return { success: true, message: 'Connection dropped — the host is most likely rebooting.' };
+        return { success: true, message: 'Connection dropped - the host is most likely rebooting.' };
       }
       return {
         success: false,
         message:
           e instanceof ApiError && e.status === 401
-            ? 'Unauthorized — set a valid Agent Token under Settings.'
+            ? 'Unauthorized - set a valid Agent Token under Settings.'
             : e instanceof Error
-            ? e.message
-            : 'Reboot failed',
+              ? e.message
+              : 'Reboot failed',
       };
     }
   }

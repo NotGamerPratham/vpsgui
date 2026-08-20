@@ -47,7 +47,7 @@ coverage
 
 # Secrets
 # The agent writes its bearer token here when AGENT_TOKEN is not supplied via the environment.
-# That token grants root-equivalent control of the host — it must never be committed.
+# That token grants root-equivalent control of the host - it must never be committed.
 agent/.agent-token
 .agent-token
 
@@ -57,6 +57,10 @@ agent/.agent-token
 # Encrypted secret store and its key (agent-local, never committed).
 agent/.secrets.json
 agent/.secrets-key
+# Dashboard accounts. scrypt hashes rather than plaintext, but still credential
+# material, and it appears here whenever the agent is run from a checkout.
+agent/users.db
+agent/users.db.tmp
 
 # SDK build artifacts
 sdk/node/dist

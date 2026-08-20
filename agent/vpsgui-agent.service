@@ -15,7 +15,7 @@ After=network.target docker.service
 [Service]
 Type=simple
 # The agent inspects systemd units, installs apt packages, and executes shell commands, so it needs
-# root. Everything it exposes is gated behind AGENT_TOKEN — treat that token as a root password.
+# root. Everything it exposes is gated behind AGENT_TOKEN - treat that token as a root password.
 User=root
 WorkingDirectory=/opt/vpsgui/agent
 ExecStart=/usr/bin/node /opt/vpsgui/agent/server.js

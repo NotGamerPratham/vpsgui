@@ -1,6 +1,6 @@
 # Security & Performance Headers for VPSGUI (Netlify / Cloudflare Pages format).
 #
-# Self-hosted deployments are served by deploy/nginx.conf instead — keep the two in sync.
+# Self-hosted deployments are served by deploy/nginx.conf instead - keep the two in sync.
 # Rules are applied most-specific-first, so /assets/* and /service-worker.js must precede /*.
 
 # Hashed build assets are immutable.
@@ -11,7 +11,7 @@
 /service-worker.js
   Cache-Control: no-cache, no-store, must-revalidate
 
-# API responses carry live host telemetry, process lists, and file contents — never cache them.
+# API responses carry live host telemetry, process lists, and file contents - never cache them.
 /api/*
   Cache-Control: no-store, no-cache, must-revalidate, private
 

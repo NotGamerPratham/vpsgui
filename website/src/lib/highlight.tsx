@@ -3,7 +3,7 @@ import { Fragment, type ReactNode } from 'react';
 /**
  * A small syntax highlighter for the dark code surfaces.
  *
- * The alternative was shipping Shiki or Prism — hundreds of kilobytes of
+ * The alternative was shipping Shiki or Prism - hundreds of kilobytes of
  * grammar to colour a handful of short snippets. This tokenises the four
  * languages that actually appear on the site and nothing else.
  *
@@ -40,7 +40,7 @@ export type Lang = 'shell' | 'json' | 'typescript' | 'python' | 'table';
  * These are the only coloured pixels on the site: the surrounding page is
  * monochrome, and a terminal is a depiction of another program's output, which
  * is genuinely coloured. Values live in index.css so both themes share one
- * definition — the terminal is dark in either case.
+ * definition - the terminal is dark in either case.
  */
 const CLASS_FOR: Record<TokenKind, string> = {
   command: 'text-[var(--syn-command)]',
@@ -182,7 +182,7 @@ function tokenizeJson(src: string): Token[] {
 }
 
 /**
- * Tabular command output — `docker ps` and friends. The first column names the
+ * Tabular command output - `docker ps` and friends. The first column names the
  * thing and the rest is status, so the name stays bright and the state words
  * carry the only real signal.
  */

@@ -2,7 +2,7 @@
  * Store and pure-logic tests.
  *
  * Per-service coverage lives in the sibling *Service.test.ts files; this file covers the shared
- * state layer — alert throttling and the notification store's identity/timestamp contract.
+ * state layer - alert throttling and the notification store's identity/timestamp contract.
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';

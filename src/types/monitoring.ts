@@ -8,7 +8,7 @@ export interface TelemetryPoint {
   netTxKbps: number;
   iowaitPercent: number;
   gpuPercent?: number;
-  /** null when the host exposes no thermal zone — the agent reports null rather than a fake 0. */
+  /** null when the host exposes no thermal zone - the agent reports null rather than a fake 0. */
   tempC?: number | null;
   /** null: no power telemetry source is implemented. */
   powerWatts?: number | null;

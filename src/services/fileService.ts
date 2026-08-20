@@ -108,7 +108,7 @@ export function rootsFromError(e: unknown): string[] | null {
 
 function describeError(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 401) return 'Unauthorized — set a valid Agent Token under Settings.';
+    if (e.status === 401) return 'Unauthorized - set a valid Agent Token under Settings.';
     if (e.status === 403) return e.message;
     if (e.status === 0) return `Agent unreachable: ${e.message}`;
     return e.message;

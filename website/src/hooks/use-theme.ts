@@ -24,7 +24,7 @@ function readStoredTheme(): Theme {
  * Reading localStorage during render would make the client disagree with the
  * prerendered HTML, which is a hydration mismatch. The inline script in
  * index.html has already put the right class on <html> by then, so the only
- * thing deferred is which icon the toggle shows — not the page's appearance.
+ * thing deferred is which icon the toggle shows - not the page's appearance.
  */
 export function useTheme() {
   const [theme, setTheme] = useState<Theme | null>(null);

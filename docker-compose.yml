@@ -4,8 +4,8 @@
 # (systemd units, apt, the process table, host filesystem), which a container cannot meaningfully
 # do. Install it on the host with `bash agent/install.sh` and run this compose file for the web UI.
 #
-# The previous version of this file referenced `image: vpsgui/backend:latest` — an image that does
-# not exist and was never published — on port 8080, while the real agent listens on 46509. It also
+# The previous version of this file referenced `image: vpsgui/backend:latest` - an image that does
+# not exist and was never published - on port 8080, while the real agent listens on 46509. It also
 # passed VITE_* values as runtime `environment:` entries, which Vite ignores because it inlines
 # them at build time.
 

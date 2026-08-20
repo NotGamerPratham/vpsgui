@@ -68,17 +68,16 @@ export function InfrastructureMapPage() {
     apiClient.get(`/topology/node/${selectedNode}`)
       .then(setNodeDetails)
       .catch(() => {
+        // The agent is the only source for these. It previously fell back to
+        // "Active 100%" and a "Security Inspection" reading "Agent Reported",
+        // both of which were invented in the browser - the agent had said
+        // nothing at all. Show the node's known status and leave the rest blank.
         const matchedNode = nodes.find((n) => n.id === selectedNode);
-        if (matchedNode) {
-          setNodeDetails({
-            routing: matchedNode.status === 'online' ? 'Active 100%' : 'Degraded',
-            latency: '--',
-            throughput: '--',
-            security: 'Agent Reported',
-          });
-        } else {
-          setNodeDetails(null);
-        }
+        setNodeDetails(
+          matchedNode
+            ? { routing: matchedNode.status === 'online' ? 'Online' : matchedNode.status, latency: null, throughput: null, security: null }
+            : null,
+        );
       });
   }, [selectedNode, nodes]);
 
@@ -130,11 +129,10 @@ export function InfrastructureMapPage() {
                         <button
                           key={item.id}
                           onClick={() => setSelectedNode(item.id)}
-                          className={`flex items-start space-x-3 rounded-xl border p-4 text-left transition-all ${
-                            isSelected
+                          className={`flex items-start space-x-3 rounded-xl border p-4 text-left transition-all ${isSelected
                               ? 'border-primary bg-primary/10 shadow-lg shadow-primary/5'
                               : 'border-border/70 bg-card hover:border-border hover:bg-muted/40'
-                          }`}
+                            }`}
                         >
                           <div className="rounded-lg bg-muted p-2.5 border border-border/60 text-primary shrink-0">
                             <Icon className="h-5 w-5" />
@@ -184,7 +182,7 @@ export function InfrastructureMapPage() {
                 <div className="flex justify-between border-b border-border/40 py-1.5">
                   <span className="text-muted-foreground">Traffic Routing Status</span>
                   <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> {nodeDetails?.routing || 'Awaiting Agent'}
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {nodeDetails?.routing || 'Awaiting agent'}
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-border/40 py-1.5">
@@ -197,7 +195,7 @@ export function InfrastructureMapPage() {
                 </div>
                 <div className="flex justify-between border-b border-border/40 py-1.5">
                   <span className="text-muted-foreground">Security Inspection</span>
-                  <span className="text-emerald-400 font-mono">{nodeDetails?.security || '--'}</span>
+                  <span className="font-mono text-foreground">{nodeDetails?.security || '--'}</span>
                 </div>
               </div>
             </CardContent>

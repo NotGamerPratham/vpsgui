@@ -44,7 +44,7 @@ fi
 NODE_BIN="$(command -v node)"
 
 # The agent uses fs/promises and logical-assignment syntax. On an older Node it dies with a syntax
-# error at startup, which surfaces only as an unexplained 502 from nginx — fail loudly here instead.
+# error at startup, which surfaces only as an unexplained 502 from nginx - fail loudly here instead.
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 if [ "${NODE_MAJOR}" -lt 18 ]; then
   echo "Error: Node.js 18+ is required (found $(node -v 2>/dev/null || echo 'none'))." >&2
@@ -64,7 +64,7 @@ mkdir -p "${INSTALL_DIR}"
 install -m 0644 "${SCRIPT_DIR}/server.js" "${INSTALL_DIR}/server.js"
 install -m 0644 "${SCRIPT_DIR}/package.json" "${INSTALL_DIR}/package.json"
 # A bare `[ -f x ] && cmd` as a top-level statement aborts the whole script under `set -e` when the
-# test fails, silently skipping everything below it — including the service restart.
+# test fails, silently skipping everything below it - including the service restart.
 if [ -f "${SCRIPT_DIR}/server.cjs" ]; then
   install -m 0644 "${SCRIPT_DIR}/server.cjs" "${INSTALL_DIR}/server.cjs"
 fi
@@ -124,7 +124,7 @@ AGENT_IPINFO_VALUE="${AGENT_IPINFO_TOKEN:-$(read_env_value AGENT_IPINFO_TOKEN)}"
 umask 077
 cat > "${ENV_FILE}" << EOF
 # VPSGUI agent configuration. Read by both the systemd unit and the pm2 process.
-# This file contains a token equivalent to a root password — keep it mode 0600.
+# This file contains a token equivalent to a root password - keep it mode 0600.
 PORT=${AGENT_PORT_VALUE}
 # Loopback only. The bundled nginx config proxies to 127.0.0.1:46509 and terminates TLS.
 # Change to 0.0.0.0 ONLY if you front the agent with TLS and a firewall.
@@ -215,7 +215,7 @@ After=network.target docker.service
 [Service]
 Type=simple
 # The agent reports on systemd units, installs apt packages, and executes shell commands, so it
-# needs root. Everything it exposes is gated behind AGENT_TOKEN — treat that token as a root password.
+# needs root. Everything it exposes is gated behind AGENT_TOKEN - treat that token as a root password.
 User=root
 WorkingDirectory=${INSTALL_DIR}
 # Configuration (including the token) lives in the 0600 env file rather than inline here, so the

@@ -46,7 +46,7 @@ export function DeploymentsPage() {
       setDeployments([]);
       setError(
         e instanceof ApiError && e.status === 401
-          ? 'Unauthorized — set a valid Agent Token under Settings.'
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
           : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     }
@@ -89,10 +89,10 @@ export function DeploymentsPage() {
             <span>Git Checkouts</span>
           </h1>
           {/* Previously promised "push-to-deploy webhooks, automatic builds, and zero-downtime
-              container rollouts" — none of which exists. This is what the host really has. */}
+              container rollouts" - none of which exists. This is what the host really has. */}
           <p className="text-xs text-muted-foreground mt-0.5">
             Git repositories found on the host, with the commit each is on and how far it has drifted
-            from its remote. There is no build pipeline — pulling runs a fast-forward-only
+            from its remote. There is no build pipeline - pulling runs a fast-forward-only
             <code className="font-mono"> git pull</code>.
           </p>
         </div>
@@ -180,11 +180,10 @@ export function DeploymentsPage() {
 
                 {result && (
                   <div
-                    className={`rounded border p-2.5 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto ${
-                      result.success
+                    className={`rounded border p-2.5 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto ${result.success
                         ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                         : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1 font-sans font-semibold">
                       <Terminal className="h-3 w-3" />

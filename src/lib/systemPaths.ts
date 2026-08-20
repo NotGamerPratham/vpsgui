@@ -3,7 +3,7 @@
  *
  * The agent decides *whether* a path is system-owned (it resolves symlinks
  * first, so /etc/os-release is correctly seen as /usr/lib/os-release). This
- * module only decides what to *say* about it — a generic "this is a system
+ * module only decides what to *say* about it - a generic "this is a system
  * file" is easy to click past, whereas naming the specific consequence is not.
  */
 

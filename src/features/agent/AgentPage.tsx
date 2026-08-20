@@ -11,7 +11,7 @@ export function AgentPage() {
   const [copied, setCopied] = useState(false);
 
   // There is one agent and it is Node.js. The "Go Agent" / "Rust Agent" tabs offered a choice that
-  // never existed — both emitted the same shell script — and both carried a hardcoded
+  // never existed - both emitted the same shell script - and both carried a hardcoded
   // `--token=vpsgui_tok_84920492840`, an invented value that install.sh does not even accept.
   // The installer generates a real token and prints it on completion.
   const downloadCmd = 'curl -fsSLO https://raw.githubusercontent.com/NotGamerPratham/vpsgui/main/agent/install.sh';
@@ -92,7 +92,7 @@ export function AgentPage() {
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-foreground">{node.name}</h4>
-                    <p className="text-[11px] text-muted-foreground font-mono">{node.network?.publicIp || '127.0.0.1'} (Port {node.network?.sshPort || 22})</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">{node.network?.publicIp || 'Public IP not reported'}</p>
                   </div>
                 </div>
 

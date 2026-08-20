@@ -17,7 +17,7 @@ interface SystemFileConfirmProps {
  * Deliberately not `window.confirm`: that gives one line of text with no room to
  * name the actual consequence, and on a `critical` path the consequence is
  * losing access to the host. For those, the confirm button stays disabled until
- * the acknowledgement is ticked — enough friction to stop a reflex click,
+ * the acknowledgement is ticked - enough friction to stop a reflex click,
  * without blocking work the operator meant to do.
  */
 export function SystemFileConfirm({ path, risk, onCancel, onConfirm }: SystemFileConfirmProps) {
@@ -76,9 +76,8 @@ export function SystemFileConfirm({ path, risk, onCancel, onConfirm }: SystemFil
         <div className="space-y-4 p-5">
           <div className="flex items-center gap-2">
             <span
-              className={`rounded px-2 py-0.5 font-mono text-[0.6875rem] uppercase ${
-                critical ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'
-              }`}
+              className={`rounded px-2 py-0.5 font-mono text-[0.6875rem] uppercase ${critical ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'
+                }`}
             >
               {risk.label}
             </span>

@@ -56,7 +56,7 @@ export const securityDuties: SecurityPoint[] = [
   {
     id: 'tls',
     title: 'Terminate TLS yourself',
-    body: 'The token is a bearer header. VPSGUI cannot protect it on the wire — put a certificate in front of the UI before you sign in from outside the machine.',
+    body: 'The token is a bearer header. VPSGUI cannot protect it on the wire - put a certificate in front of the UI before you sign in from outside the machine.',
     icon: ShieldAlert,
     kind: 'duty',
   },
