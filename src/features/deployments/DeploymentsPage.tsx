@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitBranch, RefreshCw, AlertCircle, Loader2, Download, Terminal } from 'lucide-react';
+import { GitBranch, RefreshCw, AlertCircle, Loader2, Download, Terminal, X } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -29,12 +29,43 @@ interface Deployment {
   status: 'clean' | 'modified' | 'behind';
 }
 
+type PullResults = Record<string, { success: boolean; output: string }>;
+
+const RESULTS_KEY = 'vpsgui_deployment_pull_results';
+
+function readStoredResults(): PullResults {
+  try {
+    const raw = sessionStorage.getItem(RESULTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as PullResults) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function DeploymentsPage() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pullingId, setPullingId] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, { success: boolean; output: string }>>({});
+  const [results, setResults] = useState<PullResults>(() => readStoredResults());
+
+  // Pull output is the whole point of pressing the button, and a failed pull's
+  // output is the actionable half - `draw` refusing to fast-forward lists the
+  // exact files in the way. Keeping it in component state alone meant a glance
+  // at another page threw it away. sessionStorage keeps it for the tab without
+  // outliving it.
+  //
+  // Safe to key by deployment id only because the agent now derives that id
+  // from the checkout path; while it was the scan-array index, a persisted
+  // result could reattach to a different repository entirely.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(RESULTS_KEY, JSON.stringify(results));
+    } catch {
+      // Private browsing or a full quota - the output stays in memory regardless.
+    }
+  }, [results]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +87,14 @@ export function DeploymentsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const dismissResult = (id: string) => {
+    setResults((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
 
   /** Runs a real `git pull --ff-only` in the checkout. */
   const handlePull = async (d: Deployment) => {
@@ -188,6 +227,16 @@ export function DeploymentsPage() {
                     <div className="flex items-center gap-1.5 mb-1 font-sans font-semibold">
                       <Terminal className="h-3 w-3" />
                       <span>{result.success ? 'Pulled' : 'Failed'}</span>
+                      {/* Dismissed deliberately rather than disappearing on its own: a failed
+                          pull's output is what tells the operator what to fix. */}
+                      <button
+                        type="button"
+                        onClick={() => dismissResult(d.id)}
+                        aria-label={`Dismiss pull output for ${d.app}`}
+                        className="ml-auto rounded p-0.5 opacity-70 hover:opacity-100 hover:bg-white/10"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </div>
                     {result.output}
                   </div>

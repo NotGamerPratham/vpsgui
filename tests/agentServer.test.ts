@@ -869,6 +869,45 @@ describe('agent: backups, deployments and image removal', () => {
   });
 });
 
+describe('agent: deployments', () => {
+  it('identifies a checkout by its path, not its position in the scan', async () => {
+    // The id used to be `repo-${index}`. Scan order comes from readdir, which is
+    // filesystem-defined and can change between calls, so the same id could mean
+    // a different repository on the next scan. The UI keys a pull's output by
+    // that id, so a failed pull's error rendered under the wrong checkout.
+    const first = await fetch(`${BASE}/api/v1/deployments`, { headers: AUTH });
+    expect(first.status).toBe(200);
+    const a = await first.json();
+    expect(Array.isArray(a)).toBe(true);
+
+    // Windows reports no deployments at all, so there is nothing to assert there.
+    if (a.length === 0) return;
+
+    for (const d of a) {
+      expect(typeof d.id).toBe('string');
+      expect(d.id).not.toMatch(/^repo-\d+$/);
+    }
+
+    // Ids must be unique, or two cards collide on one React key and one result.
+    const ids = a.map((d: { id: string }) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // And stable: a second scan must map every id to the same path.
+    const b = await (await fetch(`${BASE}/api/v1/deployments`, { headers: AUTH })).json();
+    const pathById = new Map(b.map((d: { id: string; path: string }) => [d.id, d.path]));
+    for (const d of a) {
+      expect(pathById.get(d.id), `id ${d.id} moved between scans`).toBe(d.path);
+    }
+  });
+
+  it('reports checkouts in a deterministic order', async () => {
+    const a = await (await fetch(`${BASE}/api/v1/deployments`, { headers: AUTH })).json();
+    if (a.length < 2) return;
+    const paths = a.map((d: { path: string }) => d.path);
+    expect(paths).toEqual([...paths].sort());
+  });
+});
+
 describe('agent: IP geolocation proxy', () => {
   it('requires a token', async () => {
     expect((await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`)).status).toBe(401);
@@ -881,17 +920,63 @@ describe('agent: IP geolocation proxy', () => {
     expect(res.status).toBe(200);
 
     const info = await res.json();
-    for (const key of ['ip', 'city', 'region', 'country', 'countryCode', 'org', 'asn', 'source']) {
+    const keys = [
+      'ip', 'city', 'region', 'country', 'countryCode', 'org', 'asn',
+      'latitude', 'longitude', 'timezone', 'postal', 'hostname', 'source',
+    ];
+    for (const key of keys) {
       expect(info, `missing key: ${key}`).toHaveProperty(key);
     }
-    for (const key of ['city', 'region', 'country', 'countryCode', 'org', 'asn']) {
+    for (const key of ['city', 'region', 'country', 'countryCode', 'org', 'asn', 'timezone', 'postal', 'hostname']) {
       expect(info[key] === null || typeof info[key] === 'string').toBe(true);
+    }
+    for (const key of ['latitude', 'longitude']) {
+      expect(info[key] === null || typeof info[key] === 'number').toBe(true);
     }
     // No provider answered => nothing may be reported as if it had.
     if (info.source === null) {
       expect(info.city).toBeNull();
       expect(info.country).toBeNull();
     }
+  });
+
+  it('reports a country as a name, not the raw two-letter code', async () => {
+    // ipinfo's standard endpoint returns `country: "US"`. Rendering that raw put
+    // "US" where the server card expects "United States", so the agent resolves
+    // it through Intl before returning.
+    const res = await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`, { headers: AUTH });
+    const info = await res.json();
+
+    if (info.country !== null) {
+      expect(info.country.length).toBeGreaterThan(2);
+      expect(info.countryCode).toMatch(/^[A-Z]{2}$/);
+    }
+  });
+
+  it('splits the ASN out of the provider org string', async () => {
+    // ipinfo sends one combined field: "AS15169 Google LLC". Leaving it joined
+    // meant the node card printed the ASN inside the hosting provider's name.
+    const res = await fetch(`${BASE}/api/v1/network/ip-info?ip=8.8.8.8`, { headers: AUTH });
+    const info = await res.json();
+
+    if (info.asn !== null) {
+      expect(info.asn).toMatch(/^AS\d+$/);
+      // The operator name must no longer carry the ASN prefix.
+      expect(info.org ?? '').not.toMatch(/^AS\d+\s/);
+    }
+  });
+
+  it('reports nothing rather than guessing for a reserved address', async () => {
+    // ipinfo answers 200 with `bogon: true` and no location for reserved ranges.
+    // That is "asked, nothing known" - not a provider failure, and not grounds
+    // for inventing a city.
+    const res = await fetch(`${BASE}/api/v1/network/ip-info?ip=0.0.0.1`, { headers: AUTH });
+    expect(res.status).toBe(200);
+
+    const info = await res.json();
+    expect(info.city).toBeNull();
+    expect(info.country).toBeNull();
+    expect(info.latitude).toBeNull();
   });
 
   it('reports whether a token is configured without disclosing it', async () => {

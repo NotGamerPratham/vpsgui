@@ -2812,7 +2812,26 @@ async function findGitRepos()
   }
 
   for (const root of DEPLOY_ROOTS) await walk(root, 0);
-  return found;
+  // readdir order is filesystem-defined (ext4 returns hash order, not alphabetical) and can change
+  // as directories are written to. Sorting makes the reported order stable, so the cards do not
+  // reshuffle between one scan and the next.
+  return found.sort();
+}
+
+/**
+ * A stable identifier for a checkout.
+ *
+ * This used to be `repo-${index}` - the position in the scan array. Because the scan order is not
+ * guaranteed, the same id could refer to a different repository on the next scan, and the UI keys
+ * a pull's output by it: the result of pulling one checkout could be rendered under another. The
+ * path is the one thing that actually identifies a checkout, so the id is derived from it. The
+ * readable slug keeps it debuggable; the hash suffix keeps two paths that slugify alike apart.
+ */
+function deploymentId(repoPath)
+{
+  const slug = String(repoPath).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  const digest = crypto.createHash('sha1').update(String(repoPath)).digest('hex').slice(0, 8);
+  return `repo-${slug.slice(0, 48)}-${digest}`;
 }
 
 /**
@@ -2828,7 +2847,7 @@ async function getDeployments()
   const repos = await findGitRepos();
 
   return Promise.all(
-    repos.map(async (repo, index) =>
+    repos.map(async (repo) =>
     {
       const git = (args) => tryRun('git', ['-C', repo, ...args], { timeout: 8000 });
 
@@ -2849,7 +2868,7 @@ async function getDeployments()
       const behind = Number.parseInt(behindRaw, 10) || 0;
 
       return {
-        id: `repo-${index}`,
+        id: deploymentId(repo),
         path: repo,
         app: path.basename(repo),
         branch: (branch || '').trim() || 'unknown',
@@ -3213,6 +3232,70 @@ async function resolvePublicIp()
   return ip;
 }
 
+/**
+ * ipinfo.io's country code -> a display name, via the ICU data Node already ships.
+ *
+ * The standard endpoint returns `country` as a two-letter code ("US"), not a
+ * name, so rendering it raw would put "US" where the UI expects "United States".
+ */
+const REGION_NAMES = (() => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' });
+  } catch (e) {
+    // A Node built without full ICU has no region data; the code is still shown.
+    return null;
+  }
+})();
+
+function countryNameFrom(code)
+{
+  if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) return null;
+  if (!REGION_NAMES) return code.toUpperCase();
+  try {
+    const name = REGION_NAMES.of(code.toUpperCase());
+    // Intl echoes the input back for codes it does not know, which is no better
+    // than the raw code and should not be presented as a resolved name.
+    return name && name !== code.toUpperCase() ? name : code.toUpperCase();
+  } catch (e) {
+    return code.toUpperCase();
+  }
+}
+
+/**
+ * Split ipinfo's combined `org` field into its ASN and the operator name.
+ *
+ * It arrives as "AS15169 Google LLC". Some records carry no ASN at all, in which
+ * case the whole string is the name and the ASN stays null rather than being
+ * guessed at.
+ */
+function splitOrg(org)
+{
+  const text = typeof org === 'string' ? org.trim() : '';
+  if (!text) return { asn: null, org: null };
+  const match = /^(AS\d+)\s+(.*)$/.exec(text);
+  return match ? { asn: match[1], org: match[2] || null } : { asn: null, org: text };
+}
+
+function emptyIpInfo(ip)
+{
+  return {
+    ip: ip || null,
+    city: null,
+    region: null,
+    country: null,
+    countryCode: null,
+    continent: null,
+    org: null,
+    asn: null,
+    latitude: null,
+    longitude: null,
+    timezone: null,
+    postal: null,
+    hostname: null,
+    source: null,
+  };
+}
+
 async function lookupIpInfo(targetIp)
 {
   let ip = typeof targetIp === 'string' ? targetIp.trim() : '';
@@ -3220,36 +3303,50 @@ async function lookupIpInfo(targetIp)
   // Resolve the host's own public address when none was supplied. A private or loopback address is
   // not externally routable, so geolocating it would describe the wrong machine.
   if (!ip || ip === 'localhost' || /^127\./.test(ip) || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) {
-    const self = await fetchJson('https://api.ipify.org?format=json');
-    ip = self?.ip || '';
+    ip = (await resolvePublicIp()) || '';
   }
-  if (!ip) return { ip: null, city: null, region: null, country: null, countryCode: null, org: null, asn: null, source: null };
+  if (!ip) return emptyIpInfo(null);
 
-  if (IPINFO_TOKEN) {
-    const data = await fetchJson(
-      `https://api.ipinfo.io/lite/${encodeURIComponent(ip)}?token=${encodeURIComponent(IPINFO_TOKEN)}`
-    );
-    if (data) {
-      return {
-        ip: data.ip || ip,
-        // Not provided by the lite endpoint - null rather than invented.
-        city: null,
-        region: null,
-        country: data.country || null,
-        countryCode: data.country_code || null,
-        continent: data.continent || null,
-        org: data.as_name || null,
-        asn: data.asn || null,
-        source: 'ipinfo.io',
-      };
-    }
-    // Fall through to the keyless provider if ipinfo failed (quota, network, bad token).
+  // ipinfo.io's standard endpoint. It works with no token at all (1k lookups/day)
+  // and returns city, region, coordinates, org and timezone; a free token raises
+  // the allowance to 50k/month over the same URL and the same fields.
+  //
+  // This deliberately does NOT use api.ipinfo.io/lite: that endpoint 403s without
+  // a token, and even with one it is country-level only, which is why the server
+  // card used to render a location with no city in it.
+  const query = IPINFO_TOKEN ? `?token=${encodeURIComponent(IPINFO_TOKEN)}` : '';
+  const data = await fetchJson(`https://ipinfo.io/${encodeURIComponent(ip)}/json${query}`);
+
+  // `bogon` marks a reserved/unroutable address. ipinfo answers 200 with no
+  // location for those, so treat it as "nothing known" rather than a failure.
+  if (data && data.bogon) return { ...emptyIpInfo(data.ip || ip), source: 'ipinfo.io' };
+
+  if (data && !data.error) {
+    const { asn, org } = splitOrg(data.org);
+    const [lat, lon] = typeof data.loc === 'string' ? data.loc.split(',') : [];
+    return {
+      ip: data.ip || ip,
+      city: data.city || null,
+      region: data.region || null,
+      country: countryNameFrom(data.country),
+      countryCode: data.country ? String(data.country).toUpperCase() : null,
+      continent: null,
+      org,
+      asn,
+      latitude: lat ? Number.parseFloat(lat) : null,
+      longitude: lon ? Number.parseFloat(lon) : null,
+      timezone: data.timezone || null,
+      postal: data.postal || null,
+      hostname: data.hostname || null,
+      source: 'ipinfo.io',
+    };
   }
 
+  // ipinfo failed (rate limit, network, revoked token). ipapi.co is keyless and
+  // reports the same core fields, so the UI keeps working rather than going blank.
   const geo = await fetchJson(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
-  if (!geo || geo.error) {
-    return { ip, city: null, region: null, country: null, countryCode: null, org: null, asn: null, source: null };
-  }
+  if (!geo || geo.error) return emptyIpInfo(ip);
+
   return {
     ip,
     city: geo.city || null,
@@ -3259,9 +3356,15 @@ async function lookupIpInfo(targetIp)
     continent: null,
     org: geo.org || null,
     asn: geo.asn || null,
+    latitude: typeof geo.latitude === 'number' ? geo.latitude : null,
+    longitude: typeof geo.longitude === 'number' ? geo.longitude : null,
+    timezone: geo.timezone || null,
+    postal: geo.postal || null,
+    hostname: null,
     source: 'ipapi.co',
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // Node payload

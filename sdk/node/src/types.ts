@@ -252,14 +252,22 @@ export interface NetworkInterfaceInfo {
 
 export interface IpInfoResult {
   ip: string | null;
-  /** null from ipinfo's /lite tier, which is country-level only. */
+  /** null only when the provider genuinely reported nothing (e.g. a bogon address). */
   city: string | null;
   region: string | null;
+  /** Display name, resolved from the two-letter code ipinfo returns. */
   country: string | null;
   countryCode: string | null;
   continent?: string | null;
+  /** Operator name, split out of ipinfo's combined "AS15169 Google LLC" field. */
   org: string | null;
   asn: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  postal?: string | null;
+  /** Reverse DNS, when the provider reports it. */
+  hostname?: string | null;
   /** Which provider answered, or null when none did. */
   source: string | null;
 }

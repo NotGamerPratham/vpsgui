@@ -10,15 +10,22 @@ export interface DnsRecordResult {
 export interface IpInfoResult {
   /** null when neither the agent nor a lookup could establish the address. */
   ip: string | null;
-  /** null when the provider does not report it - ipinfo's /lite tier is country-level only. */
+  /** null only when the provider genuinely reported nothing (e.g. a bogon address). */
   city?: string | null;
   region?: string | null;
+  /** Display name, resolved from the two-letter code ipinfo returns. */
   country?: string | null;
   countryCode?: string | null;
   continent?: string | null;
+  /** Operator name, split out of ipinfo's combined "AS15169 Google LLC" field. */
   org?: string | null;
   asn?: string | null;
-  /** Which provider answered, so the UI can explain a missing city. */
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  postal?: string | null;
+  hostname?: string | null;
+  /** Which provider answered, so the UI can explain a missing field. */
   source?: string | null;
 }
 

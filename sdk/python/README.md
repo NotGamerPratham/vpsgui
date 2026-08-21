@@ -111,7 +111,7 @@ Fields the agent cannot determine are `None` rather than guessed. Check before f
 
 - `smartHealth` - needs `smartctl` and raw device access
 - `cpuPercent` on a process - Windows `tasklist` reports none
-- `city` / `region` from `ip_info()` - ipinfo's `/lite` tier is country-level
+- `city` / `region` from `ip_info()` - only when the provider reports nothing (e.g. a bogon address)
 - `size` / `tables` / `keys` on a database - would need per-engine credentials
 - `downloadsCount` / `rating` on a catalog item - the agent queries no registry
 
