@@ -3,7 +3,6 @@ import { Archive, Plus, RotateCcw, Trash2, RefreshCw, AlertCircle, Loader2 } fro
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
 import { apiClient, ApiError } from '../../api/client';
 

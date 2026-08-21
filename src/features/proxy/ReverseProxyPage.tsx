@@ -175,10 +175,14 @@ export function ReverseProxyPage() {
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Reverse Proxy Rules Configured</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Configure Nginx or Caddy reverse proxy rules from the VPSGUI agent to manage domain routing and SSL certificates.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Reading nginx configuration...' : 'No Reverse Proxy Rules Configured'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Configure Nginx or Caddy reverse proxy rules from the VPSGUI agent to manage domain routing and SSL certificates.
+                </p>
+              )}
             </div>
           </div>
         ) : (

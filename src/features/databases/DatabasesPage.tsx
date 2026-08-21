@@ -69,10 +69,14 @@ export function DatabasesPage() {
               <Database className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Database Instances Found</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Database instances running on your VPS will be detected by the VPSGUI agent. Install PostgreSQL, MySQL, or Redis to get started.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Scanning for database engines...' : 'No Database Instances Found'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Database instances running on your VPS will be detected by the VPSGUI agent. Install PostgreSQL, MySQL, or Redis to get started.
+                </p>
+              )}
             </div>
           </div>
         </Card>

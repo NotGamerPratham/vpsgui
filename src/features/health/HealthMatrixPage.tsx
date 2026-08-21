@@ -40,8 +40,14 @@ export function HealthMatrixPage() {
           </p>
         </div>
 
-        <Button size="sm" variant="outline" onClick={fetchHealth} className="gap-1.5 text-xs">
-          <RotateCw className="h-3.5 w-3.5" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={fetchHealth}
+          disabled={loading}
+          className="gap-1.5 text-xs"
+        >
+          <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Health Checks</span>
         </Button>
       </div>
@@ -53,10 +59,14 @@ export function HealthMatrixPage() {
               <Activity className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Health Check Data Available</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Health matrix data is reported by the VPSGUI agent running on your Linux VPS. Connect your server to see live health status.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Running health checks...' : 'No Health Check Data Available'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Health matrix data is reported by the VPSGUI agent running on your Linux VPS. Connect your server to see live health status.
+                </p>
+              )}
             </div>
           </div>
         </Card>

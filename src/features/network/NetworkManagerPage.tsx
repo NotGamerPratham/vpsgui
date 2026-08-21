@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Radio } from 'lucide-react';
+import { AlertCircle, Globe, Radio } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
@@ -80,6 +80,18 @@ export function NetworkManagerPage() {
         </div>
       </div>
 
+      {/*
+        The failure was captured but never rendered, so an unreachable agent or a
+        bad token showed "No Network Interfaces Detected" - a claim about the
+        host, when the truth was that we never got an answer.
+      */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span className="break-words whitespace-pre-wrap">{error}</span>
+        </div>
+      )}
+
       <Card className="bg-card/70 border-border/70 overflow-hidden">
         {interfaces.length === 0 ? (
           <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
@@ -87,10 +99,14 @@ export function NetworkManagerPage() {
               <Globe className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Network Interfaces Detected</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Network interface data is reported by the VPSGUI agent. Connect your Linux VPS to view ethernet adapters, bridges, and bandwidth usage.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Reading network interfaces...' : 'No Network Interfaces Detected'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Network interface data is reported by the VPSGUI agent. Connect your Linux VPS to view ethernet adapters, bridges, and bandwidth usage.
+                </p>
+              )}
             </div>
           </div>
         ) : (

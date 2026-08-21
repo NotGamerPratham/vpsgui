@@ -38,10 +38,14 @@ export function AuditCenterPage() {
               <ShieldAlert className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Audit Events Recorded</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Security audit logs will populate automatically as the VPSGUI agent records administrative actions, authentication attempts, and system events on your VPS.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Reading the audit log...' : 'No Audit Events Recorded'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Security audit logs will populate automatically as the VPSGUI agent records administrative actions, authentication attempts, and system events on your VPS.
+                </p>
+              )}
             </div>
           </div>
         ) : (

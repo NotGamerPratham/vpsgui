@@ -20,7 +20,16 @@
 - **API Access**: Use `apiClient` (`src/api/client.ts`) for all REST requests. It attaches the agent token, enforces a timeout, and throws `ApiError` carrying the HTTP status - never call `fetch` directly against the agent.
 - **Live Telemetry**: Delivered by polling via `startTelemetryPolling` (`src/services/telemetryPoller.ts`), which republishes on `globalEventBus`. The agent serves **no** WebSocket endpoint; `telemetrySocket` (`src/websocket/socket.ts`) stays dormant unless `VITE_WS_URL` is set for a custom backend.
 - **Data Honesty**: Never fall back to invented data when the agent is unreachable. Surface the error and render an empty state - a fabricated "installed"/"active"/"online" reading about a real host is worse than showing nothing.
-- **Agent Token**: The single real credential (`localStorage` key `vpsgui_auth_token`, set under Settings). It grants root-equivalent host control; the login page is a local profile gate, not authentication.
+- **Credentials**: there are now two, and they are not interchangeable.
+  - **Agent token** - `localStorage` key `vpsgui_auth_token`, set under Settings. Root-equivalent:
+    it authorises every API call including `/terminal/exec`, which is arbitrary shell as the agent
+    user. Being in `localStorage` it is readable by any script running on the page.
+  - **Dashboard account** - username plus a scrypt-hashed password in the agent's 0600 `users.db`,
+    exchanged for an HttpOnly, SameSite=Strict session cookie the frontend cannot read. Sessions
+    live in memory with a 12h TTL, so an agent restart signs everyone out.
+
+  The login page used to be a local profile gate that set a `localStorage` flag and checked nothing.
+  It is real authentication now; do not reintroduce a client-side bypass.
 - **SDKs and CLI**: Node.js SDK in `sdk/node` (npm `vpsgui`, formerly `vpsgui-sdk`), Python SDK in
   `sdk/python` (PyPI `vpsgui`). Both publish a `vpsgui` binary and share `~/.vpsgui/config.json` -
   the format is a contract between them, asserted from both sides in `tests/cliConfig.test.ts` and

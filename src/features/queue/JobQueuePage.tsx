@@ -39,10 +39,14 @@ export function JobQueuePage() {
               <ListTodo className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-foreground">No Background Jobs in Queue</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mt-1">
-                Background tasks such as Docker prunes, SSL renewals, and server updates will appear here when triggered from the VPSGUI agent.
-              </p>
+              <h3 className="font-bold text-sm text-foreground">
+                {loading ? 'Reading the job queue...' : 'No Background Jobs in Queue'}
+              </h3>
+              {!loading && (
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Background tasks such as Docker prunes, SSL renewals, and server updates will appear here when triggered from the VPSGUI agent.
+                </p>
+              )}
             </div>
           </div>
         ) : (
