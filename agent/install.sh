@@ -14,7 +14,6 @@
 
 set -euo pipefail
 
-AGENT_VERSION="1.5.0"
 INSTALL_DIR="/opt/vpsgui/agent"
 SERVICE_FILE="/etc/systemd/system/vpsgui-agent.service"
 # Single source of truth for the agent's configuration, read by BOTH supervisors. 0600 because it
@@ -26,6 +25,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "${PROCESS_MANAGER}" != "pm2" ] && [ "${PROCESS_MANAGER}" != "systemd" ]; then
   echo "Error: AGENT_PROCESS_MANAGER must be 'pm2' or 'systemd' (got '${PROCESS_MANAGER}')." >&2
+  exit 1
+fi
+
+if [ ! -f "${SCRIPT_DIR}/server.js" ]; then
+  echo "Error: ${SCRIPT_DIR}/server.js not found. Run this script from the cloned repository." >&2
+  exit 1
+fi
+
+# Read from server.js rather than hardcoding a second copy here. The two used to drift - this
+# script once compared the freshly installed agent against a version string one release behind,
+# which failed every deploy with a false "an old process is holding the port".
+AGENT_VERSION="$(sed -n "s/^const AGENT_VERSION = '\(.*\)';/\1/p" "${SCRIPT_DIR}/server.js" | head -n1)"
+if [ -z "${AGENT_VERSION}" ]; then
+  echo "Error: could not read AGENT_VERSION out of ${SCRIPT_DIR}/server.js." >&2
   exit 1
 fi
 
@@ -49,11 +62,6 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 
 if [ "${NODE_MAJOR}" -lt 18 ]; then
   echo "Error: Node.js 18+ is required (found $(node -v 2>/dev/null || echo 'none'))." >&2
   echo "  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs" >&2
-  exit 1
-fi
-
-if [ ! -f "${SCRIPT_DIR}/server.js" ]; then
-  echo "Error: ${SCRIPT_DIR}/server.js not found. Run this script from the cloned repository." >&2
   exit 1
 fi
 
@@ -259,16 +267,47 @@ fi
 # Confirm the daemon now answering on the port is the build we just installed. Starting the
 # supervisor is not proof: a leftover process from an earlier session keeps the port and serves old
 # code, which looks identical from the outside except that new endpoints still 404.
-RUNNING_VERSION=""
-for _ in $(seq 1 15); do
-  RUNNING_VERSION="$(
-    curl -fsS -H "Authorization: Bearer ${AGENT_TOKEN}" \
-      "http://127.0.0.1:46509/api/v1/agent/info" 2>/dev/null |
-      sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
-  )"
-  [ -n "${RUNNING_VERSION}" ] && break
-  sleep 1
-done
+check_running_version() {
+  RUNNING_VERSION=""
+  for _ in $(seq 1 15); do
+    RUNNING_VERSION="$(
+      curl -fsS -H "Authorization: Bearer ${AGENT_TOKEN}" \
+        "http://127.0.0.1:46509/api/v1/agent/info" 2>/dev/null |
+        sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+    )"
+    [ -n "${RUNNING_VERSION}" ] && break
+    sleep 1
+  done
+}
+
+# The PID currently bound to 46509, per `ss` - empty if `ss` is missing or nothing is listening.
+port_holder_pid() {
+  ss -tlnp 2>/dev/null | grep ':46509 ' | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n1
+}
+
+# True only if $1 is a node process running THIS agent - never anything else. This host may also
+# run other node apps under the same pm2 (n8n, custom services, ...), so both the interpreter and
+# the entry script are checked before this installer ever offers to stop anything.
+is_our_agent_process() {
+  local pid="$1" cmdline
+  [ -n "${pid}" ] || return 1
+  [ -r "/proc/${pid}/cmdline" ] || return 1
+  cmdline="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null)"
+  case "${cmdline}" in
+    *node*server.js*|*node*server.cjs*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+restart_supervisor() {
+  if [ "${PROCESS_MANAGER}" = "pm2" ]; then
+    pm2 restart "${PM2_APP_NAME}" >/dev/null 2>&1 || true
+  else
+    systemctl restart vpsgui-agent >/dev/null 2>&1 || true
+  fi
+}
+
+check_running_version
 
 if [ -z "${RUNNING_VERSION}" ]; then
   echo "Error: the agent is running but did not answer /api/v1/agent/info." >&2
@@ -283,9 +322,48 @@ fi
 
 if [ "${RUNNING_VERSION}" != "${AGENT_VERSION}" ]; then
   echo "Error: port 46509 is served by agent v${RUNNING_VERSION}, but v${AGENT_VERSION} was just installed." >&2
-  echo "An old process is holding the port. Find and stop it, then re-run this installer:" >&2
-  ss -tlnp 2>/dev/null | grep 46509 >&2 || true
-  exit 1
+  ss -tlnp 2>/dev/null | grep ':46509 ' >&2 || true
+
+  HOLDER_PID="$(port_holder_pid)"
+
+  # Offer to stop it only when every one of these holds: this is an interactive terminal (never
+  # auto-kill in an unattended `curl | bash` or CI run), exactly one PID owns the port, and that
+  # PID is confirmed - by its own /proc/<pid>/cmdline, not by assumption - to be this agent and
+  # nothing else that happens to be running on the box.
+  if [ -t 0 ] && [ -n "${HOLDER_PID}" ] && is_our_agent_process "${HOLDER_PID}"; then
+    echo "" >&2
+    read -r -p "Stop process ${HOLDER_PID} and retry? [y/N] " REPLY
+    case "${REPLY}" in
+      [yY]|[yY][eE][sS])
+        echo "Stopping ${HOLDER_PID}..." >&2
+        kill "${HOLDER_PID}" 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "${HOLDER_PID}" 2>/dev/null || break
+          sleep 0.5
+        done
+        kill -0 "${HOLDER_PID}" 2>/dev/null && kill -9 "${HOLDER_PID}" 2>/dev/null || true
+
+        restart_supervisor
+        check_running_version
+
+        if [ "${RUNNING_VERSION}" = "${AGENT_VERSION}" ]; then
+          echo "Recovered: v${AGENT_VERSION} is now serving on 127.0.0.1:46509." >&2
+        else
+          echo "Error: still not serving v${AGENT_VERSION} after stopping ${HOLDER_PID}." >&2
+          echo "Check: ss -tlnp | grep 46509" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "Left ${HOLDER_PID} running. Stop it manually, then re-run this installer." >&2
+        exit 1
+        ;;
+    esac
+  else
+    echo "An old process is holding the port. Find and stop it, then re-run this installer:" >&2
+    [ -n "${HOLDER_PID}" ] && echo "  (pid ${HOLDER_PID} - could not confirm it is this agent, so it was not touched)" >&2
+    exit 1
+  fi
 fi
 
 echo ""

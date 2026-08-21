@@ -105,6 +105,7 @@ export function TopNav() {
         <Button
           size="sm"
           onClick={() => setQuickLauncherOpen(true)}
+          aria-label="Quick Action"
           className="h-8 px-2.5 sm:px-3 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-bold"
         >
           <Plus className="h-3.5 w-3.5" />

@@ -150,6 +150,7 @@ export function Sidebar() {
             </button>
             <button
               onClick={() => setMobileMenuOpen(false)}
+              aria-label="Close navigation menu"
               className="lg:hidden rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
               <X className="h-5 w-5" />
