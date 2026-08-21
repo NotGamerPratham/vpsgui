@@ -1741,6 +1741,21 @@ async function getDatabases()
  * Unlike the other endpoints this is reference data, not host state, so serving a static list is
  * accurate rather than fabricated: it describes what *can* be deployed, not what is installed.
  */
+/**
+ * Deployable catalog.
+ *
+ * Every `image` below was checked against Docker Hub or GHCR, and every URL in
+ * an `installCommand` against a live request, before being added. A catalog
+ * entry whose command 404s is worse than a shorter catalog, so anything that
+ * could not be verified was left out.
+ *
+ * Items with no container image carry `installCommand` instead, because the UI
+ * disables its copy button when neither is present - an OS template with no
+ * command would render as a dead button.
+ *
+ * There is no `plugins` category: VPSGUI has no plugin system, and populating
+ * that tab would advertise a feature that does not exist.
+ */
 const CATALOG_ITEMS = [
   {
     id: 'nginx', name: 'Nginx', category: 'docker_images', version: 'stable-alpine',
@@ -1752,8 +1767,7 @@ const CATALOG_ITEMS = [
     id: 'postgres', name: 'PostgreSQL', category: 'docker_images', version: '16-alpine',
     description: 'Object-relational database system.',
     iconName: 'Database', publisher: 'postgres', official: true, tags: ['database', 'sql'],
-    image: 'postgres:16-alpine', defaultPorts: [5432],
-    defaultEnv: { POSTGRES_PASSWORD: 'change-me' },
+    image: 'postgres:16-alpine', defaultPorts: [5432], defaultEnv: { POSTGRES_PASSWORD: 'change-me' },
   },
   {
     id: 'redis', name: 'Redis', category: 'docker_images', version: '7-alpine',
@@ -1765,8 +1779,73 @@ const CATALOG_ITEMS = [
     id: 'mariadb', name: 'MariaDB', category: 'docker_images', version: '11',
     description: 'Community-developed fork of MySQL.',
     iconName: 'Database', publisher: 'mariadb', official: true, tags: ['database', 'sql'],
-    image: 'mariadb:11', defaultPorts: [3306],
-    defaultEnv: { MARIADB_ROOT_PASSWORD: 'change-me' },
+    image: 'mariadb:11', defaultPorts: [3306], defaultEnv: { MARIADB_ROOT_PASSWORD: 'change-me' },
+  },
+  {
+    id: 'mysql', name: 'MySQL', category: 'docker_images', version: '8',
+    description: 'The world\'s most popular open source database.',
+    iconName: 'Database', publisher: 'mysql', official: true, tags: ['database', 'sql'],
+    image: 'mysql:8', defaultPorts: [3306], defaultEnv: { MYSQL_ROOT_PASSWORD: 'change-me' },
+  },
+  {
+    id: 'mongo', name: 'MongoDB', category: 'docker_images', version: '7',
+    description: 'Document-oriented NoSQL database.',
+    iconName: 'Database', publisher: 'mongo', official: true, tags: ['database', 'nosql'],
+    image: 'mongo:7', defaultPorts: [27017],
+  },
+  {
+    id: 'caddy', name: 'Caddy', category: 'docker_images', version: '2-alpine',
+    description: 'Web server with automatic HTTPS via Let\'s Encrypt.',
+    iconName: 'Globe', publisher: 'caddy', official: true, tags: ['web', 'proxy', 'tls'],
+    image: 'caddy:2-alpine', defaultPorts: [80, 443],
+  },
+  {
+    id: 'traefik', name: 'Traefik', category: 'docker_images', version: 'v3.0',
+    description: 'Cloud-native reverse proxy and load balancer.',
+    iconName: 'Globe', publisher: 'traefik', official: true, tags: ['proxy', 'ingress'],
+    image: 'traefik:v3.0', defaultPorts: [80, 443, 8080],
+  },
+  {
+    id: 'haproxy', name: 'HAProxy', category: 'docker_images', version: '2.9-alpine',
+    description: 'Reliable, high performance TCP/HTTP load balancer.',
+    iconName: 'Globe', publisher: 'haproxy', official: true, tags: ['proxy', 'loadbalancer'],
+    image: 'haproxy:2.9-alpine', defaultPorts: [80, 443],
+  },
+  {
+    id: 'httpd', name: 'Apache HTTP Server', category: 'docker_images', version: '2.4-alpine',
+    description: 'The Apache web server.',
+    iconName: 'Globe', publisher: 'httpd', official: true, tags: ['web'],
+    image: 'httpd:2.4-alpine', defaultPorts: [80],
+  },
+  {
+    id: 'rabbitmq', name: 'RabbitMQ', category: 'docker_images', version: '3-management-alpine',
+    description: 'Message broker with the management UI enabled.',
+    iconName: 'Radio', publisher: 'rabbitmq', official: true, tags: ['queue', 'messaging'],
+    image: 'rabbitmq:3-management-alpine', defaultPorts: [5672, 15672],
+  },
+  {
+    id: 'memcached', name: 'Memcached', category: 'docker_images', version: '1.6-alpine',
+    description: 'Distributed memory object caching system.',
+    iconName: 'Zap', publisher: 'memcached', official: true, tags: ['cache'],
+    image: 'memcached:1.6-alpine', defaultPorts: [11211],
+  },
+  {
+    id: 'influxdb', name: 'InfluxDB', category: 'docker_images', version: '2.7-alpine',
+    description: 'Time-series database for metrics and events.',
+    iconName: 'BarChart3', publisher: 'influxdb', official: true, tags: ['database', 'metrics'],
+    image: 'influxdb:2.7-alpine', defaultPorts: [8086],
+  },
+  {
+    id: 'registry', name: 'Docker Registry', category: 'docker_images', version: '2',
+    description: 'Private container image registry.',
+    iconName: 'Container', publisher: 'registry', official: true, tags: ['docker', 'registry'],
+    image: 'registry:2', defaultPorts: [5000],
+  },
+  {
+    id: 'valkey', name: 'Valkey', category: 'docker_images', version: '8-alpine',
+    description: 'Community fork of Redis, drop-in compatible.',
+    iconName: 'Zap', publisher: 'valkey', official: false, tags: ['database', 'cache'],
+    image: 'valkey/valkey:8-alpine', defaultPorts: [6379],
   },
   {
     id: 'portainer', name: 'Portainer CE', category: 'applications', version: 'latest',
@@ -1801,12 +1880,246 @@ const CATALOG_ITEMS = [
   {
     id: 'vaultwarden', name: 'Vaultwarden', category: 'applications', version: 'latest',
     description: 'Lightweight Bitwarden-compatible password manager server.',
-    iconName: 'KeyRound', publisher: 'dani-garcia', official: false, tags: ['security'],
+    iconName: 'ShieldCheck', publisher: 'vaultwarden', official: false, tags: ['security', 'passwords'],
     image: 'vaultwarden/server:latest', defaultPorts: [80],
   },
+  {
+    id: 'jellyfin', name: 'Jellyfin', category: 'applications', version: 'latest',
+    description: 'Free software media system for streaming your own library.',
+    iconName: 'Play', publisher: 'jellyfin', official: false, tags: ['media', 'streaming'],
+    image: 'jellyfin/jellyfin:latest', defaultPorts: [8096],
+  },
+  {
+    id: 'n8n', name: 'n8n', category: 'applications', version: 'latest',
+    description: 'Workflow automation with a visual node editor.',
+    iconName: 'Workflow', publisher: 'n8nio', official: false, tags: ['automation', 'workflow'],
+    image: 'n8nio/n8n:latest', defaultPorts: [5678],
+  },
+  {
+    id: 'wordpress', name: 'WordPress', category: 'applications', version: '6-apache',
+    description: 'The most widely deployed content management system.',
+    iconName: 'Globe', publisher: 'wordpress', official: true, tags: ['cms', 'web'],
+    image: 'wordpress:6-apache', defaultPorts: [80],
+  },
+  {
+    id: 'ghost', name: 'Ghost', category: 'applications', version: '5-alpine',
+    description: 'Publishing platform for blogs and newsletters.',
+    iconName: 'Globe', publisher: 'ghost', official: true, tags: ['cms', 'blog'],
+    image: 'ghost:5-alpine', defaultPorts: [2368],
+  },
+  {
+    id: 'nocodb', name: 'NocoDB', category: 'applications', version: 'latest',
+    description: 'Turns any database into a smart spreadsheet UI.',
+    iconName: 'Table', publisher: 'nocodb', official: false, tags: ['database', 'nocode'],
+    image: 'nocodb/nocodb:latest', defaultPorts: [8080],
+  },
+  {
+    id: 'minio', name: 'MinIO', category: 'applications', version: 'latest',
+    description: 'S3-compatible high performance object storage.',
+    iconName: 'HardDrive', publisher: 'minio', official: false, tags: ['storage', 's3'],
+    image: 'minio/minio:latest', defaultPorts: [9000, 9001],
+  },
+  {
+    id: 'filebrowser', name: 'File Browser', category: 'applications', version: 'latest',
+    description: 'Web file manager for a directory on the host.',
+    iconName: 'Folder', publisher: 'filebrowser', official: false, tags: ['files', 'storage'],
+    image: 'filebrowser/filebrowser:latest', defaultPorts: [80],
+  },
+  {
+    id: 'adminer', name: 'Adminer', category: 'applications', version: '4',
+    description: 'Single-file database management in one PHP file.',
+    iconName: 'Database', publisher: 'adminer', official: true, tags: ['database', 'admin'],
+    image: 'adminer:4', defaultPorts: [8080],
+  },
+  {
+    id: 'phpmyadmin', name: 'phpMyAdmin', category: 'applications', version: '5',
+    description: 'Web administration for MySQL and MariaDB.',
+    iconName: 'Database', publisher: 'phpmyadmin', official: true, tags: ['database', 'admin'],
+    image: 'phpmyadmin:5', defaultPorts: [80],
+  },
+  {
+    id: 'syncthing', name: 'Syncthing', category: 'applications', version: 'latest',
+    description: 'Continuous peer-to-peer file synchronisation.',
+    iconName: 'RefreshCw', publisher: 'syncthing', official: false, tags: ['files', 'sync'],
+    image: 'syncthing/syncthing:latest', defaultPorts: [8384, 22000],
+  },
+  {
+    id: 'nginx-proxy-manager', name: 'Nginx Proxy Manager', category: 'applications', version: '2',
+    description: 'Reverse proxy with a UI and automatic Let\'s Encrypt certificates.',
+    iconName: 'Globe', publisher: 'jc21', official: false, tags: ['proxy', 'tls'],
+    image: 'jc21/nginx-proxy-manager:2', defaultPorts: [80, 443, 81],
+  },
+  {
+    id: 'pihole', name: 'Pi-hole', category: 'applications', version: 'latest',
+    description: 'Network-wide DNS ad blocking.',
+    iconName: 'ShieldCheck', publisher: 'pihole', official: false, tags: ['dns', 'network'],
+    image: 'pihole/pihole:latest', defaultPorts: [53, 80],
+  },
+  {
+    id: 'adguardhome', name: 'AdGuard Home', category: 'applications', version: 'latest',
+    description: 'Network-wide DNS filtering and ad blocking.',
+    iconName: 'ShieldCheck', publisher: 'adguard', official: false, tags: ['dns', 'network'],
+    image: 'adguard/adguardhome:latest', defaultPorts: [53, 3000],
+  },
+  {
+    id: 'freshrss', name: 'FreshRSS', category: 'applications', version: 'latest',
+    description: 'Self-hosted RSS and Atom feed aggregator.',
+    iconName: 'Rss', publisher: 'freshrss', official: false, tags: ['rss', 'news'],
+    image: 'freshrss/freshrss:latest', defaultPorts: [80],
+  },
+  {
+    id: 'navidrome', name: 'Navidrome', category: 'applications', version: 'latest',
+    description: 'Subsonic-compatible music streaming server.',
+    iconName: 'Music', publisher: 'deluan', official: false, tags: ['media', 'music'],
+    image: 'deluan/navidrome:latest', defaultPorts: [4533],
+  },
+  {
+    id: 'mattermost', name: 'Mattermost', category: 'applications', version: 'release-9',
+    description: 'Self-hosted team messaging and collaboration.',
+    iconName: 'MessageSquare', publisher: 'mattermost', official: false, tags: ['chat', 'collaboration'],
+    image: 'mattermost/mattermost-team-edition:release-9', defaultPorts: [8065],
+  },
+  {
+    id: 'metabase', name: 'Metabase', category: 'applications', version: 'latest',
+    description: 'Business intelligence and dashboards over your database.',
+    iconName: 'BarChart3', publisher: 'metabase', official: false, tags: ['analytics', 'bi'],
+    image: 'metabase/metabase:latest', defaultPorts: [3000],
+  },
+  {
+    id: 'ollama', name: 'Ollama', category: 'applications', version: 'latest',
+    description: 'Run large language models locally with a REST API.',
+    iconName: 'Cpu', publisher: 'ollama', official: false, tags: ['ai', 'llm'],
+    image: 'ollama/ollama:latest', defaultPorts: [11434],
+  },
+  {
+    id: 'netdata', name: 'Netdata', category: 'applications', version: 'latest',
+    description: 'Real-time per-second infrastructure monitoring.',
+    iconName: 'Activity', publisher: 'netdata', official: false, tags: ['monitoring', 'metrics'],
+    image: 'netdata/netdata:latest', defaultPorts: [19999],
+  },
+  {
+    id: 'meilisearch', name: 'Meilisearch', category: 'applications', version: 'v1.8',
+    description: 'Fast, typo-tolerant full-text search engine.',
+    iconName: 'Search', publisher: 'getmeili', official: false, tags: ['search'],
+    image: 'getmeili/meilisearch:v1.8', defaultPorts: [7700],
+  },
+  {
+    id: 'homeassistant', name: 'Home Assistant', category: 'applications', version: 'stable',
+    description: 'Open source home automation hub.',
+    iconName: 'Cpu', publisher: 'home-assistant', official: false, tags: ['automation', 'iot'],
+    image: 'ghcr.io/home-assistant/home-assistant:stable', defaultPorts: [8123],
+  },
+  {
+    id: 'paperless-ngx', name: 'Paperless-ngx', category: 'applications', version: 'latest',
+    description: 'Scan, index and archive your documents.',
+    iconName: 'FileText', publisher: 'paperless-ngx', official: false, tags: ['documents', 'archive'],
+    image: 'ghcr.io/paperless-ngx/paperless-ngx:latest', defaultPorts: [8000],
+  },
+  {
+    id: 'immich', name: 'Immich', category: 'applications', version: 'release',
+    description: 'Self-hosted photo and video backup for mobile.',
+    iconName: 'Image', publisher: 'immich-app', official: false, tags: ['media', 'photos'],
+    image: 'ghcr.io/immich-app/immich-server:release', defaultPorts: [2283],
+  },
+  {
+    id: 'umami', name: 'Umami', category: 'applications', version: 'postgresql-latest',
+    description: 'Privacy-focused, cookie-free web analytics.',
+    iconName: 'BarChart3', publisher: 'umami-software', official: false, tags: ['analytics', 'privacy'],
+    image: 'ghcr.io/umami-software/umami:postgresql-latest', defaultPorts: [3000],
+  },
+  {
+    id: 'open-webui', name: 'Open WebUI', category: 'applications', version: 'main',
+    description: 'Browser front-end for Ollama and OpenAI-compatible APIs.',
+    iconName: 'MessageSquare', publisher: 'open-webui', official: false, tags: ['ai', 'llm'],
+    image: 'ghcr.io/open-webui/open-webui:main', defaultPorts: [8080],
+  },
+  {
+    id: 'code-server', name: 'code-server', category: 'applications', version: 'latest',
+    description: 'VS Code running in the browser on your own host.',
+    iconName: 'Code', publisher: 'linuxserver', official: false, tags: ['development', 'ide'],
+    image: 'lscr.io/linuxserver/code-server:latest', defaultPorts: [8443],
+  },
+  {
+    id: 'bookstack', name: 'BookStack', category: 'applications', version: 'latest',
+    description: 'Simple, self-hosted platform for organising documentation.',
+    iconName: 'BookOpen', publisher: 'linuxserver', official: false, tags: ['wiki', 'docs'],
+    image: 'lscr.io/linuxserver/bookstack:latest', defaultPorts: [80],
+  },
+  {
+    id: 'stack-lemp', name: 'LEMP Stack', category: 'stacks', version: 'nginx + php-fpm + mariadb',
+    description: 'Nginx, PHP-FPM and MariaDB wired together for classic PHP hosting.',
+    iconName: 'Layers', publisher: 'vpsgui', official: false, tags: ['web', 'php', 'stack'],
+    installCommand: 'docker network create lemp && docker run -d --name lemp-db --network lemp -e MARIADB_ROOT_PASSWORD=change-me mariadb:11 && docker run -d --name lemp-web --network lemp -p 80:80 nginx:stable-alpine',
+  },
+  {
+    id: 'stack-monitoring', name: 'Monitoring Stack', category: 'stacks', version: 'prometheus + grafana',
+    description: 'Prometheus scraping metrics with Grafana for dashboards.',
+    iconName: 'BarChart3', publisher: 'vpsgui', official: false, tags: ['monitoring', 'metrics', 'stack'],
+    installCommand: 'docker network create monitoring && docker run -d --name prometheus --network monitoring -p 9090:9090 prom/prometheus:latest && docker run -d --name grafana --network monitoring -p 3000:3000 grafana/grafana:latest',
+  },
+  {
+    id: 'stack-wordpress', name: 'WordPress Stack', category: 'stacks', version: 'wordpress + mariadb',
+    description: 'WordPress with its own MariaDB database on a private network.',
+    iconName: 'Globe', publisher: 'vpsgui', official: false, tags: ['cms', 'web', 'stack'],
+    installCommand: 'docker network create wp && docker run -d --name wp-db --network wp -e MARIADB_ROOT_PASSWORD=change-me -e MARIADB_DATABASE=wordpress mariadb:11 && docker run -d --name wordpress --network wp -p 80:80 -e WORDPRESS_DB_HOST=wp-db wordpress:6-apache',
+  },
+  {
+    id: 'stack-elk-lite', name: 'Logging Stack', category: 'stacks', version: 'loki + grafana',
+    description: 'Grafana Loki for log aggregation with Grafana to query it.',
+    iconName: 'FileText', publisher: 'vpsgui', official: false, tags: ['logging', 'observability', 'stack'],
+    installCommand: 'docker network create logging && docker run -d --name loki --network logging -p 3100:3100 grafana/loki:2.9.8 && docker run -d --name grafana-logs --network logging -p 3000:3000 grafana/grafana:latest',
+  },
+  {
+    id: 'stack-ai-local', name: 'Local AI Stack', category: 'stacks', version: 'ollama + open-webui',
+    description: 'Ollama serving local models behind the Open WebUI chat front-end.',
+    iconName: 'Cpu', publisher: 'vpsgui', official: false, tags: ['ai', 'llm', 'stack'],
+    installCommand: 'docker network create ai && docker run -d --name ollama --network ai -p 11434:11434 ollama/ollama:latest && docker run -d --name open-webui --network ai -p 8080:8080 -e OLLAMA_BASE_URL=http://ollama:11434 ghcr.io/open-webui/open-webui:main',
+  },
+  {
+    id: 'os-ubuntu-2404', name: 'Ubuntu Server 24.04 LTS', category: 'operating_systems', version: 'noble',
+    description: 'Cloud image for the current Ubuntu LTS release.',
+    iconName: 'HardDrive', publisher: 'Canonical', official: true, tags: ['linux', 'debian-family', 'lts'],
+    installCommand: 'curl -fsSLO https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img',
+  },
+  {
+    id: 'os-ubuntu-2204', name: 'Ubuntu Server 22.04 LTS', category: 'operating_systems', version: 'jammy',
+    description: 'Cloud image for the previous Ubuntu LTS release.',
+    iconName: 'HardDrive', publisher: 'Canonical', official: true, tags: ['linux', 'debian-family', 'lts'],
+    installCommand: 'curl -fsSLO https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img',
+  },
+  {
+    id: 'os-debian-12', name: 'Debian 12 (Bookworm)', category: 'operating_systems', version: 'bookworm',
+    description: 'Generic cloud image for Debian stable.',
+    iconName: 'HardDrive', publisher: 'Debian', official: true, tags: ['linux', 'debian-family', 'stable'],
+    installCommand: 'curl -fsSLO https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2',
+  },
+  {
+    id: 'os-almalinux-9', name: 'AlmaLinux 9', category: 'operating_systems', version: '9',
+    description: 'RHEL-compatible generic cloud image.',
+    iconName: 'HardDrive', publisher: 'AlmaLinux', official: true, tags: ['linux', 'rhel-family'],
+    installCommand: 'curl -fsSLO https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2',
+  },
+  {
+    id: 'os-rocky-9', name: 'Rocky Linux 9', category: 'operating_systems', version: '9',
+    description: 'RHEL-compatible generic cloud image.',
+    iconName: 'HardDrive', publisher: 'Rocky Enterprise Software Foundation', official: true, tags: ['linux', 'rhel-family'],
+    installCommand: 'curl -fsSLO https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2',
+  },
+  {
+    id: 'vm-openwrt', name: 'OpenWrt', category: 'vm_images', version: '23.05',
+    description: 'Linux distribution for routers, as an x86-64 disk image.',
+    iconName: 'Radio', publisher: 'OpenWrt', official: true, tags: ['network', 'router', 'appliance'],
+    installCommand: 'curl -fsSLO https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-23.05.5-x86-64-generic-ext4-combined.img.gz',
+  },
+  {
+    id: 'vm-alpine-virt', name: 'Alpine Linux (virt)', category: 'vm_images', version: '3.20',
+    description: 'Minimal Alpine image tuned for virtual machines.',
+    iconName: 'HardDrive', publisher: 'Alpine Linux', official: true, tags: ['linux', 'minimal', 'appliance'],
+    installCommand: 'curl -fsSLO https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-virt-3.20.3-x86_64.iso',
+  },
 ].map((item) => ({
-  // Download counts and star ratings would have to come from a registry the agent does not query;
-  // omitting them beats printing an invented "4.8 / 12k downloads".
+  // Download counts and star ratings would have to come from a registry the agent does not
+  // query; omitting them beats printing an invented "4.8 / 12k downloads".
   downloadsCount: null,
   rating: null,
   ...item,

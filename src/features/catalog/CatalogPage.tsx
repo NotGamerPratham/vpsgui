@@ -22,14 +22,27 @@ export function CatalogPage() {
     catalogService.fetchCatalog().then(setCatalogItems);
   }, []);
 
-  /** Build the `docker run` line for an item, including its documented ports and env. */
-  const copyRunCommand = async (item: CatalogItem) => {
-    if (!item.image) return;
+  /**
+   * The command that actually deploys an item.
+   *
+   * Container entries get a `docker run` line built from their documented ports
+   * and env. OS templates, VM appliances and multi-service stacks are not a
+   * single container, so they carry their own `installCommand` - without it
+   * their cards rendered a permanently disabled button.
+   */
+  const commandFor = (item: CatalogItem): string | null => {
+    if (item.installCommand) return item.installCommand;
+    if (!item.image) return null;
     const ports = (item.defaultPorts || []).map((p) => `-p ${p}:${p}`).join(' ');
     const env = Object.entries(item.defaultEnv || {})
       .map(([k, v]) => `-e ${k}=${v}`)
       .join(' ');
-    const cmd = ['docker run -d --name', item.id, ports, env, item.image].filter(Boolean).join(' ');
+    return ['docker run -d --name', item.id, ports, env, item.image].filter(Boolean).join(' ');
+  };
+
+  const copyRunCommand = async (item: CatalogItem) => {
+    const cmd = commandFor(item);
+    if (!cmd) return;
 
     // Falls back to execCommand, so this works over plain HTTP too.
     if ((await copyToClipboard(cmd)) === 'copied') {
@@ -152,8 +165,8 @@ export function CatalogPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!item.image}
-                onClick={() => item.image && copyRunCommand(item)}
+                disabled={!commandFor(item)}
+                onClick={() => copyRunCommand(item)}
                 className="gap-1.5 text-xs shrink-0"
               >
                 {copiedId === item.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}

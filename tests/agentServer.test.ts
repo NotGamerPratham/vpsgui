@@ -208,18 +208,46 @@ describe('agent: host inventory endpoints', () => {
     expect(Array.isArray(await res.json())).toBe(true);
   });
 
-  it('serves a catalog whose entries carry a usable image reference', async () => {
+  it('serves a catalog where every entry is actually deployable', async () => {
     const res = await fetch(`${BASE}/api/v1/catalog`, { headers: AUTH });
     const items = await res.json();
     expect(items.length).toBeGreaterThan(0);
 
+    const ids = new Set<string>();
     for (const item of items) {
       expect(typeof item.id).toBe('string');
-      expect(typeof item.image).toBe('string');
+
+      // The real invariant. It used to be "every entry has an image", but OS
+      // templates, VM appliances and multi-service stacks are not a single
+      // container. The UI disables its copy button when neither field is
+      // present, so an entry with neither renders as a dead button.
+      const deployable =
+        typeof item.image === 'string' || typeof item.installCommand === 'string';
+      expect(deployable, `${item.id} has neither image nor installCommand`).toBe(true);
+
+      // Duplicate ids would collide as React keys and silently drop cards.
+      expect(ids.has(item.id), `duplicate catalog id ${item.id}`).toBe(false);
+      ids.add(item.id);
+
+      expect(typeof item.name).toBe('string');
+      expect(Array.isArray(item.tags)).toBe(true);
+
       // Popularity metrics would need a registry the agent does not query. The UI called
       // .toLocaleString() on downloadsCount, so an invented number here would hide a real crash.
       expect(item.downloadsCount).toBeNull();
       expect(item.rating).toBeNull();
+    }
+  });
+
+  it('populates every catalog tab the UI renders', async () => {
+    // The console shows a tab per category. A category with no items renders an
+    // empty tab, which reads as broken rather than as "nothing here yet".
+    const res = await fetch(`${BASE}/api/v1/catalog`, { headers: AUTH });
+    const items = await res.json();
+    const categories = new Set(items.map((i: { category: string }) => i.category));
+
+    for (const expected of ['docker_images', 'applications', 'stacks', 'operating_systems', 'vm_images']) {
+      expect(categories.has(expected), `no catalog items in ${expected}`).toBe(true);
     }
   });
 

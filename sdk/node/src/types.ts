@@ -340,6 +340,8 @@ export interface CatalogItem {
   rating: number | null;
   tags: string[];
   image?: string;
+  /** Ready-to-run command for catalog entries that are not a single container. */
+  installCommand?: string;
   defaultPorts?: number[];
   defaultEnv?: Record<string, string>;
 }

@@ -19,6 +19,12 @@ export interface CatalogItem {
   tags: string[];
   /** Container image reference, for items deployable via Docker. */
   image?: string;
+  /**
+   * Ready-to-run command for items that are not a single container - OS
+   * cloud images, VM appliances and multi-service stacks. Without it those
+   * cards render a permanently disabled copy button.
+   */
+  installCommand?: string;
   readmeMarkdown?: string;
   defaultPorts?: number[];
   defaultEnv?: Record<string, string>;
