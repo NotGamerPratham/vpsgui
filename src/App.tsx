@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LinuxOnlyGuard } from './components/common/LinuxOnlyGuard';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { MainLayout } from './layouts/MainLayout';
@@ -44,6 +45,7 @@ import { ServicesPage } from './features/system/ServicesPage';
 export function App() {
   return (
     <LinuxOnlyGuard>
+      <ErrorBoundary>
         <BrowserRouter>
           <Routes>
             {/* The landing page used to own "/". With it gone the bare domain fell
@@ -102,6 +104,7 @@ export function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
+      </ErrorBoundary>
     </LinuxOnlyGuard>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Package, Terminal, CheckCircle, Download, Code, Layers, Search, RefreshCw, Copy, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
@@ -49,6 +49,23 @@ export function PackagesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
+  // A bare setTimeout per message meant an older timer could clear a newer
+  // banner early. Holding the pending timer lets each new message cancel the
+  // one it replaces.
+  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashError = (message: string, ms: number) => {
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    setInstallError(message);
+    errorTimer.current = setTimeout(() => setInstallError(null), ms);
+  };
+
+  useEffect(() => () => {
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+  }, []);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -78,8 +95,7 @@ export function PackagesPage() {
   const handleInstall = async (name: string, isLanguage: boolean) => {
     const packageName = isLanguage ? LANGUAGE_APT_PACKAGE[name] : name;
     if (!packageName) {
-      setInstallError(`${name} has no apt package available for 1-click install - use "Copy Cmd" instead.`);
-      setTimeout(() => setInstallError(null), 4000);
+      flashError(`${name} has no apt package available for 1-click install - use "Copy Cmd" instead.`, 4000);
       return;
     }
     setInstallingItem(name);
@@ -93,12 +109,10 @@ export function PackagesPage() {
         setPackages((prev) => prev.map((p) => (p.name === name ? { ...p, installed: true } : p)));
         setLanguages((prev) => prev.map((l) => (l.name === name ? { ...l, installed: true } : l)));
       } else {
-        setInstallError(`Install failed for ${name}: ${(res.output || 'unknown error').slice(0, 200)}`);
-        setTimeout(() => setInstallError(null), 5000);
+        flashError(`Install failed for ${name}: ${(res.output || 'unknown error').slice(0, 200)}`, 5000);
       }
     } catch (e: any) {
-      setInstallError(`Install failed for ${name}: ${e?.message || 'agent unreachable'}`);
-      setTimeout(() => setInstallError(null), 5000);
+      flashError(`Install failed for ${name}: ${e?.message || 'agent unreachable'}`, 5000);
     } finally {
       setInstallingItem(null);
     }
@@ -108,8 +122,9 @@ export function PackagesPage() {
     // copyToClipboard falls back to execCommand, so this works over plain HTTP where
     // navigator.clipboard does not exist at all.
     if ((await copyToClipboard(cmd)) === 'copied') {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
       setCopiedCmd(cmd);
-      setTimeout(() => setCopiedCmd(null), 2000);
+      copiedTimer.current = setTimeout(() => setCopiedCmd(null), 2000);
       return;
     }
     // Last resort: show the command so it can be selected, rather than only saying "copy manually".
