@@ -8,6 +8,7 @@
   <a href="https://github.com/NotGamerPratham/vpsgui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-10B981?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>
   <a href="https://github.com/NotGamerPratham/vpsgui"><img src="https://img.shields.io/github/v/release/NotGamerPratham/vpsgui?style=flat-square&color=3B82F6" alt="Release" /></a>
   <a href="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml"><img src="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/sponsors/NotGamerPratham"><img src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white" alt="Sponsor" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://vitejs.dev"><img src="https://img.shields.io/badge/Vite-5.4-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /></a>
@@ -276,8 +277,38 @@ telemetry = client.system.telemetry()
 
 ---
 
+## 💖 Sponsor VPSGUI Development
+
+VPSGUI is 100% free and open-source software created and maintained by **[NotGamerPratham](https://notgamerpratham.com)**. If VPSGUI saves you time or powers your server infrastructure, consider sponsoring its ongoing development!
+
+<p align="center">
+  <a href="https://github.com/sponsors/NotGamerPratham">
+    <img src="https://img.shields.io/badge/Sponsor%20VPSGUI-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor VPSGUI on GitHub Sponsors" />
+  </a>
+  <a href="https://notgamerpratham.com">
+    <img src="https://img.shields.io/badge/Support%20Author-NotGamerPratham-FF4655?style=for-the-badge&logo=github&logoColor=white" alt="Support Author NotGamerPratham" />
+  </a>
+</p>
+
+---
+
+## 🤝 Real-Time Contributors & Collaborators
+
+Thank you to all the amazing developers and contributors who help improve VPSGUI! Real-time contributor avatars and metrics are fetched live directly from GitHub:
+
+<p align="center">
+  <a href="https://github.com/NotGamerPratham/vpsgui/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=NotGamerPratham/vpsgui" alt="Real-time VPSGUI Contributors" />
+  </a>
+</p>
+
+Want to contribute to VPSGUI? Check out our [CONTRIBUTING.md](CONTRIBUTING.md) guide!
+
+---
+
 ## Author & License
 
 Developed by **[NotGamerPratham](https://notgamerpratham.com)**.
 
 VPSGUI is open-source software released under the [MIT License](LICENSE).
+
