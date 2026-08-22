@@ -98,10 +98,36 @@ Packages, so a bare `npm publish` targets it; the workflow rewrites the name to 
 first. The npmjs leg overrides the registry instead and keeps the unscoped name, because that is
 what `npm i -g vpsgui` resolves.
 
-The `bin` entry stays `vpsgui` in both, so the command is the same whichever one you install.
+Both halves must be lowercase - GitHub Packages rejects capitals in a name or scope - which is why
+the workflow lowercases `github.repository_owner` before setting the name. `actions/setup-node`
+independently lowercases the same value when it writes the `.npmrc`, so the two agree.
 
-Note that GitHub Packages requires an authenticated `.npmrc` to *install* from, even for public
-packages. npmjs.com is therefore the registry to point users at; GitHub Packages is a mirror.
+`setup-node` writes a *scoped* registry line (`@owner:registry=...`), not a global default. That
+matters: a global default would send `npm install` to GitHub Packages looking for `typescript` and
+`@types/node`, which do not exist there, and the publish job would fail before it published
+anything.
+
+### Visibility on GitHub Packages is not npm's `access` field
+
+A package published to GitHub Packages **inherits the visibility of the repository it is linked
+to**. `vpsgui` is currently a private repository, so the GitHub Packages copy is private too, and
+installing it needs a personal access token with `read:packages`:
+
+```ini
+# ~/.npmrc
+@notgamerpratham:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_PERSONAL_ACCESS_TOKEN
+```
+
+`publishConfig` deliberately does **not** set `"access": "public"`. That is an npmjs concept; on
+GitHub Packages it changes nothing, and stating it implies a visibility the package will not have.
+To make the package public, either make the repository public or change the package's visibility in
+its GitHub Packages settings.
+
+npmjs.com is therefore the registry to point users at - `npm i -g vpsgui` needs no token and no
+`.npmrc`. GitHub Packages is a mirror for people who already have repo access.
+
+The `bin` entry stays `vpsgui` in both, so the command is the same whichever one you install.
 
 ### Secrets
 

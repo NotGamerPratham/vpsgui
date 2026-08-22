@@ -16,8 +16,7 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "build": "tsc && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
