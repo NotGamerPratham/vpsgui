@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="https://github.com/NotGamerPratham/vpsgui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-10B981?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>
-  <a href="https://github.com/NotGamerPratham/vpsgui"><img src="https://img.shields.io/github/v/release/NotGamerPratham/vpsgui?style=flat-square&color=3B82F6" alt="Release" /></a>
   <a href="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml"><img src="https://github.com/NotGamerPratham/vpsgui/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/sponsors/NotGamerPratham"><img src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white" alt="Sponsor" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
