@@ -1,0 +1,15 @@
+# Blank issues are disabled so that a security report cannot be filed publicly by
+# someone who simply skipped the templates. The link below routes those privately.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/NotGamerPratham/vpsgui/security/advisories/new
+    about: >-
+      The agent token is equivalent to a root password. Report privately here - never in a public
+      issue. See docs/SECURITY.md for what is in scope.
+  - name: Deployment and configuration help
+    url: https://github.com/NotGamerPratham/vpsgui/blob/main/docs/AGENT_INSTALLATION.md
+    about: Installing the agent, TLS, file roots, environment variables and troubleshooting.
+  - name: Support the project
+    url: https://buymeacoffee.com/notgamerpratham
+    about: VPSGUI is free and open source. Sponsorship is optional and always welcome.

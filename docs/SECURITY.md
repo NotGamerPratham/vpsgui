@@ -78,5 +78,18 @@ The token is stored in `localStorage` so it survives reloads. Consequences worth
 
 ## Reporting security vulnerabilities
 
-Please report security issues to `security@vpsgui.dev`. Do not open a public issue for anything that
-would let an unauthenticated caller reach the agent.
+Do not open a public issue for anything that would let an unauthenticated caller reach the agent.
+
+**Use [GitHub private vulnerability reporting][advisory]** — it delivers straight to the maintainer,
+keeps the report private until a fix ships, and needs no working mailbox on our side.
+
+[advisory]: https://github.com/NotGamerPratham/vpsgui/security/advisories/new
+
+> The address `security@vpsgui.dev` was previously listed here. `vpsgui.dev` currently has no DNS
+> record, so mail to it **bounces** — do not rely on it. If that domain is set up later and given an
+> MX record, it can be restored as a second route; until then the advisory link above is the only
+> one that actually reaches anyone.
+
+Please include the agent version (`GET /api/v1/agent/info`), how the agent is exposed (loopback
+behind nginx, or bound to a public interface), and whether `AGENT_ENABLE_SHELL` and
+`AGENT_FILE_ROOTS` are at their defaults. Never include a real agent token in the report.

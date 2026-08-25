@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest a capability VPSGUI does not have yet.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        VPSGUI reports what is actually on the host and does not invent data, so a request that
+        would require guessing at something the agent cannot determine is unlikely to be accepted.
+        Saying which host facts a feature needs makes it much easier to judge.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve
+      description: The situation you are in, rather than the implementation you have in mind.
+      placeholder: >-
+        I run six hosts and have no way to tell at a glance which of them have pending package
+        upgrades.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part would this touch
+      options:
+        - Console (web UI)
+        - Agent (new or changed endpoint)
+        - CLI (`vpsgui` command)
+        - Node SDK
+        - Python SDK
+        - Marketing website
+        - Installer / deployment
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-source
+    attributes:
+      label: Where would the data come from
+      description: >-
+        If this needs information from the host, which command or file provides it? A feature whose
+        data has no real source ends up as a fabricated reading, which this project treats as worse
+        than showing nothing.
+      placeholder: "`apt list --upgradable`, parsed by the agent."
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you have tried instead

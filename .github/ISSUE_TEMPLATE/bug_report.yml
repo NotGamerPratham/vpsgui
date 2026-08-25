@@ -1,0 +1,117 @@
+name: Bug report
+description: Something in the console, the agent, the CLI or an SDK behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **Do not report security vulnerabilities here.** The agent token is equivalent to a root
+        password, so anything that could let an unauthenticated caller reach the agent goes through
+        [private vulnerability reporting](https://github.com/NotGamerPratham/vpsgui/security/advisories/new)
+        instead - see [docs/SECURITY.md](https://github.com/NotGamerPratham/vpsgui/blob/main/docs/SECURITY.md).
+
+        **Never paste your agent token**, the contents of `agent.env`, or a `users.db` into an
+        issue. Redact them from any log you attach.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+      placeholder: |
+        The Systemd Services page reports 80 services, but `systemctl list-units --type=service`
+        on the host reports 303.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the dashboard and sign in
+        2. Go to Systemd Services
+        3. Compare the count against `systemctl` over ssh
+    validations:
+      required: true
+
+  - type: input
+    id: agent-version
+    attributes:
+      label: Agent version
+      description: >-
+        The version the agent actually reports, not the one in your checkout - these drift.
+        Run `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:46509/api/v1/agent/info`
+        on the host, or read it from the Agent page.
+      placeholder: "1.6.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: redeployed
+    attributes:
+      label: Has the agent been reinstalled since you last pulled?
+      description: >-
+        The console and the agent deploy separately. `git pull` plus a build updates
+        `/var/www/vpsgui`, but the agent runs from `/opt/vpsgui/agent` and only `run.sh` copies it
+        there. A console newer than its agent produces 404s on whole route groups. This is the most
+        common cause of "the endpoint is missing".
+      options:
+        - "Yes - I ran `sudo ./run.sh` after pulling"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Console (web UI)
+        - Agent (vpsgui-agent daemon)
+        - CLI (`vpsgui` command)
+        - Node SDK
+        - Python SDK
+        - Marketing website
+        - Installer / deployment
+    validations:
+      required: true
+
+  - type: input
+    id: host-os
+    attributes:
+      label: Host OS
+      placeholder: "Ubuntu 24.04 LTS"
+    validations:
+      required: true
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Node (or Bun) version on the host
+      description: "`node -v` / `bun -v`"
+      placeholder: "v20.11.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: >-
+        Browser console errors, `pm2 logs vpsgui-agent`, or `journalctl -u vpsgui-agent -n 50`.
+        Redact any token before pasting. This is rendered as a code block, so no backticks needed.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted every token, password and secret from the text above.
+          required: true
+        - label: This is not a security vulnerability (those go through private advisories).
+          required: true
