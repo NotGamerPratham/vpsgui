@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 // @ts-expect-error - plain .mjs helper, no type declarations by design.
 import { renderTable, spliceBlock, START, END } from '../scripts/update-contributors.mjs';
+import { readFileSync } from 'node:fs';
 
 /**
  * The contributor block in README.md is machine-written, so the failure mode is
@@ -114,5 +115,35 @@ describe('spliceBlock', () => {
   it('refuses when the markers are inverted', () => {
     const broken = `# P\n${END}\nbody\n${START}\n`;
     expect(() => spliceBlock(broken, 'x')).toThrow(/marker/i);
+  });
+});
+
+describe('README.md still carries the markers the workflow writes between', () => {
+  // The markers were twice removed by a hand-edit to the README. The script
+  // refuses to guess where the block goes - correctly, since appending blindly
+  // would duplicate the section on every run - so the contributors workflow
+  // simply went red on every push until someone noticed. This turns that into a
+  // local test failure with an obvious cause instead.
+  // Named distinctly: `readme()` above is the fixture builder, this is the real file.
+  const readmeFile = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+
+  it('contains the start marker, byte-for-byte', () => {
+    expect(readmeFile).toContain(START);
+  });
+
+  it('contains the end marker', () => {
+    expect(readmeFile).toContain(END);
+  });
+
+  it('has them exactly once and in the right order', () => {
+    expect((readmeFile.match(/CONTRIBUTORS:START/g) || []).length).toBe(1);
+    expect((readmeFile.match(/CONTRIBUTORS:END/g) || []).length).toBe(1);
+    expect(readmeFile.indexOf(START)).toBeLessThan(readmeFile.indexOf(END));
+  });
+
+  it('can actually be spliced, so the workflow will not fail', () => {
+    // The real end-to-end guarantee: whatever the file looks like now, the
+    // exact function the workflow calls must succeed against it.
+    expect(() => spliceBlock(readmeFile, '<table>probe</table>')).not.toThrow();
   });
 });
