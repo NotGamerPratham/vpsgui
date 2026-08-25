@@ -48,6 +48,10 @@ const ALLOW_SENSITIVE_FILES = process.env.AGENT_ALLOW_SENSITIVE_FILES === '1';
 // Request/response limits. Without these a single client can exhaust agent memory.
 const MAX_JSON_BODY_BYTES = 8 * 1024 * 1024; // /files/write payloads
 const MAX_READ_FILE_BYTES = 2 * 1024 * 1024; // largest file the editor will load
+// Uploads stream straight to disk rather than being buffered, so this cap is about not filling the
+// host's filesystem from one request, not about agent memory. Override with AGENT_MAX_UPLOAD_MB.
+const MAX_UPLOAD_BYTES =
+  (Number.parseInt(process.env.AGENT_MAX_UPLOAD_MB || '', 10) || 100) * 1024 * 1024;
 const MAX_EXEC_BUFFER_BYTES = 4 * 1024 * 1024; // cap on captured child-process output
 const EXEC_TIMEOUT_MS = 10000;
 const INSTALL_TIMEOUT_MS = 300000;
@@ -4006,6 +4010,131 @@ async function handleRequest(req, res)
     }
     const result = await applyFirewallAction(parsed.body);
     sendJson(res, result.invalid ? 400 : 200, { success: result.success, output: result.output });
+    return;
+  }
+
+  // ---- File upload ----
+  // The body is the file's raw bytes, streamed to disk. Deliberately not JSON: /files/write takes
+  // a string, so anything non-UTF-8 (an image, a tarball, a binary) would be corrupted on the way
+  // through, and base64 would inflate the payload by a third before it hit the JSON body cap.
+  if (method === 'POST' && pathname === '/api/v1/files/upload') {
+    const target = reqUrl.searchParams.get('path');
+    const overwrite = reqUrl.searchParams.get('overwrite') === '1';
+
+    const safe = await resolveSafePath(target, { mustExist: false });
+    if (safe.error) {
+      sendJson(res, safe.status, { success: false, error: safe.error, roots: FILE_ROOTS });
+      return;
+    }
+
+    // Refuse to clobber by default. The browser sends a filename the operator may not have looked
+    // at closely, and silently replacing an existing file is not recoverable from here.
+    if (!overwrite) {
+      const exists = await fsp.stat(safe.path).then(() => true).catch(() => false);
+      if (exists) {
+        sendJson(res, 409, {
+          success: false,
+          error: 'A file already exists at that path. Re-send with overwrite=1 to replace it.',
+        });
+        return;
+      }
+    }
+
+    const declared = Number.parseInt(req.headers['content-length'] || '', 10);
+    if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES) {
+      sendJson(res, 413, {
+        success: false,
+        error: `File exceeds the ${Math.floor(MAX_UPLOAD_BYTES / 1048576)} MB upload limit`,
+      });
+      return;
+    }
+
+    // Write to a temp file in the destination directory, then rename. A connection that drops
+    // half way therefore leaves no partial file where a complete one is expected, and the rename
+    // is atomic on the same filesystem.
+    const tmpPath = `${safe.path}.vpsgui-upload-${process.pid}-${Date.now()}`;
+    let written = 0;
+    let failed = null;
+
+    try {
+      const handle = await fsp.open(tmpPath, 'wx', 0o644);
+      const stream = handle.createWriteStream();
+
+      await new Promise((resolve, reject) => {
+        req.on('data', (chunk) => {
+          written += chunk.length;
+          // Content-Length can lie, or be absent on a chunked upload, so enforce the cap against
+          // what actually arrives rather than what was promised.
+          if (written > MAX_UPLOAD_BYTES) {
+            failed = {
+              status: 413,
+              error: `File exceeds the ${Math.floor(MAX_UPLOAD_BYTES / 1048576)} MB upload limit`,
+            };
+            req.destroy();
+            stream.destroy();
+            reject(new Error('upload too large'));
+          }
+        });
+        req.on('error', reject);
+        stream.on('error', reject);
+        stream.on('finish', resolve);
+        req.pipe(stream);
+      });
+
+      await fsp.rename(tmpPath, safe.path);
+      sendJson(res, 200, { success: true, path: safe.path, sizeBytes: written });
+    } catch (e) {
+      await fsp.rm(tmpPath, { force: true }).catch(() => { });
+      if (failed) {
+        sendJson(res, failed.status, { success: false, error: failed.error });
+      } else if (e && e.code === 'EEXIST') {
+        sendJson(res, 409, { success: false, error: 'A concurrent upload is already writing there' });
+      } else {
+        sendJson(res, 500, { success: false, error: (e && e.message) || 'Upload failed' });
+      }
+    }
+    return;
+  }
+
+  // ---- Backup download ----
+  // Streams the archive rather than reading it into memory: a backup of /var/www is routinely
+  // larger than the agent's whole heap.
+  if (method === 'GET' && pathname === '/api/v1/backups/download') {
+    const name = reqUrl.searchParams.get('name') || '';
+    if (!ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
+      sendJson(res, 400, { success: false, error: 'Invalid archive name' });
+      return;
+    }
+
+    // The name pattern excludes path separators, so this cannot escape BACKUP_DIR.
+    const archivePath = path.join(BACKUP_DIR, name);
+    let stat;
+    try {
+      stat = await fsp.stat(archivePath);
+    } catch (e) {
+      sendJson(res, 404, { success: false, error: 'No such backup' });
+      return;
+    }
+    if (!stat.isFile()) {
+      sendJson(res, 404, { success: false, error: 'No such backup' });
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/gzip',
+      'Content-Length': stat.size,
+      // The name is already restricted to [A-Za-z0-9._-], so it cannot break out of the quotes
+      // or inject a header.
+      'Content-Disposition': `attachment; filename="${name}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    const stream = fs.createReadStream(archivePath);
+    stream.on('error', () => res.destroy());
+    // A client that navigates away mid-download leaves the read stream open otherwise.
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
     return;
   }
 

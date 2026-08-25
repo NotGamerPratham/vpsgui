@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FolderTree, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { FolderTree, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2, ShieldAlert, AlertTriangle, Upload } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { fileService } from '../../services/fileService';
@@ -47,6 +47,13 @@ export function FileManagerPage() {
   const [pendingRisk, setPendingRisk] = useState<SystemRisk | null>(null);
   /** The agent's configured roots, learned from a confinement refusal. */
   const [agentRoots, setAgentRoots] = useState<string[] | null>(null);
+
+  /** Hidden input the Upload button opens; drag-and-drop bypasses it entirely. */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  /** True while a drag is over the listing, so the drop target is visible. */
+  const [dragActive, setDragActive] = useState(false);
 
   const loadDirectory = useCallback(async (targetPath: string) => {
     setListLoading(true);
@@ -101,6 +108,48 @@ export function FileManagerPage() {
     } finally {
       setFileLoading(false);
     }
+  };
+
+  /**
+   * Send dropped or picked files to the current directory.
+   *
+   * Uploads run one at a time rather than in parallel: the agent writes each to a temp file and
+   * renames it, and a dozen concurrent multi-megabyte writes on a small VPS is a worse experience
+   * than a queue that finishes.
+   */
+  const uploadFiles = async (list: FileList | File[]) => {
+    const chosen = Array.from(list);
+    if (chosen.length === 0) return;
+
+    setUploadError(null);
+    setActionError(null);
+
+    for (const file of chosen) {
+      setUploading(file.name);
+      let result = await fileService.uploadFile(currentPath, file);
+
+      // The agent refuses to clobber by default, so an existing name becomes a question rather
+      // than a silent replacement.
+      if (result.conflict) {
+        const replace = window.confirm(
+          `"${file.name}" already exists in ${currentPath}.\n\nReplace it? The current contents cannot be recovered.`
+        );
+        if (!replace) {
+          setUploading(null);
+          continue;
+        }
+        result = await fileService.uploadFile(currentPath, file, { overwrite: true });
+      }
+
+      if (!result.success) {
+        setUploadError(`${file.name}: ${result.error || 'Upload failed'}`);
+        setUploading(null);
+        break;
+      }
+      setUploading(null);
+    }
+
+    await loadDirectory(currentPath);
   };
 
   /** Create a new empty file in the current directory. */
@@ -229,6 +278,33 @@ export function FileManagerPage() {
             <FolderPlus className="h-3.5 w-3.5" />
             <span>New folder</span>
           </Button>
+
+          {/* The input is hidden because its native styling cannot be themed; the button drives it.
+              `value` is cleared on every change so picking the same file twice still fires. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void uploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={Boolean(uploading)}
+            className="gap-1.5 text-xs"
+          >
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
+            <span>{uploading ? 'Uploading...' : 'Upload'}</span>
+          </Button>
           <Button size="sm" variant="outline" onClick={() => loadDirectory(currentPath)} disabled={listLoading} className="gap-1.5 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${listLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -256,11 +332,11 @@ export function FileManagerPage() {
         </div>
       </div>
 
-      {(listError || saveError || fileError || actionError) && (
+      {(listError || saveError || fileError || actionError || uploadError) && (
         <div className="space-y-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span className="break-words">{listError || fileError || saveError || actionError}</span>
+            <span className="break-words">{listError || fileError || saveError || actionError || uploadError}</span>
           </div>
 
           {/* A confinement refusal is unfixable from the UI, so say what the
@@ -315,12 +391,47 @@ export function FileManagerPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[600px]">
-        {/* Left Directory Tree Panel */}
-        <Card className="lg:col-span-1 bg-card/70 border-border/70 p-4 overflow-y-auto flex flex-col space-y-2">
+        {/* Left Directory Tree Panel. Doubles as the drop target: dragging onto the listing you
+            are looking at is the obvious gesture, and it uploads into exactly that directory. */}
+        <Card
+          onDragEnter={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer.types.includes('Files')) setDragActive(true);
+          }}
+          onDragOver={(e) => {
+            // Without preventDefault the browser navigates away to open the file instead.
+            e.preventDefault();
+          }}
+          onDragLeave={(e) => {
+            // Ignore the events fired while moving between children of this card.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragActive(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files);
+          }}
+          className={`lg:col-span-1 bg-card/70 p-4 overflow-y-auto flex flex-col space-y-2 transition-colors ${
+            dragActive ? 'border-primary border-dashed bg-primary/5' : 'border-border/70'
+          }`}
+        >
           <div className="flex items-center justify-between pb-2 border-b border-border text-xs font-bold text-foreground">
             <span className="truncate" title={currentPath}>EXPLORER ({currentPath})</span>
             {listLoading && <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin shrink-0" />}
           </div>
+
+          {dragActive && (
+            <div className="rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 py-4 text-center text-xs text-primary">
+              Drop to upload into <span className="font-mono">{currentPath}</span>
+            </div>
+          )}
+
+          {uploading && (
+            <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+              <span className="truncate" title={uploading}>Uploading {uploading}</span>
+            </div>
+          )}
 
           <div className="space-y-1 font-mono text-xs">
             <button

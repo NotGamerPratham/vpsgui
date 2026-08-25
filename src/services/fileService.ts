@@ -97,6 +97,42 @@ class FileService {
       return { success: false, error: describeError(e) };
     }
   }
+
+  /**
+   * Upload a file's raw bytes to a directory on the host.
+   *
+   * Not routed through `writeFile`: that sends the content as a JSON string, which mangles anything
+   * that is not UTF-8 text. This sends the bytes as-is, so an image or an archive arrives intact.
+   *
+   * `overwrite` is opt-in. The agent answers 409 for an existing path otherwise, which the caller
+   * turns into a confirmation rather than silently replacing a file the operator did not mean to
+   * touch.
+   */
+  async uploadFile(
+    directory: string,
+    file: File,
+    { overwrite = false }: { overwrite?: boolean } = {}
+  ): Promise<{ success: boolean; error?: string; conflict?: boolean; path?: string; sizeBytes?: number }> {
+    // Browsers expose only the base name, but a crafted one could still contain a separator; the
+    // agent confines the resolved path regardless, and stripping here keeps the request honest.
+    const name = file.name.replace(/^.*[\\/]/, '').trim();
+    if (!name) return { success: false, error: 'That file has no usable name' };
+
+    const target = `${directory.replace(/[\\/]+$/, '')}/${name}`;
+    const query = `?path=${encodeURIComponent(target)}${overwrite ? '&overwrite=1' : ''}`;
+
+    try {
+      return await apiClient.upload<{ success: boolean; path?: string; sizeBytes?: number }>(
+        `/files/upload${query}`,
+        file
+      );
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        return { success: false, conflict: true, error: e.message };
+      }
+      return { success: false, error: describeError(e) };
+    }
+  }
 }
 
 /** Pull the agent's configured roots out of a confinement error, if it sent them. */

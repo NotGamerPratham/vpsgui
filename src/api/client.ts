@@ -134,6 +134,108 @@ class ApiClient {
     return this.request<T>('DELETE', endpoint, undefined, timeoutMs);
   }
 
+  /**
+   * Send a file's raw bytes as the request body.
+   *
+   * `request()` cannot carry this: it JSON-stringifies whatever it is given, which would corrupt
+   * anything that is not UTF-8 text, and base64 would inflate the payload by a third before it hit
+   * the agent's JSON body cap. The bytes go up untouched instead.
+   *
+   * The timeout is generous and separate from the default, because a large file over a slow uplink
+   * is not a hung request.
+   */
+  async upload<T>(endpoint: string, file: Blob, timeoutMs = 10 * 60 * 1000): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const token = readToken();
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: file,
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new ApiError(`Upload timed out after ${timeoutMs}ms`, 0, endpoint);
+      }
+      throw new ApiError(error instanceof Error ? error.message : 'Upload failed', 0, endpoint);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const raw = await response.text();
+    let parsed: unknown;
+    try {
+      parsed = raw ? JSON.parse(raw) : undefined;
+    } catch (e) {
+      // Non-JSON body (an nginx 413 page, say); the status still carries the meaning.
+    }
+
+    if (!response.ok) {
+      const detail =
+        parsed && typeof parsed === 'object' && 'error' in parsed
+          ? String((parsed as { error: unknown }).error)
+          : `HTTP ${response.status} ${response.statusText}`;
+      throw new ApiError(detail, response.status, endpoint, parsed);
+    }
+    return parsed as T;
+  }
+
+  /**
+   * Fetch a binary response as a Blob.
+   *
+   * A plain `<a href>` cannot be used for this: the agent requires the bearer token on every
+   * request and a link carries no headers, so the download would 401. Fetching here keeps the
+   * token attached and hands back bytes the caller can save.
+   */
+  async download(endpoint: string, timeoutMs = 10 * 60 * 1000): Promise<Blob> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const token = readToken();
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new ApiError(`Download timed out after ${timeoutMs}ms`, 0, endpoint);
+      }
+      throw new ApiError(error instanceof Error ? error.message : 'Download failed', 0, endpoint);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      // The failure path is JSON even though the success path is not, so read it as text and try.
+      const raw = await response.text().catch(() => '');
+      let detail = `HTTP ${response.status} ${response.statusText}`;
+      try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+          detail = String((parsed as { error: unknown }).error);
+        }
+      } catch (e) {
+        // Keep the status-based message.
+      }
+      throw new ApiError(detail, response.status, endpoint);
+    }
+
+    return response.blob();
+  }
+
   /** True when an agent token has been saved; used to explain 401s to the user. */
   hasToken(): boolean {
     return Boolean(readToken());

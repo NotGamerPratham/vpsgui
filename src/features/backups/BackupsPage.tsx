@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Archive, Plus, RotateCcw, Trash2, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import { Archive, Plus, RotateCcw, Trash2, RefreshCw, AlertCircle, Loader2, Download } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -73,6 +73,39 @@ export function BackupsPage() {
       setError(e instanceof Error ? e.message : 'Backup failed');
     }
     setBusy(null);
+  };
+
+  /**
+   * Save an archive to the machine running the browser.
+   *
+   * Fetched rather than linked: the agent requires the bearer token on every request and an
+   * `<a href>` sends no headers, so a plain link would 401. The bytes come back as a Blob, which
+   * is handed to a synthetic link and revoked immediately afterwards - an object URL left alive
+   * pins the whole archive in memory for the life of the tab.
+   */
+  const handleDownload = async (b: BackupItem) => {
+    setBusy(b.id);
+    setError(null);
+    let url: string | null = null;
+    try {
+      const blob = await apiClient.download(`/backups/download?name=${encodeURIComponent(b.name)}`);
+      url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = b.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e) {
+      setError(
+        e instanceof ApiError && e.status === 401
+          ? 'Unauthorized - set a valid Agent Token under Settings.'
+          : `Could not download ${b.name}: ${e instanceof Error ? e.message : 'unknown error'}`
+      );
+    } finally {
+      if (url) URL.revokeObjectURL(url);
+      setBusy(null);
+    }
   };
 
   const handleDelete = async (b: BackupItem) => {
@@ -225,6 +258,17 @@ export function BackupsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownload(b)}
+                        disabled={busy === b.id}
+                        title="Download this archive to your computer"
+                        className="h-7 text-[11px] gap-1"
+                      >
+                        {busy === b.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                        Download
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

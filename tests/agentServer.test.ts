@@ -869,6 +869,100 @@ describe('agent: backups, deployments and image removal', () => {
   });
 });
 
+describe('agent: file upload', () => {
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/files/upload?path=${encodeURIComponent(sandboxRoot)}/nope.txt`, {
+      method: 'POST',
+      body: 'x',
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('writes raw bytes byte-for-byte, not through JSON', async () => {
+    // The point of a separate endpoint: /files/write takes a string, so any byte
+    // sequence that is not valid UTF-8 would be mangled on the way through.
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0xfe, 0x01, 0x80]);
+    const target = `${sandboxRoot}/binary.bin`;
+
+    const res = await fetch(`${BASE}/api/v1/files/upload?path=${encodeURIComponent(target)}`, {
+      method: 'POST',
+      headers: AUTH,
+      body: bytes,
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+
+    const onDisk = await fs.readFile(target);
+    expect(Buffer.compare(onDisk, Buffer.from(bytes))).toBe(0);
+  });
+
+  it('refuses to overwrite unless asked, so a stray upload cannot destroy a file', async () => {
+    const target = `${sandboxRoot}/keepme.txt`;
+    await fs.writeFile(target, 'original', 'utf-8');
+
+    const res = await fetch(`${BASE}/api/v1/files/upload?path=${encodeURIComponent(target)}`, {
+      method: 'POST',
+      headers: AUTH,
+      body: 'replacement',
+    });
+    expect(res.status).toBe(409);
+    // The original must be untouched.
+    expect(await fs.readFile(target, 'utf-8')).toBe('original');
+  });
+
+  it('overwrites when explicitly told to', async () => {
+    const target = `${sandboxRoot}/replaceme.txt`;
+    await fs.writeFile(target, 'original', 'utf-8');
+
+    const res = await fetch(
+      `${BASE}/api/v1/files/upload?path=${encodeURIComponent(target)}&overwrite=1`,
+      { method: 'POST', headers: AUTH, body: 'replacement' }
+    );
+    expect(res.status).toBe(200);
+    expect(await fs.readFile(target, 'utf-8')).toBe('replacement');
+  });
+
+  it('confines the destination to the configured roots', async () => {
+    const outside = path.join(os.tmpdir(), 'vpsgui-escape.txt');
+    const res = await fetch(`${BASE}/api/v1/files/upload?path=${encodeURIComponent(outside)}`, {
+      method: 'POST',
+      headers: AUTH,
+      body: 'should not land',
+    });
+    expect(res.status).toBe(403);
+    await expect(fs.access(outside)).rejects.toThrow();
+  });
+
+  it('leaves no temp file behind on a rejected upload', async () => {
+    // Uploads land on a `.vpsgui-upload-*` temp file first; a refused request
+    // must not leave one orphaned in the directory.
+    const entries = await fs.readdir(sandboxRoot);
+    expect(entries.filter((e) => e.includes('vpsgui-upload'))).toEqual([]);
+  });
+});
+
+describe('agent: backup download', () => {
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/backups/download?name=any.tar.gz`);
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a name that could escape the backup directory', async () => {
+    for (const name of ['../../etc/passwd', '/etc/shadow.tar.gz', 'a/b.tar.gz', 'no-suffix']) {
+      const res = await fetch(
+        `${BASE}/api/v1/backups/download?name=${encodeURIComponent(name)}`,
+        { headers: AUTH }
+      );
+      expect(res.status, `${name} must be rejected`).toBe(400);
+    }
+  });
+
+  it('404s for a well-formed name that does not exist', async () => {
+    const res = await fetch(`${BASE}/api/v1/backups/download?name=not-here.tar.gz`, { headers: AUTH });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('agent: deployments', () => {
   it('identifies a checkout by its path, not its position in the scan', async () => {
     // The id used to be `repo-${index}`. Scan order comes from readdir, which is
