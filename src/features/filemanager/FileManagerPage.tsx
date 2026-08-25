@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FolderTree, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2, ShieldAlert, AlertTriangle, Upload } from 'lucide-react';
+import { FolderTree, Save, ChevronLeft, Check, AlertCircle, Loader2, RefreshCw, FilePlus, FolderPlus, Pencil, Trash2, ShieldAlert, AlertTriangle, Upload, Download, X } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { fileService } from '../../services/fileService';
@@ -7,6 +7,7 @@ import { FileItem } from '../../types/file';
 import { iconForFile } from '../../lib/fileIcons';
 import { describeSystemRisk, SystemRisk } from '../../lib/systemPaths';
 import { SystemFileConfirm } from './SystemFileConfirm';
+import { saveBlob } from '../../lib/saveBlob';
 
 /** Walk one level up, handling both POSIX and Windows separators. */
 function parentPath(currentPath: string): string {
@@ -55,6 +56,11 @@ export function FileManagerPage() {
   /** True while a drag is over the listing, so the drop target is visible. */
   const [dragActive, setDragActive] = useState(false);
 
+  /** Paths ticked for a bulk action. Cleared whenever the directory changes. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
   const loadDirectory = useCallback(async (targetPath: string) => {
     setListLoading(true);
     const { items, error, roots } = await fileService.fetchFiles(targetPath);
@@ -72,6 +78,7 @@ export function FileManagerPage() {
     setIsTruncated(false);
     setFileError(null);
     setSelectedIsSystem(false);
+    setSelected(new Set());
   }, []);
 
   useEffect(() => {
@@ -149,6 +156,68 @@ export function FileManagerPage() {
       setUploading(null);
     }
 
+    await loadDirectory(currentPath);
+  };
+
+  /** Save one file to the machine running the browser. */
+  const handleDownload = async (item: FileItem) => {
+    setDownloading(item.path);
+    setActionError(null);
+    const result = await fileService.downloadFile(item.path);
+    setDownloading(null);
+
+    if (!result.success || !result.blob) {
+      setActionError(result.error || `Could not download ${item.name}`);
+      return;
+    }
+    saveBlob(result.blob, item.name);
+  };
+
+  const toggleSelected = (path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  /**
+   * Delete every ticked path in one request.
+   *
+   * The agent reports per-path outcomes, so a selection mixing a deletable file with a refused one
+   * removes what it can and names what it could not - rather than reporting a blanket failure that
+   * hides the deletions that did happen.
+   */
+  const handleBulkDelete = async () => {
+    const paths = [...selected];
+    if (paths.length === 0) return;
+
+    const anyDirectory = files.some((f) => selected.has(f.path) && f.type === 'directory');
+    const confirmed = window.confirm(
+      `Delete ${paths.length} item${paths.length === 1 ? '' : 's'} from ${currentPath}?` +
+        (anyDirectory ? '\n\nThe selection includes directories; their contents go too.' : '') +
+        '\n\nThis cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setActionError(null);
+    const result = await fileService.deleteMany(paths, anyDirectory);
+    setBulkBusy(false);
+
+    if (result.failed.length > 0) {
+      const first = result.failed[0];
+      setActionError(
+        `Deleted ${result.deleted.length} of ${paths.length}. ` +
+          `${first.path}: ${first.error}` +
+          (result.failed.length > 1 ? ` (and ${result.failed.length - 1} more)` : '')
+      );
+    } else if (result.error) {
+      setActionError(result.error);
+    }
+
+    setSelected(new Set());
     await loadDirectory(currentPath);
   };
 
@@ -426,6 +495,29 @@ export function FileManagerPage() {
             </div>
           )}
 
+          {selected.size > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px]">
+              <span className="text-primary font-medium">{selected.size} selected</span>
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkBusy}
+                  className="flex items-center gap-1 rounded px-1.5 py-1 text-rose-400 hover:bg-rose-500/15 disabled:opacity-50"
+                >
+                  {bulkBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  Delete
+                </button>
+                <button
+                  onClick={() => setSelected(new Set())}
+                  aria-label="Clear selection"
+                  className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            </div>
+          )}
+
           {uploading && (
             <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground">
               <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
@@ -456,6 +548,15 @@ export function FileManagerPage() {
                 const ItemIcon = itemIcon.Icon;
                 return (
                   <div key={item.path} className="group flex items-center gap-1">
+                    {/* Ticking selects for a bulk action; it deliberately does not open the file,
+                        so a selection can be built without loading each one into the editor. */}
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.path)}
+                      onChange={() => toggleSelected(item.path)}
+                      aria-label={`Select ${item.name}`}
+                      className="h-3 w-3 shrink-0 accent-primary cursor-pointer"
+                    />
                     <button
                       onClick={() => handleSelectFile(item)}
                       disabled={item.readable === false}
@@ -484,6 +585,20 @@ export function FileManagerPage() {
 
                     {/* Revealed on hover so the tree stays readable; both call real agent endpoints. */}
                     <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                      {item.type !== 'directory' && (
+                        <button
+                          onClick={() => handleDownload(item)}
+                          disabled={downloading === item.path || item.readable === false}
+                          title={`Download ${item.name}`}
+                          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-40"
+                        >
+                          {downloading === item.path ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleRename(item)}
                         title={`Rename ${item.name}`}

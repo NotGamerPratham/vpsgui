@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Archive, Plus, RotateCcw, Trash2, RefreshCw, AlertCircle, Loader2, Download } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Archive, Plus, RotateCcw, Trash2, RefreshCw, AlertCircle, Loader2, Download, Upload } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
 import { apiClient, ApiError } from '../../api/client';
+import { saveBlob } from '../../lib/saveBlob';
 
 /** Matches the agent's GET /backups payload: real tar.gz archives on disk. */
 interface BackupItem {
@@ -24,6 +25,9 @@ export function BackupsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Separate from `busy`, which is per-row; an upload belongs to no row yet. */
+  const [uploading, setUploading] = useState(false);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [sourcePath, setSourcePath] = useState('/var/www');
   const [label, setLabel] = useState('');
@@ -76,6 +80,32 @@ export function BackupsPage() {
   };
 
   /**
+   * Restore an archive taken elsewhere by putting it back in the backup directory.
+   *
+   * The agent validates the name and checks the gzip magic bytes before the file joins the list,
+   * so a mistyped upload cannot sit there looking restorable until tar fails on it later.
+   */
+  const handleUploadArchive = async (list: FileList | null) => {
+    const file = list?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+    try {
+      await apiClient.upload(`/backups/upload?name=${encodeURIComponent(file.name)}`, file);
+      await load();
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? `Could not upload ${file.name}: ${e.message}`
+          : `Could not upload ${file.name}`
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /**
    * Save an archive to the machine running the browser.
    *
    * Fetched rather than linked: the agent requires the bearer token on every request and an
@@ -86,16 +116,9 @@ export function BackupsPage() {
   const handleDownload = async (b: BackupItem) => {
     setBusy(b.id);
     setError(null);
-    let url: string | null = null;
     try {
       const blob = await apiClient.download(`/backups/download?name=${encodeURIComponent(b.name)}`);
-      url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = b.name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      saveBlob(blob, b.name);
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 401
@@ -103,7 +126,6 @@ export function BackupsPage() {
           : `Could not download ${b.name}: ${e instanceof Error ? e.message : 'unknown error'}`
       );
     } finally {
-      if (url) URL.revokeObjectURL(url);
       setBusy(null);
     }
   };
@@ -167,6 +189,27 @@ export function BackupsPage() {
           <Button size="sm" variant="outline" onClick={load} disabled={loading} className="gap-1.5 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
+          </Button>
+          <input
+            ref={archiveInputRef}
+            type="file"
+            accept=".gz,.tgz,application/gzip"
+            className="hidden"
+            onChange={(e) => {
+              void handleUploadArchive(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => archiveInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload a .tar.gz taken from another host"
+            className="gap-1.5 text-xs"
+          >
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            <span>{uploading ? 'Uploading...' : 'Upload archive'}</span>
           </Button>
           <Button size="sm" onClick={() => setShowCreate((v) => !v)} className="gap-1.5 text-xs bg-primary">
             <Plus className="h-4 w-4" />

@@ -99,6 +99,38 @@ class FileService {
   }
 
   /**
+   * Fetch a file's exact bytes for saving locally.
+   *
+   * Not `readFile`: that caps at the agent's editor limit and returns a JSON string, so a 3 MB log
+   * would arrive truncated and a binary would arrive corrupted. This streams the whole file.
+   */
+  async downloadFile(path: string): Promise<{ success: boolean; error?: string; blob?: Blob }> {
+    try {
+      const blob = await apiClient.download(`/files/download?path=${encodeURIComponent(path)}`);
+      return { success: true, blob };
+    } catch (e) {
+      return { success: false, error: describeError(e) };
+    }
+  }
+
+  /**
+   * Delete several paths in one request.
+   *
+   * The agent resolves and checks each path separately and answers with a per-path breakdown, so a
+   * selection containing one refusal still removes the rest rather than failing as a whole.
+   */
+  async deleteMany(
+    paths: string[],
+    recursive = false
+  ): Promise<{ success: boolean; deleted: string[]; failed: { path: string; error: string }[]; error?: string }> {
+    try {
+      return await apiClient.post('/files/delete-many', { paths, recursive }, 120000);
+    } catch (e) {
+      return { success: false, deleted: [], failed: [], error: describeError(e) };
+    }
+  }
+
+  /**
    * Upload a file's raw bytes to a directory on the host.
    *
    * Not routed through `writeFile`: that sends the content as a JSON string, which mangles anything

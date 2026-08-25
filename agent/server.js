@@ -4013,6 +4013,171 @@ async function handleRequest(req, res)
     return;
   }
 
+  // ---- File download ----
+  // Separate from /files/read, which caps at MAX_READ_FILE_BYTES and returns a JSON string for the
+  // editor. This streams the whole file at any size and preserves the exact bytes, so a log, an
+  // archive or an image comes off the host intact rather than truncated into a text field.
+  if (method === 'GET' && pathname === '/api/v1/files/download') {
+    const safe = await resolveSafePath(reqUrl.searchParams.get('path'));
+    if (safe.error) {
+      sendJson(res, safe.status, { success: false, error: safe.error, roots: FILE_ROOTS });
+      return;
+    }
+
+    let stat;
+    try {
+      stat = await fsp.stat(safe.path);
+    } catch (e) {
+      sendJson(res, 404, { success: false, error: 'No such file' });
+      return;
+    }
+    if (stat.isDirectory()) {
+      sendJson(res, 400, { success: false, error: 'That path is a directory. Back it up instead.' });
+      return;
+    }
+
+    // Quote-and-escape the filename: unlike a backup archive, an arbitrary file on the host can
+    // contain quotes or newlines, which would otherwise break out of the header.
+    const base = path.basename(safe.path).replace(/["\\\r\n]/g, '_');
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': stat.size,
+      'Content-Disposition': `attachment; filename="${base}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    const stream = fs.createReadStream(safe.path);
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+    return;
+  }
+
+  // ---- Backup upload (restore an archive taken elsewhere) ----
+  // Lands the file in BACKUP_DIR so it shows up in /backups and can then be restored with the
+  // existing endpoint. The name is validated the same way deleteBackup validates it, so this
+  // cannot write outside the backup directory.
+  if (method === 'POST' && pathname === '/api/v1/backups/upload') {
+    if (os.platform() === 'win32') {
+      sendJson(res, 400, { success: false, error: 'Backups are managed on Linux hosts only' });
+      return;
+    }
+
+    const name = reqUrl.searchParams.get('name') || '';
+    if (!ARCHIVE_NAME.test(name) || !name.endsWith(ARCHIVE_SUFFIX)) {
+      sendJson(res, 400, {
+        success: false,
+        error: `Name must match ${ARCHIVE_NAME.source} and end in ${ARCHIVE_SUFFIX}`,
+      });
+      return;
+    }
+
+    await fsp.mkdir(BACKUP_DIR, { recursive: true, mode: 0o700 }).catch(() => { });
+    const target = path.join(BACKUP_DIR, name);
+
+    const exists = await fsp.stat(target).then(() => true).catch(() => false);
+    if (exists) {
+      sendJson(res, 409, { success: false, error: 'A backup with that name already exists' });
+      return;
+    }
+
+    const declared = Number.parseInt(req.headers['content-length'] || '', 10);
+    if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES) {
+      sendJson(res, 413, {
+        success: false,
+        error: `Archive exceeds the ${Math.floor(MAX_UPLOAD_BYTES / 1048576)} MB upload limit`,
+      });
+      return;
+    }
+
+    const tmpPath = `${target}.incoming-${process.pid}-${Date.now()}`;
+    let written = 0;
+    let tooLarge = false;
+
+    try {
+      const handle = await fsp.open(tmpPath, 'wx', 0o600);
+      const stream = handle.createWriteStream();
+
+      await new Promise((resolve, reject) => {
+        req.on('data', (chunk) => {
+          written += chunk.length;
+          if (written > MAX_UPLOAD_BYTES) {
+            tooLarge = true;
+            req.destroy();
+            stream.destroy();
+            reject(new Error('archive too large'));
+          }
+        });
+        req.on('error', reject);
+        stream.on('error', reject);
+        stream.on('finish', resolve);
+        req.pipe(stream);
+      });
+
+      // Reject anything that is not actually a gzip stream before it lands in the backup list,
+      // where the restore button would later hand it to tar and fail confusingly.
+      const probe = Buffer.alloc(2);
+      const fh = await fsp.open(tmpPath, 'r');
+      const { bytesRead } = await fh.read(probe, 0, 2, 0);
+      await fh.close();
+      if (bytesRead < 2 || probe[0] !== 0x1f || probe[1] !== 0x8b) {
+        await fsp.rm(tmpPath, { force: true }).catch(() => { });
+        sendJson(res, 400, { success: false, error: 'That file is not a gzip archive' });
+        return;
+      }
+
+      await fsp.rename(tmpPath, target);
+      sendJson(res, 200, { success: true, name, sizeBytes: written });
+    } catch (e) {
+      await fsp.rm(tmpPath, { force: true }).catch(() => { });
+      if (tooLarge) {
+        sendJson(res, 413, {
+          success: false,
+          error: `Archive exceeds the ${Math.floor(MAX_UPLOAD_BYTES / 1048576)} MB upload limit`,
+        });
+      } else {
+        sendJson(res, 500, { success: false, error: (e && e.message) || 'Upload failed' });
+      }
+    }
+    return;
+  }
+
+  // ---- Bulk delete ----
+  // One request instead of N, and every path is resolved and checked individually, so a mixed
+  // selection deletes what it may and reports precisely what it refused rather than failing whole.
+  if (method === 'POST' && pathname === '/api/v1/files/delete-many') {
+    const parsed = await parseJsonBody(req, 64 * 1024);
+    if (parsed.error) {
+      sendJson(res, parsed.status, { success: false, error: parsed.error });
+      return;
+    }
+
+    const paths = Array.isArray(parsed.body?.paths) ? parsed.body.paths : null;
+    if (!paths || paths.length === 0) {
+      sendJson(res, 400, { success: false, error: 'paths must be a non-empty array' });
+      return;
+    }
+    if (paths.length > 200) {
+      sendJson(res, 400, { success: false, error: 'Refusing to delete more than 200 paths at once' });
+      return;
+    }
+    const recursive = parsed.body.recursive === true;
+
+    const deleted = [];
+    const failed = [];
+    for (const candidate of paths) {
+      const result = await deletePath(candidate, recursive);
+      if (result.body && result.body.success) deleted.push(candidate);
+      else failed.push({ path: candidate, error: (result.body && result.body.error) || 'Failed' });
+    }
+
+    // 200 even with failures: the caller needs the per-path breakdown, and a blanket error status
+    // would hide the fact that some entries were in fact removed.
+    sendJson(res, 200, { success: failed.length === 0, deleted, failed });
+    return;
+  }
+
   // ---- File upload ----
   // The body is the file's raw bytes, streamed to disk. Deliberately not JSON: /files/write takes
   // a string, so anything non-UTF-8 (an image, a tarball, a binary) would be corrupted on the way

@@ -941,6 +941,127 @@ describe('agent: file upload', () => {
   });
 });
 
+describe('agent: file download', () => {
+  it('requires a token', async () => {
+    const res = await fetch(
+      `${BASE}/api/v1/files/download?path=${encodeURIComponent(sandboxRoot)}/sample.txt`
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('returns the whole file, past the editor read cap', async () => {
+    // /files/read stops at MAX_READ_FILE_BYTES (2 MB) and returns a JSON string. Download exists
+    // precisely so a bigger file comes off the host complete rather than silently truncated.
+    const big = Buffer.alloc(3 * 1024 * 1024, 7);
+    const target = `${sandboxRoot}/big.bin`;
+    await fs.writeFile(target, big);
+
+    const res = await fetch(`${BASE}/api/v1/files/download?path=${encodeURIComponent(target)}`, {
+      headers: AUTH,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('content-disposition')).toContain('big.bin');
+
+    const received = Buffer.from(await res.arrayBuffer());
+    expect(received.length).toBe(big.length);
+    expect(Buffer.compare(received, big)).toBe(0);
+  });
+
+  it('refuses a directory rather than streaming something nonsensical', async () => {
+    const res = await fetch(`${BASE}/api/v1/files/download?path=${encodeURIComponent(sandboxRoot)}`, {
+      headers: AUTH,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('confines downloads to the configured roots', async () => {
+    const outside = path.join(os.tmpdir(), 'vpsgui-outside-download.txt');
+    await fs.writeFile(outside, 'secret', 'utf-8');
+    try {
+      const res = await fetch(`${BASE}/api/v1/files/download?path=${encodeURIComponent(outside)}`, {
+        headers: AUTH,
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      await fs.rm(outside, { force: true });
+    }
+  });
+});
+
+describe('agent: bulk delete', () => {
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/files/delete-many`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: [] }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('deletes what it may and reports what it refused, rather than failing whole', async () => {
+    const ok1 = `${sandboxRoot}/bulk-a.txt`;
+    const ok2 = `${sandboxRoot}/bulk-b.txt`;
+    await fs.writeFile(ok1, 'a', 'utf-8');
+    await fs.writeFile(ok2, 'b', 'utf-8');
+    const outside = path.join(os.tmpdir(), 'vpsgui-bulk-outside.txt');
+
+    const res = await fetch(`${BASE}/api/v1/files/delete-many`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: [ok1, ok2, outside] }),
+    });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.success).toBe(false); // one entry was refused
+    expect(body.deleted).toEqual(expect.arrayContaining([ok1, ok2]));
+    expect(body.failed).toHaveLength(1);
+    expect(body.failed[0].path).toBe(outside);
+
+    // The two permitted deletions really happened.
+    await expect(fs.access(ok1)).rejects.toThrow();
+    await expect(fs.access(ok2)).rejects.toThrow();
+  });
+
+  it('rejects an empty or oversized batch', async () => {
+    const empty = await fetch(`${BASE}/api/v1/files/delete-many`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: [] }),
+    });
+    expect(empty.status).toBe(400);
+
+    const huge = await fetch(`${BASE}/api/v1/files/delete-many`, {
+      method: 'POST',
+      headers: { ...AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: Array.from({ length: 201 }, (_, i) => `${sandboxRoot}/x${i}`) }),
+    });
+    expect(huge.status).toBe(400);
+  });
+});
+
+describe('agent: backup upload', () => {
+  it('requires a token', async () => {
+    const res = await fetch(`${BASE}/api/v1/backups/upload?name=x.tar.gz`, {
+      method: 'POST',
+      body: 'x',
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a name that could escape the backup directory', async () => {
+    for (const name of ['../escape.tar.gz', 'a/b.tar.gz', 'noSuffix']) {
+      const res = await fetch(
+        `${BASE}/api/v1/backups/upload?name=${encodeURIComponent(name)}`,
+        { method: 'POST', headers: AUTH, body: 'x' }
+      );
+      // 400 either for the name, or for the platform guard on Windows - both refuse the write.
+      expect([400].includes(res.status), `${name} must be refused`).toBe(true);
+    }
+  });
+});
+
 describe('agent: backup download', () => {
   it('requires a token', async () => {
     const res = await fetch(`${BASE}/api/v1/backups/download?name=any.tar.gz`);
