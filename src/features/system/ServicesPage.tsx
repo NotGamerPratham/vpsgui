@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Cpu, Play, Square, RotateCw, Search, RefreshCw, AlertCircle, Radio, Layers } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Cpu, Play, Pause, Square, RotateCw, Search, RefreshCw, AlertCircle, Radio, Layers } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { apiClient, ApiError } from '../../api/client';
+import { livePollDelay, isHaltingStatus } from '../../lib/livePoll';
 
 interface ServiceItem {
   id: string;
@@ -18,6 +19,15 @@ interface ServiceItem {
   category: string;
 }
 
+/**
+ * How often the unit list is re-read while live.
+ *
+ * Slower than the 3s telemetry poll on purpose: this runs two `systemctl` calls (`list-units` plus
+ * `list-unit-files`) over several hundred units, which is far heavier than reading /proc, and a
+ * service's state changes on a human timescale rather than a per-second one.
+ */
+const LIVE_INTERVAL_MS = 5000;
+
 export function ServicesPage() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,29 +36,126 @@ export function ServicesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadServices();
-  }, []);
+  /** Live refresh is on by default; the toggle is there for a host under load. */
+  const [live, setLive] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  /**
+   * Set when the agent rejected our credentials, which also stops the loop.
+   *
+   * The agent locks a client out after repeated failed authentication, so a poller holding a stale
+   * token would re-arm that lockout every few seconds and take the page down with 429s. The
+   * telemetry poller learned this the same way.
+   */
+  const [halted, setHalted] = useState<string | null>(null);
 
-  const loadServices = async () => {
-    setLoading(true);
-    setLoadError(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failuresRef = useRef(0);
+  /** Guards against two loads overlapping when one response is slower than the interval. */
+  const inFlightRef = useRef(false);
+
+  /**
+   * Read the unit list.
+   *
+   * `silent` keeps a background refresh from flashing the spinner and blanking the table every few
+   * seconds - the list should update underneath the operator, not flicker. Only the first load and
+   * an explicit Refresh show the loading state.
+   */
+  const loadServices = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    if (!silent) setLoading(true);
+
     try {
       const res = await apiClient.get<ServiceItem[]>('/system/services');
       // Report the host's real unit list, or nothing. The previous fallback presented seven
       // invented units (nginx, docker, postgresql, redis...) as "active" whenever the agent was
       // unreachable, so a bare host looked like a fully provisioned one.
       setServices(Array.isArray(res) ? res : []);
+      setLoadError(null);
+      setLastUpdated(new Date());
+      failuresRef.current = 0;
     } catch (e) {
-      setServices([]);
-      setLoadError(
-        e instanceof ApiError && e.status === 401
-          ? 'Unauthorized - set a valid Agent Token under Settings to list systemd units.'
-          : `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
-      );
+      const authFailure = e instanceof ApiError && isHaltingStatus(e.status);
+
+      if (authFailure) {
+        // Stop rather than retry: continuing would extend the agent's lockout indefinitely.
+        setHalted(
+          e.status === 429
+            ? 'Locked out by the agent after repeated failed attempts. Live refresh stopped.'
+            : 'Unauthorized - set a valid Agent Token under Settings. Live refresh stopped.'
+        );
+        setLoadError(
+          e.status === 429
+            ? 'Locked out by the agent after repeated failed attempts. Wait a few minutes.'
+            : 'Unauthorized - set a valid Agent Token under Settings to list systemd units.'
+        );
+        setServices([]);
+      } else {
+        failuresRef.current += 1;
+        setLoadError(
+          `Could not reach the agent: ${e instanceof Error ? e.message : 'unknown error'}`
+        );
+        // A transient failure must not wipe a list that was correct a moment ago; the error banner
+        // already says the reading is stale.
+        if (!silent) setServices([]);
+      }
+    } finally {
+      inFlightRef.current = false;
+      if (!silent) setLoading(false);
     }
-    setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadServices();
+  }, [loadServices]);
+
+  /**
+   * The live loop.
+   *
+   * Chained timeouts rather than setInterval: on a host where `systemctl` takes longer than the
+   * interval, an interval would queue overlapping requests and pile load onto an already-slow
+   * machine. Each tick is scheduled only after the previous one finishes.
+   */
+  useEffect(() => {
+    if (!live || halted) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      // Polling a hidden tab spends the host's CPU on a list nobody is looking at.
+      if (typeof document !== 'undefined' && document.hidden) {
+        schedule(LIVE_INTERVAL_MS);
+        return;
+      }
+      await loadServices({ silent: true });
+      if (cancelled) return;
+      schedule(livePollDelay(LIVE_INTERVAL_MS, failuresRef.current));
+    };
+
+    function schedule(delay: number) {
+      if (cancelled) return;
+      timerRef.current = setTimeout(tick, delay);
+    }
+
+    schedule(LIVE_INTERVAL_MS);
+
+    // Coming back to the tab should show current state at once. Without this the operator stares
+    // at a reading up to one interval old, which is exactly when they are least likely to notice
+    // it is stale - they just switched to this tab to check something.
+    const onVisible = () => {
+      if (document.hidden || cancelled) return;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      void loadServices({ silent: true }).then(() => schedule(LIVE_INTERVAL_MS));
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+    };
+  }, [live, halted, loadServices]);
 
   const handleAction = async (svc: ServiceItem, action: 'start' | 'stop' | 'restart') => {
     setActionServiceId(svc.id);
@@ -95,9 +202,53 @@ export function ServicesPage() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <Button size="sm" variant="outline" onClick={loadServices} disabled={loading} className="gap-1.5 text-xs">
+          {/* Live state, and when the list was last actually read - so a frozen page is
+              distinguishable from a host on which nothing is changing. */}
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                halted
+                  ? 'bg-rose-500'
+                  : live
+                    ? 'bg-emerald-500 animate-pulse'
+                    : 'bg-muted-foreground/50'
+              }`}
+            />
+            {halted
+              ? 'stopped'
+              : live
+                ? `live${lastUpdated ? ` · ${lastUpdated.toLocaleTimeString()}` : ''}`
+                : 'paused'}
+          </span>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // Restarting after a lockout has to clear the halt, or the loop stays stopped.
+              setHalted(null);
+              failuresRef.current = 0;
+              setLive((v) => !v);
+            }}
+            className="gap-1.5 text-xs"
+          >
+            {live && !halted ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            <span>{live && !halted ? 'Pause' : 'Resume'}</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setHalted(null);
+              failuresRef.current = 0;
+              void loadServices();
+            }}
+            disabled={loading}
+            className="gap-1.5 text-xs"
+          >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh Services</span>
+            <span>Refresh</span>
           </Button>
         </div>
       </div>
