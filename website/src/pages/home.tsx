@@ -1,3 +1,4 @@
+import { Community } from '@/components/sections/community';
 import { Cta } from '@/components/sections/cta';
 import { Faq } from '@/components/sections/faq';
 import { Features } from '@/components/sections/features';
@@ -20,6 +21,7 @@ export default function HomePage() {
       <Limits />
       <SecurityPreview />
       <Faq />
+      <Community />
       <Cta />
     </>
   );

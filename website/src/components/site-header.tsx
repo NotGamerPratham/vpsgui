@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, Search, Star, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,13 @@ import { useScrolled } from '@/hooks/use-scrolled';
 import { cn } from '@/lib/utils';
 
 import { Logo } from './logo';
+import { SearchDialog, useSearchDialog } from './search-dialog';
 import { ThemeToggle } from './theme-toggle';
 
 export function SiteHeader() {
   const scrolled = useScrolled();
   const [open, setOpen] = useState(false);
+  const { open: searchOpen, setOpen: setSearchOpen } = useSearchDialog();
   const location = useLocation();
 
   useEffect(() => {
@@ -27,6 +29,8 @@ export function SiteHeader() {
   }, [open]);
 
   return (
+    <>
+    <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     <header
       className="sticky top-0 z-50 w-full px-4 pt-4 sm:px-6"
     >
@@ -59,15 +63,33 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search documentation"
+            className="hidden items-center gap-2 rounded-md border border-border/70 py-1.5 pl-2.5 pr-2 text-[0.8125rem] text-subtle transition-colors hover:text-foreground sm:flex"
+          >
+            <Search aria-hidden className="size-3.5" />
+            <span>Search</span>
+            {/* Rendered as the literal key, not a platform-detected glyph: sniffing the
+                user agent to choose between Cmd and Ctrl is wrong on every device that
+                lies about itself, and both bindings work regardless. */}
+            <kbd className="rounded border border-border/70 px-1 font-mono text-[10px]">/</kbd>
+          </button>
+
           <ThemeToggle />
 
+          {/* A star prompt rather than a star count. The count is the conventional choice and the
+              wrong one here: it reports project size on every page load, which argues against a
+              young repository, and it costs an API call that fails closed on rate limits. */}
           <a
             href={site.repo}
             target="_blank"
             rel="noreferrer noopener"
-            className="hidden rounded-md px-2.5 py-1.5 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
+            className="hidden items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
           >
-            GitHub
+            <Star aria-hidden className="size-3.5" />
+            Star
           </a>
 
           <Button asChild size="sm" className="hidden sm:inline-flex">
@@ -107,6 +129,18 @@ export function SiteHeader() {
               </Link>
             ))}
 
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setSearchOpen(true);
+              }}
+              className="flex items-center gap-2 border-b border-border/60 py-3.5 text-left text-[0.9375rem] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Search aria-hidden className="size-4" />
+              Search
+            </button>
+
             <div className="flex gap-2 py-4">
               <Button asChild className="flex-1">
                 <Link to="/#install">Install</Link>
@@ -121,5 +155,6 @@ export function SiteHeader() {
         </div>
       ) : null}
     </header>
+    </>
   );
 }
