@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+case "$1" in
+remove|upgrade|deconfigure)
+  # On upgrade the postinst restarts it, so stopping here only briefly interrupts the agent.
+  if [ -d /run/systemd/system ]; then
+    systemctl stop vpsgui-agent >/dev/null 2>&1 || true
+  fi
+  ;;
+esac
+exit 0

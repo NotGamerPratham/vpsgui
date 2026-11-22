@@ -1,0 +1,32 @@
+[Unit]
+Description=VPSGUI Linux Infrastructure Telemetry Agent
+Documentation=https://github.com/NotGamerPratham/vpsgui
+After=network.target docker.service
+
+[Service]
+Type=simple
+# The agent reports on systemd units, installs packages and executes shell commands, so it needs
+# root. Everything it exposes is gated behind AGENT_TOKEN - treat that token as a root password.
+User=root
+WorkingDirectory=/opt/vpsgui/agent
+# Configuration, including the token, lives in a 0600 file written by the package's postinst. The
+# unit itself carries no secret.
+EnvironmentFile=/opt/vpsgui/agent/agent.env
+# The Node.js binary ships inside the package, so the unit works on distros whose own Node is old
+# or absent.
+ExecStart=/opt/vpsgui/node/bin/node /opt/vpsgui/agent/server.cjs
+Restart=always
+RestartSec=3s
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

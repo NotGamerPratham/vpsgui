@@ -1,0 +1,204 @@
+name: Linux packages
+
+# Builds every way of installing vpsgui - .deb (amd64/arm64/armhf), .rpm (x86_64/aarch64) and the
+# portable tarballs behind install.sh - installs what a stock Ubuntu runner can run for real, and,
+# on a published release, attaches everything to the release and publishes the signed apt and
+# yum/dnf repositories to GitHub Pages.
+#
+# The repository step needs one-time setup (a signing key and Pages); until then the packages are
+# still built, tested and attached to the release, and the repository step is skipped rather than
+# failing. See docs/LINUX_INSTALLATION.md.
+#
+# Not covered here: installing the .rpm. A GitHub runner is Ubuntu with no dnf and containers have
+# no systemd, so scripts/smoke-rpm.sh is run by hand on a Rocky/Alma/Fedora VM before a release.
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/build-*.sh'
+      - 'scripts/smoke-*.sh'
+      - 'scripts/install.sh'
+      - 'scripts/lib/**'
+      - 'deploy/nginx.conf'
+      - 'agent/**'
+      - '.github/workflows/packages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke-test the packages
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Work out the package version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            V="${{ github.event.release.tag_name }}"
+          else
+            # Pull requests and manual runs get a clearly-not-a-release version that still sorts
+            # below any real tag, in both dpkg and rpm.
+            V="0.0.0~ci.${{ github.run_number }}"
+          fi
+          echo "version=${V#v}" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # Node.js is bundled, so one runner builds every architecture: only the downloaded binary
+      # differs. Only the amd64/x86_64 builds can be installed and exercised on this runner.
+      - name: Build the packages
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          for arch in amd64 arm64 armhf; do
+            bash scripts/build-deb.sh "$V" "$arch"
+            bash scripts/build-tarball.sh "$V" "$arch"
+          done
+          for arch in x86_64 aarch64; do
+            bash scripts/build-rpm.sh "$V" "$arch"
+          done
+          ls -la out
+
+      # No nodejs here on purpose: the packages must work on a host that has none.
+      - name: Install runtime dependencies
+        run: sudo apt-get install -y nginx curl openssl
+
+      - name: Install the .deb with apt and exercise it
+        run: sudo bash scripts/smoke-deb.sh out/vpsgui_${{ steps.ver.outputs.version }}_amd64.deb
+
+      - name: Run install.sh against a local release and exercise it
+        run: sudo bash scripts/smoke-installer.sh out/vpsgui-${{ steps.ver.outputs.version }}-linux-x64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vpsgui-packages
+          path: |
+            out/*.deb
+            out/*.rpm
+            out/*.tar.gz
+          if-no-files-found: error
+
+  release-asset:
+    name: Attach to the release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vpsgui-packages
+          path: assets
+      - name: Checksums and installer
+        run: |
+          cp scripts/install.sh assets/install.sh
+          ( cd assets && sha256sum vpsgui* > SHA256SUMS )
+          cat assets/SHA256SUMS
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" assets/* --clobber --repo "${{ github.repository }}"
+
+  repos:
+    name: Publish the apt and yum repositories
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      HAS_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY != '' }}
+    steps:
+      - name: Skip when no signing key is configured
+        if: env.HAS_KEY != 'true'
+        run: |
+          echo "::notice::APT_GPG_PRIVATE_KEY is not set, so the apt and yum repositories were not published."
+          echo "::notice::The packages are attached to the release. See docs/LINUX_INSTALLATION.md to enable them."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          ref: gh-pages
+          path: site
+        continue-on-error: true   # the very first release has no gh-pages branch yet
+
+      - uses: actions/download-artifact@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          name: vpsgui-packages
+          path: new
+
+      - name: Build and sign both repositories
+        if: env.HAS_KEY == 'true'
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg rpm createrepo-c
+
+          # Import the key, then read its id back rather than asking for it as a second secret.
+          echo "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+          export APT_GPG_KEY_ID="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')"
+          [ -n "${APT_GPG_KEY_ID}" ] || { echo "No secret key found after import" >&2; exit 1; }
+
+          mkdir -p site
+
+          # Keep every version already published: a repository that drops old versions breaks
+          # anyone pinned to one.
+          mkdir -p debs rpms
+          cp new/*.deb debs/
+          cp new/*.rpm rpms/
+          if ls site/apt/pool/main/*.deb >/dev/null 2>&1; then cp site/apt/pool/main/*.deb debs/; fi
+          for f in site/rpm/*/Packages/*.rpm; do [ -e "$f" ] && cp "$f" rpms/; done
+
+          rm -rf repo-apt repo-rpm
+          bash scripts/build-apt-repo.sh debs repo-apt
+          bash scripts/build-rpm-repo.sh rpms repo-rpm
+
+          rm -rf site/apt site/rpm
+          mv repo-apt site/apt
+          mv repo-rpm site/rpm
+          # One public key at a fixed, short URL serves both package managers.
+          cp site/apt/key.gpg site/key.gpg
+          # The drop-in repo file is what users download; keep it at the site root too.
+          cp site/rpm/vpsgui.repo site/vpsgui.repo
+          touch site/.nojekyll   # otherwise Pages' Jekyll step can mangle dists/ and pool/
+
+      - name: Push to gh-pages
+        if: env.HAS_KEY == 'true'
+        run: |
+          set -euo pipefail
+          cd site
+          [ -d .git ] || { git init -b gh-pages && git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "repos: publish ${{ needs.build.outputs.version }}" || { echo "Nothing to publish"; exit 0; }
+          git push origin HEAD:gh-pages

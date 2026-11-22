@@ -1,0 +1,132 @@
+#!/bin/sh
+# postinst for vpsgui. Runs as root on install and on upgrade.
+#
+# Deliberately never fails over a problem with nginx or the supervisor: a failing postinst leaves
+# the package half-configured and wedges every later apt operation on the machine. Anything that
+# can go wrong here after the files are on disk is reported loudly instead.
+set -e
+
+INSTALL_DIR=/opt/vpsgui/agent
+ENV_FILE="${INSTALL_DIR}/agent.env"
+SITE=/etc/nginx/sites-available/vpsgui
+LINK=/etc/nginx/sites-enabled/vpsgui
+TEMPLATE=/usr/share/vpsgui/nginx.conf
+
+have_systemd() { [ -d /run/systemd/system ]; }
+
+case "$1" in
+configure)
+  # --- agent.env: created once, never rewritten ----------------------------------------------
+  # Rewriting it on upgrade would regenerate the token and silently sign every operator out.
+  FRESH=0
+  if [ ! -f "${ENV_FILE}" ]; then
+    FRESH=1
+    TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    umask 077
+    cat > "${ENV_FILE}" <<ENVEOF
+# VPSGUI agent configuration, read by the vpsgui-agent systemd unit.
+# This file contains a token equivalent to a root password - keep it mode 0600.
+PORT=46509
+# Loopback only. nginx proxies to 127.0.0.1:46509 and terminates TLS.
+AGENT_HOST=127.0.0.1
+AGENT_TOKEN=${TOKEN}
+# Directories the file manager may browse. The credential deny list applies at any setting.
+AGENT_FILE_ROOTS=/
+# Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
+AGENT_ENABLE_SHELL=1
+# Optional ipinfo.io token for IP geolocation. Held here, never in the frontend bundle.
+AGENT_IPINFO_TOKEN=
+ENVEOF
+    umask 022
+  fi
+  chmod 600 "${ENV_FILE}"
+
+  # --- Hand the port over from any other supervisor ------------------------------------------
+  # Two supervisors racing for 46509 leave the loser crash-looping while the winner serves stale
+  # code. A pm2 install from run.sh is the likely previous owner.
+  if command -v pm2 >/dev/null 2>&1 && pm2 describe vpsgui-agent >/dev/null 2>&1; then
+    echo "vpsgui: removing the pm2 process so it cannot compete for port 46509."
+    pm2 delete vpsgui-agent >/dev/null 2>&1 || true
+    pm2 save --force >/dev/null 2>&1 || true
+  fi
+
+  # --- nginx ---------------------------------------------------------------------------------
+  # Written on first install only. On upgrade an operator may have edited it (server_name, TLS),
+  # and silently replacing it would undo that.
+  if [ -d /etc/nginx ]; then
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    if [ ! -f "${SITE}" ]; then
+      cp "${TEMPLATE}" "${SITE}"
+
+      # Only one vhost may be default_server per address:port. If another site owns it, drop the
+      # flag from OUR copy rather than breaking the whole nginx config.
+      OTHER="$(grep -rlE '^[[:space:]]*listen[^;]*[[:space:]]default_server' \
+          /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
+          | grep -v -e '/vpsgui$' -e '/default$' || true)"
+      if [ -n "${OTHER}" ]; then
+        echo "vpsgui: another site already claims default_server; dropping it from the vpsgui vhost."
+        sed -i 's/\(^[[:space:]]*listen[^;]*\)[[:space:]]default_server;/\1;/' "${SITE}"
+        echo "vpsgui: set server_name in ${SITE} or the site will only answer its own hostname."
+      else
+        rm -f /etc/nginx/sites-enabled/default
+      fi
+      ln -sf "${SITE}" "${LINK}"
+
+      if nginx -t >/dev/null 2>&1; then
+        if have_systemd; then systemctl reload nginx >/dev/null 2>&1 || true; fi
+      else
+        echo "vpsgui: WARNING - nginx rejected the vpsgui vhost; disabling it so nginx keeps working." >&2
+        rm -f "${LINK}"
+        echo "vpsgui: run 'nginx -t' for the reason, then: ln -s ${SITE} ${LINK}" >&2
+      fi
+    elif ! cmp -s "${TEMPLATE}" "${SITE}"; then
+      echo "vpsgui: ${SITE} differs from the packaged default and was left untouched."
+      echo "vpsgui: compare with: diff ${SITE} ${TEMPLATE}"
+    fi
+  fi
+
+  # --- Supervisor ----------------------------------------------------------------------------
+  if have_systemd; then
+    systemctl daemon-reload || true
+    systemctl enable vpsgui-agent >/dev/null 2>&1 || true
+    systemctl restart vpsgui-agent ||
+      echo "vpsgui: WARNING - the agent failed to start. See: journalctl -u vpsgui-agent -n 50" >&2
+  else
+    echo "vpsgui: systemd is not running here, so the agent was not started."
+  fi
+
+  # --- Verify the agent we just installed is the one answering --------------------------------
+  # Starting the unit is not proof: a stale process holding the port looks identical until a new
+  # endpoint 404s. Only meaningful when we actually started something.
+  if have_systemd && command -v curl >/dev/null 2>&1; then
+    WANT="$(sed -n "s/^const AGENT_VERSION = '\(.*\)';/\1/p" "${INSTALL_DIR}/server.js" | head -n1)"
+    TOKEN_NOW="$(sed -n 's/^AGENT_TOKEN=//p' "${ENV_FILE}" | head -n1)"
+    GOT=""
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      GOT="$(curl -fsS -H "Authorization: Bearer ${TOKEN_NOW}" http://127.0.0.1:46509/api/v1/agent/info 2>/dev/null |
+        sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')" || true
+      [ -n "${GOT}" ] && break
+      sleep 1
+    done
+    if [ -z "${GOT}" ]; then
+      echo "vpsgui: WARNING - the agent did not answer on 127.0.0.1:46509." >&2
+      echo "vpsgui: something else may hold the port: ss -tlnp | grep 46509" >&2
+    elif [ -n "${WANT}" ] && [ "${GOT}" != "${WANT}" ]; then
+      echo "vpsgui: WARNING - port 46509 serves agent v${GOT}, but v${WANT} was just installed." >&2
+      echo "vpsgui: an old process is holding the port: ss -tlnp | grep 46509" >&2
+    fi
+  fi
+
+  if [ "${FRESH}" = 1 ]; then
+    echo ""
+    echo "vpsgui is installed. Open http://<this-server>/ and paste the agent token under"
+    echo "Settings -> Agent Token. Read it with:"
+    echo "  sudo cat ${ENV_FILE}"
+    echo ""
+    echo "The token is a root-equivalent credential. Put the site behind TLS before you sign in"
+    echo "from anywhere but localhost:  sudo certbot --nginx -d <your-domain>"
+  fi
+  ;;
+esac
+
+exit 0

@@ -71,3 +71,7 @@ sdk/python/*.egg-info
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Built .deb packages and local apt repo output
+/out/
+/.cache/

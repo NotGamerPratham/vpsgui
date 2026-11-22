@@ -1,0 +1,32 @@
+#!/bin/sh
+set -e
+
+reload_nginx() {
+  if [ -d /run/systemd/system ] && command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx >/dev/null 2>&1 || true
+  fi
+}
+
+case "$1" in
+remove)
+  # Stop serving the site, but keep the config and the data so a reinstall picks up where it left off.
+  if [ -L /etc/nginx/sites-enabled/vpsgui ]; then
+    rm -f /etc/nginx/sites-enabled/vpsgui
+    reload_nginx
+  fi
+  if [ -d /run/systemd/system ]; then systemctl daemon-reload >/dev/null 2>&1 || true; fi
+  ;;
+purge)
+  rm -f /etc/nginx/sites-enabled/vpsgui /etc/nginx/sites-available/vpsgui
+  reload_nginx
+  # Agent state: token, dashboard accounts, encrypted secret store.
+  # /var/backups/vpsgui is deliberately NOT removed. Purging a tool must not destroy the backups it
+  # was used to take.
+  rm -rf /opt/vpsgui /var/www/vpsgui
+  if [ -d /run/systemd/system ]; then
+    systemctl disable vpsgui-agent >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  ;;
+esac
+exit 0

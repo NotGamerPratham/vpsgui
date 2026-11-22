@@ -1,0 +1,252 @@
+#!/bin/sh
+# vpsgui-setup - the configuration half of a VPSGUI install, shared by the RPM scriptlets and the
+# portable installer (install.sh). The Debian package has its own maintainer scripts; the logic
+# here deliberately mirrors packaging/debian/postinst, and tests/linuxPackaging.test.ts fails if
+# the two disagree about the env-file keys.
+#
+#   vpsgui-setup configure   write agent.env once, publish the nginx vhost, (re)start the agent
+#   vpsgui-setup remove      stop the agent and stop serving the site; keeps config and data
+#
+# Runs as root. Never exits non-zero over nginx, SELinux or the supervisor: a failing scriptlet
+# leaves rpm half-installed. Anything that goes wrong after the files are on disk is reported
+# loudly instead.
+
+INSTALL_DIR=/opt/vpsgui/agent
+ENV_FILE="${INSTALL_DIR}/agent.env"
+TEMPLATE=/usr/share/vpsgui/nginx.conf
+NGINX_CONF=/etc/nginx/nginx.conf
+
+have_systemd() { [ -d /run/systemd/system ]; }
+say()  { printf 'vpsgui: %s\n' "$*"; }
+warn() { printf 'vpsgui: WARNING - %s\n' "$*" >&2; }
+
+# Debian-style nginx (sites-available/sites-enabled) versus the conf.d layout used by RHEL, Fedora,
+# SUSE, Arch and nginx.org's own packages. Decided by whether nginx.conf actually includes
+# sites-enabled, not just by the directory existing.
+if [ -d /etc/nginx/sites-available ] && grep -qs 'sites-enabled' "${NGINX_CONF}" 2>/dev/null; then
+  LAYOUT=sites
+  SITE=/etc/nginx/sites-available/vpsgui
+  LINK=/etc/nginx/sites-enabled/vpsgui
+else
+  LAYOUT=confd
+  SITE=/etc/nginx/conf.d/vpsgui.conf
+  LINK=
+fi
+
+reload_nginx() {
+  if have_systemd && command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+  fi
+}
+
+# --- configure -------------------------------------------------------------------------------
+configure_env() {
+  FRESH=0
+  # Created once and never rewritten: regenerating the token on upgrade would silently sign every
+  # operator out.
+  if [ ! -f "${ENV_FILE}" ]; then
+    FRESH=1
+    TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    umask 077
+    cat > "${ENV_FILE}" <<ENVEOF
+# VPSGUI agent configuration, read by the vpsgui-agent systemd unit.
+# This file contains a token equivalent to a root password - keep it mode 0600.
+PORT=46509
+# Loopback only. nginx proxies to 127.0.0.1:46509 and terminates TLS.
+AGENT_HOST=127.0.0.1
+AGENT_TOKEN=${TOKEN}
+# Directories the file manager may browse. The credential deny list applies at any setting.
+AGENT_FILE_ROOTS=/
+# Set to 0 to disable the Terminal page's arbitrary shell execution endpoint.
+AGENT_ENABLE_SHELL=1
+# Optional ipinfo.io token for IP geolocation. Held here, never in the frontend bundle.
+AGENT_IPINFO_TOKEN=
+ENVEOF
+    umask 022
+  fi
+  chmod 600 "${ENV_FILE}"
+}
+
+hand_over_from_pm2() {
+  # Two supervisors racing for 46509 leave the loser crash-looping while the winner serves stale
+  # code. A pm2 install from run.sh is the likely previous owner.
+  if command -v pm2 >/dev/null 2>&1 && pm2 describe vpsgui-agent >/dev/null 2>&1; then
+    say "removing the pm2 process so it cannot compete for port 46509."
+    pm2 delete vpsgui-agent >/dev/null 2>&1 || true
+    pm2 save --force >/dev/null 2>&1 || true
+  fi
+}
+
+# A server that already claims default_server on :80 makes nginx -t fail if ours does too.
+# Prints the files that hold one, other than ours.
+other_default_servers() {
+  grep -rlE '^[[:space:]]*listen[^;]*[[:space:]]default_server' \
+    /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ "${NGINX_CONF}" 2>/dev/null |
+    grep -v -e '/vpsgui$' -e '/vpsgui\.conf$' -e '/default$' || true
+}
+
+configure_nginx() {
+  command -v nginx >/dev/null 2>&1 || [ -d /etc/nginx ] || { warn "nginx is not installed; the console will not be served."; return 0; }
+  [ -d /etc/nginx ] || return 0
+
+  if [ "${LAYOUT}" = sites ]; then
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+  else
+    mkdir -p /etc/nginx/conf.d
+    if ! grep -qE 'include[[:space:]]+[^;]*conf\.d/' "${NGINX_CONF}" 2>/dev/null; then
+      warn "${NGINX_CONF} does not include conf.d, so the vpsgui vhost would never load."
+      warn "add this line inside its http { } block:  include /etc/nginx/conf.d/*.conf;"
+    fi
+  fi
+
+  # Written on first install only. An operator may have edited it (server_name, TLS) and silently
+  # replacing it would undo that.
+  if [ ! -f "${SITE}" ]; then
+    if [ "${LAYOUT}" = confd ] && [ -f "${SITE}.disabled" ]; then
+      mv "${SITE}.disabled" "${SITE}"           # reinstall after a remove: pick up where we left off
+    else
+      cp "${TEMPLATE}" "${SITE}"
+      OTHER="$(other_default_servers)"
+      if [ -n "${OTHER}" ]; then
+        # The distro's placeholder welcome site is the usual holder. Stripping default_server from
+        # it (with a backup) is what lets http://<ip>/ reach the console on a fresh server; any
+        # other holder is somebody's real site and is left alone.
+        if [ "${OTHER}" = "${NGINX_CONF}" ] && grep -q '/usr/share/nginx/html' "${NGINX_CONF}"; then
+          cp -p "${NGINX_CONF}" "${NGINX_CONF}.vpsgui-bak"
+          sed -i 's/\(^[[:space:]]*listen[^;]*\)[[:space:]]default_server;/\1;/' "${NGINX_CONF}"
+          say "removed default_server from the stock site in ${NGINX_CONF} (backup: ${NGINX_CONF}.vpsgui-bak)."
+        else
+          say "another site already claims default_server; dropping it from the vpsgui vhost."
+          sed -i 's/\(^[[:space:]]*listen[^;]*\)[[:space:]]default_server;/\1;/' "${SITE}"
+          say "set server_name in ${SITE} or the site will only answer its own hostname."
+        fi
+      elif [ "${LAYOUT}" = sites ]; then
+        rm -f /etc/nginx/sites-enabled/default
+      fi
+    fi
+    [ "${LAYOUT}" = sites ] && ln -sf "${SITE}" "${LINK}"
+
+    if ! nginx -t >/dev/null 2>&1; then
+      warn "nginx rejected the vpsgui vhost; disabling it so nginx keeps working."
+      if [ "${LAYOUT}" = sites ]; then rm -f "${LINK}"; else mv "${SITE}" "${SITE}.disabled"; fi
+      warn "run 'nginx -t' for the reason, then re-enable ${SITE}."
+    fi
+  elif ! cmp -s "${TEMPLATE}" "${SITE}"; then
+    say "${SITE} differs from the packaged default and was left untouched."
+    say "compare with: diff ${SITE} ${TEMPLATE}"
+  fi
+  ensure_nginx_running
+}
+
+# Debian starts nginx when it is installed; the RHEL family, SUSE and Arch install it stopped and
+# disabled. Without this the console would never be served.
+ensure_nginx_running() {
+  have_systemd && command -v nginx >/dev/null 2>&1 || return 0
+  nginx -t >/dev/null 2>&1 || return 0
+  if systemctl is-active --quiet nginx; then
+    reload_nginx
+  else
+    systemctl enable --now nginx >/dev/null 2>&1 &&
+      say "started nginx and enabled it at boot." ||
+      warn "nginx is not running and could not be started. See: systemctl status nginx"
+  fi
+}
+
+# With SELinux enforcing, nginx (httpd_t) may not open a TCP connection to the agent unless this
+# boolean is on. Without it the console loads and every API call returns 502.
+configure_selinux() {
+  command -v getenforce >/dev/null 2>&1 || return 0
+  [ "$(getenforce 2>/dev/null)" = Enforcing ] || return 0
+  if command -v setsebool >/dev/null 2>&1; then
+    setsebool -P httpd_can_network_connect 1 >/dev/null 2>&1 &&
+      say "SELinux: enabled httpd_can_network_connect so nginx can reach the agent." ||
+      warn "SELinux is enforcing and httpd_can_network_connect could not be enabled; run: setsebool -P httpd_can_network_connect 1"
+  else
+    warn "SELinux is enforcing; install policycoreutils and run: setsebool -P httpd_can_network_connect 1"
+  fi
+}
+
+start_agent() {
+  if have_systemd; then
+    systemctl daemon-reload || true
+    systemctl enable vpsgui-agent >/dev/null 2>&1 || true
+    systemctl restart vpsgui-agent ||
+      warn "the agent failed to start. See: journalctl -u vpsgui-agent -n 50"
+  else
+    say "systemd is not running here, so the agent was not started."
+  fi
+}
+
+# Starting the unit is not proof: a stale process holding the port looks identical until a new
+# endpoint 404s. Only meaningful when we actually started something.
+verify_agent() {
+  have_systemd && command -v curl >/dev/null 2>&1 || return 0
+  WANT="$(sed -n "s/^const AGENT_VERSION = '\(.*\)';/\1/p" "${INSTALL_DIR}/server.js" | head -n1)"
+  TOKEN_NOW="$(sed -n 's/^AGENT_TOKEN=//p' "${ENV_FILE}" | head -n1)"
+  GOT=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    GOT="$(curl -fsS -H "Authorization: Bearer ${TOKEN_NOW}" http://127.0.0.1:46509/api/v1/agent/info 2>/dev/null |
+      sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')" || true
+    [ -n "${GOT}" ] && break
+    sleep 1
+  done
+  if [ -z "${GOT}" ]; then
+    warn "the agent did not answer on 127.0.0.1:46509."
+    warn "something else may hold the port: ss -tlnp | grep 46509"
+  elif [ -n "${WANT}" ] && [ "${GOT}" != "${WANT}" ]; then
+    warn "port 46509 serves agent v${GOT}, but v${WANT} was just installed."
+    warn "an old process is holding the port: ss -tlnp | grep 46509"
+  fi
+}
+
+firewall_hint() {
+  command -v firewall-cmd >/dev/null 2>&1 || return 0
+  firewall-cmd --state >/dev/null 2>&1 || return 0
+  if ! firewall-cmd --list-services 2>/dev/null | grep -qw http; then
+    say "firewalld is running and port 80 is closed. To reach the console from another machine:"
+    say "  sudo firewall-cmd --permanent --add-service=http && sudo firewall-cmd --reload"
+  fi
+}
+
+do_configure() {
+  mkdir -p "${INSTALL_DIR}"
+  configure_env
+  hand_over_from_pm2
+  configure_nginx
+  configure_selinux
+  start_agent
+  verify_agent
+  firewall_hint
+  if [ "${FRESH}" = 1 ]; then
+    echo ""
+    echo "vpsgui is installed. Open http://<this-server>/ and paste the agent token under"
+    echo "Settings -> Agent Token. Read it with:"
+    echo "  sudo cat ${ENV_FILE}"
+    echo ""
+    echo "The token is a root-equivalent credential. Put the site behind TLS before you sign in"
+    echo "from anywhere but localhost:  sudo certbot --nginx -d <your-domain>"
+  fi
+}
+
+# --- remove ----------------------------------------------------------------------------------
+do_remove() {
+  if have_systemd; then
+    systemctl stop vpsgui-agent >/dev/null 2>&1 || true
+    systemctl disable vpsgui-agent >/dev/null 2>&1 || true
+  fi
+  # Stop serving the site but keep the config and the data so a reinstall picks up where it left off.
+  if [ "${LAYOUT}" = sites ]; then
+    [ -L "${LINK}" ] && rm -f "${LINK}"
+  elif [ -f "${SITE}" ]; then
+    mv "${SITE}" "${SITE}.disabled"
+  fi
+  reload_nginx
+  if have_systemd; then systemctl daemon-reload >/dev/null 2>&1 || true; fi
+}
+
+case "${1:-}" in
+  configure) do_configure ;;
+  remove)    do_remove ;;
+  *) echo "usage: vpsgui-setup configure|remove" >&2; exit 2 ;;
+esac
+exit 0

@@ -71,7 +71,12 @@ remains root-equivalent - dashboard accounts do not replace it or reduce it.
 
 ## Setup
 
-Requires **Node.js 18+**. Clone, then run the deploy script as root - it installs dependencies,
+**Prebuilt packages** need no Node.js, git or build step: a `.deb` for Debian/Ubuntu, an `.rpm` for
+RHEL/Rocky/Alma/Fedora, and a portable installer for other systemd distributions (glibc 2.28+; x86-64,
+arm64 and 32-bit ARM). See [Linux installation](docs/LINUX_INSTALLATION.md) for the commands, what was
+tested, and what is not covered.
+
+To build from source instead, requires **Node.js 18+**. Clone, then run the deploy script as root - it installs dependencies,
 builds the frontend, publishes it to `/var/www/vpsgui/dist`, installs the agent as a systemd
 service, and configures nginx:
 
@@ -269,6 +274,7 @@ telemetry = client.system.telemetry()
 ## Technical Documentation
 
 - [Architecture Overview](docs/ARCHITECTURE.md)
+- [Linux Installation (apt, dnf, installer)](docs/LINUX_INSTALLATION.md)
 - [Linux Agent Installation](docs/AGENT_INSTALLATION.md)
 - [REST API Reference](docs/API_REFERENCE.md)
 - [Developer Guide](docs/DEVELOPMENT.md)
