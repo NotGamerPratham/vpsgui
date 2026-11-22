@@ -28,7 +28,7 @@ export function Tabs({
 
 export function TabsList({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn('inline-flex h-9 items-center justify-center rounded-lg bg-muted/60 p-1 text-muted-foreground', className)}>
+    <div className={cn('inline-flex h-9 items-center justify-center rounded-full border border-border/80 bg-muted/50 p-1 text-muted-foreground', className)}>
       {children}
     </div>
   );
@@ -53,10 +53,10 @@ export function TabsTrigger({
       type="button"
       onClick={() => context.onValueChange(value)}
       className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
         isActive
-          ? 'bg-background text-foreground shadow-sm'
-          : 'hover:bg-background/40 hover:text-foreground',
+          ? 'bg-primary text-primary-foreground'
+          : 'hover:bg-accent/50 hover:text-foreground',
         className
       )}
     >

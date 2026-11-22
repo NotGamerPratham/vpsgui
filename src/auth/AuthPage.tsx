@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Loader2, ShieldCheck, Zap } from 'lucide-react';
+import { AlertCircle, ArrowRight, Loader2, Server, ShieldCheck } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -82,13 +82,13 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
   }
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md bg-card/80 border-border/80 shadow-2xl p-6 space-y-6">
-        <div className="flex flex-col items-center text-center space-y-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20 border border-primary/30 text-primary font-bold">
-            <Zap className="h-6 w-6" />
+    <div className="flex h-screen w-screen items-center justify-center bg-background bg-precision-dots px-4">
+      <Card className="w-full max-w-md border-border/80 bg-card/85 p-7 space-y-6">
+        <div className="flex flex-col items-center text-center space-y-2.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Server className="h-5 w-5" />
           </div>
-          <h2 className="text-xl font-bold tracking-wider text-foreground">VPSGUI</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">VPSGUI</h2>
           <p className="text-xs text-muted-foreground">
             {setupMode
               ? 'Create the first dashboard account for this host'
@@ -186,7 +186,7 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
             </div>
           )}
 
-          <Button type="submit" disabled={busy} className="w-full text-xs gap-1.5 bg-primary font-bold">
+          <Button type="submit" disabled={busy} className="w-full">
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             <span>
               {busy
@@ -197,6 +197,9 @@ export function AuthPage({ mode = 'login' }: AuthPageProps) {
                   ? 'Create account'
                   : 'Sign in'}
             </span>
+            {!busy && (
+              <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
+            )}
           </Button>
         </form>
         )}

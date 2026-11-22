@@ -1,6 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Palette, Bell, Globe, Server, Menu, LogOut } from 'lucide-react';
+import {
+  Search,
+  ArrowRight,
+  Palette,
+  Bell,
+  Globe,
+  Server,
+  Menu,
+  LogOut,
+} from 'lucide-react';
 import { useUIStore } from '../store/useUIStore';
 import { useServerStore } from '../store/useServerStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -25,6 +34,7 @@ export function TopNav() {
   const { unreadCount } = useNotificationStore();
 
   const activeNode = nodes[0];
+  const isOnline = activeNode?.status === 'online';
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -33,37 +43,45 @@ export function TopNav() {
   };
 
   return (
-    <header className="flex h-14 w-full items-center justify-between border-b border-border bg-card/80 px-3 sm:px-4 backdrop-blur-md z-20">
-      {/* Left Section: Mobile Menu Toggle & Host Server Badge */}
-      <div className="flex items-center space-x-2 sm:space-x-3">
+    <header className="z-20 flex h-14 w-full shrink-0 items-center justify-between border-b border-border/80 bg-sidebar/90 px-3 sm:px-5 backdrop-blur-md">
+      {/* Left Section: Mobile Menu Toggle & Active Host Pill */}
+      <div className="flex items-center space-x-2.5 sm:space-x-3">
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="lg:hidden p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="lg:hidden rounded-full p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
           aria-label="Toggle Navigation Drawer"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </button>
 
-        {/* Active Host Node Badge */}
-        <div className="flex items-center rounded-lg bg-muted/60 px-2.5 py-1 border border-border/80 text-xs font-mono">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2 animate-pulse shrink-0" />
-          <Server className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-          <span className="font-bold text-foreground truncate max-w-[90px] sm:max-w-none">{activeNode?.name || 'No host'}</span>
-          {activeNode?.network?.publicIp && (
-            <span className="hidden sm:inline ml-1 text-muted-foreground">({activeNode.network.publicIp})</span>
+        {/* Active Host Node Pill */}
+        <div className="flex items-center rounded-full border border-border/80 bg-card/80 px-3 py-1.5 text-xs font-mono">
+          <span
+            className={`mr-2 h-1.5 w-1.5 shrink-0 rounded-full ${
+              isOnline ? 'bg-emerald-400' : 'bg-muted-foreground/50'
+            }`}
+          />
+          <Server className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="max-w-[96px] truncate font-medium text-foreground sm:max-w-none">
+            {activeNode?.name || 'No host'}
+          </span>
+          {activeNode?.network?.publicIp && activeNode.network.publicIp !== activeNode.name && (
+            <span className="ml-1.5 hidden text-muted-foreground sm:inline">
+              {activeNode.network.publicIp}
+            </span>
           )}
         </div>
 
         {/* Organization Switcher */}
-        <div className="hidden lg:flex items-center text-xs text-muted-foreground border-l border-border/60 pl-3">
-          <Globe className="h-3.5 w-3.5 mr-1.5 text-primary" />
+        <div className="hidden lg:flex items-center border-l border-border/70 pl-3 text-xs text-muted-foreground">
+          <Globe className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
           <Select
             value={currentOrg?.id || ''}
             onChange={(e) => {
               const org = organizations.find((o) => o.id === e.target.value);
               if (org) setCurrentOrg(org);
             }}
-            className="h-7 border-none bg-transparent text-xs font-medium focus:ring-0 cursor-pointer shadow-none"
+            className="h-7 cursor-pointer border-none bg-transparent text-xs font-mono font-medium shadow-none focus:ring-0"
           >
             {organizations.map((org) => (
               <option key={org.id} value={org.id} className="bg-card text-foreground">
@@ -75,50 +93,54 @@ export function TopNav() {
       </div>
 
       {/* Center Section: Spotlight Search Bar */}
-      <div className="flex-1 max-w-md mx-2 sm:mx-4 hidden md:block">
+      <div className="mx-2 hidden max-w-md flex-1 sm:mx-4 md:block">
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex w-full items-center justify-between rounded-lg border border-border/80 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:bg-muted/60 transition-all"
+          className="flex w-full items-center justify-between rounded-full border border-border/80 bg-card/60 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:bg-card hover:text-foreground"
         >
           <div className="flex items-center space-x-2">
-            <Search className="h-3.5 w-3.5 text-primary" />
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="truncate">Search containers, files, commands...</span>
           </div>
-          <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
-            Ctrl + K
+          <kbd className="pointer-events-none hidden h-5 select-none items-center rounded-full border border-border/80 bg-secondary px-2 font-mono text-[10px] text-muted-foreground sm:inline-flex">
+            Ctrl K
           </kbd>
         </button>
       </div>
 
-      {/* Right Section: Theme & Actions */}
-      <div className="flex items-center space-x-1.5 sm:space-x-2">
-        {/* Search button for mobile */}
-        <button
+      {/* Right Section: Actions & Theme */}
+      <div className="flex items-center space-x-2">
+        {/* Mobile search trigger */}
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => setCommandPaletteOpen(true)}
-          className="md:hidden p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="h-8 w-8 md:hidden"
           aria-label="Search"
         >
-          <Search className="h-4 w-4" />
-        </button>
+          <Search className="h-3.5 w-3.5" />
+        </Button>
 
-        {/* Quick Action Button */}
+        {/* Primary Pill CTA matching reference button style */}
         <Button
           size="sm"
           onClick={() => setQuickLauncherOpen(true)}
           aria-label="Quick Action"
-          className="h-8 px-2.5 sm:px-3 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-bold"
+          className="h-8 px-4 text-xs"
         >
-          <Plus className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Quick Action</span>
+          <span className="sm:hidden">Action</span>
+          <ArrowRight className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5" />
         </Button>
 
         {/* Theme Picker */}
-        <div className="relative flex items-center bg-muted/40 rounded-lg px-1.5 sm:px-2 py-1 border border-border/60">
-          <Palette className="h-3.5 w-3.5 text-muted-foreground mr-1 shrink-0" />
+        <div className="relative flex items-center rounded-full border border-border/80 bg-card/70 px-2.5 py-1">
+          <Palette className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <Select
             value={theme}
             onChange={(e) => setTheme(e.target.value as ThemeName)}
-            className="h-6 border-none bg-transparent text-xs focus:ring-0 p-0 shadow-none cursor-pointer text-muted-foreground hover:text-foreground max-w-[70px] sm:max-w-none"
+            aria-label="Color theme"
+            className="h-6 max-w-[82px] cursor-pointer border-none bg-transparent p-0 text-xs font-mono text-muted-foreground shadow-none hover:text-foreground focus:ring-0 sm:max-w-none"
           >
             {themeCatalog.map((t) => (
               <option key={t.id} value={t.id} className="bg-card text-foreground">
@@ -128,32 +150,32 @@ export function TopNav() {
           </Select>
         </div>
 
-        {/* Sign out. There was no way to end a session from the UI at all - the
-            only exit was clearing site data. */}
+        {/* Notifications Drawer */}
         <Button
-          variant="ghost"
+          variant="outline"
+          size="icon"
+          onClick={() => setNotificationsOpen(true)}
+          aria-label="Notifications"
+          className="relative h-8 w-8 shrink-0"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary font-mono text-[9px] font-semibold text-primary-foreground">
+              {unreadCount}
+            </span>
+          )}
+        </Button>
+
+        {/* Sign Out */}
+        <Button
+          variant="outline"
           size="icon"
           onClick={handleSignOut}
           title={user ? `Sign out ${user.name}` : 'Sign out'}
           aria-label="Sign out"
-          className="h-8 w-8 text-muted-foreground hover:text-rose-400 shrink-0"
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-rose-400 hover:border-rose-500/30"
         >
-          <LogOut className="h-4 w-4" />
-        </Button>
-
-        {/* Real-Time Notifications Drawer Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setNotificationsOpen(true)}
-          className="h-8 w-8 relative text-muted-foreground hover:text-foreground shrink-0"
-        >
-          <Bell className="h-4 w-4" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 font-mono text-[9px] font-bold text-white shadow-sm animate-pulse">
-              {unreadCount}
-            </span>
-          )}
+          <LogOut className="h-3.5 w-3.5" />
         </Button>
       </div>
     </header>

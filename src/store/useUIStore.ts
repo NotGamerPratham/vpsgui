@@ -32,7 +32,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  theme: 'vscode_dark',
+  theme: 'obsidian',
   language: 'en',
   sidebarCollapsed: false,
   mobileMenuOpen: false,

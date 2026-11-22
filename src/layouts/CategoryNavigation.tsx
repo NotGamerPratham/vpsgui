@@ -39,24 +39,25 @@ export function CategoryNavigation() {
   const location = useLocation();
 
   return (
-    <div className="border-b border-border/60 bg-card/40 backdrop-blur-md px-4 overflow-x-auto scrollbar-none">
-      <div className="flex items-center space-x-1 py-1 min-w-max">
+    <div className="shrink-0 border-b border-border/70 bg-sidebar/60 px-4 sm:px-5 overflow-x-auto scrollbar-none backdrop-blur-md">
+      <div className="flex items-center space-x-1.5 py-2 min-w-max">
         {navigationCategories.map((cat) => {
           const Icon = cat.icon;
-          const isActive = location.pathname.startsWith(cat.path.split('/')[1] === '' ? '/dashboard' : `/${cat.path.split('/')[1]}`);
+          const segment = cat.path.split('/')[1];
+          const isActive = location.pathname.startsWith(segment === '' ? '/dashboard' : `/${segment}`);
 
           return (
             <button
               key={cat.id}
               onClick={() => navigate(cat.path)}
               className={cn(
-                'flex items-center space-x-2 px-3 py-2 rounded-md text-xs font-medium transition-all duration-150',
+                'flex items-center space-x-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150',
                 isActive
-                  ? 'bg-primary/10 text-primary border border-primary/20 shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                  ? 'border-foreground/20 bg-accent text-foreground'
+                  : 'border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground'
               )}
             >
-              <Icon className={cn('h-3.5 w-3.5', isActive ? 'text-primary' : 'text-muted-foreground')} />
+              <Icon className="h-3.5 w-3.5" />
               <span>{cat.label}</span>
             </button>
           );

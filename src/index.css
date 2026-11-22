@@ -4,48 +4,50 @@
 
 @layer base {
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 6.5%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 6.5%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-    --radius: 0.5rem;
+    --background: 240 6% 3.1%;
+    --foreground: 48 14% 91.4%;
+    --sidebar: 240 6% 4.3%;
+    --card: 240 5% 5.8%;
+    --card-foreground: 48 14% 91.4%;
+    --popover: 240 5% 6.5%;
+    --popover-foreground: 48 14% 91.4%;
+    --primary: 48 14% 91.4%;
+    --primary-foreground: 240 5% 4.5%;
+    --secondary: 240 4% 11%;
+    --secondary-foreground: 48 12% 88%;
+    --muted: 240 4% 10.5%;
+    --muted-foreground: 240 4% 55%;
+    --accent: 240 4% 13.5%;
+    --accent-foreground: 48 14% 91.4%;
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 48 14% 96%;
+    --border: 240 4% 15.5%;
+    --input: 240 4% 16.5%;
+    --ring: 48 14% 84%;
+    --radius: 0.75rem;
   }
 
   .light {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 45 18% 96.5%;
+    --foreground: 240 6% 6%;
+    --sidebar: 45 14% 94%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 6% 6%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --popover-foreground: 240 6% 6%;
+    --primary: 240 5% 7%;
+    --primary-foreground: 48 14% 94%;
+    --secondary: 45 10% 91%;
+    --secondary-foreground: 240 6% 12%;
+    --muted: 45 10% 92%;
+    --muted-foreground: 240 4% 42%;
+    --accent: 45 10% 90%;
+    --accent-foreground: 240 6% 8%;
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 8% 85%;
+    --input: 40 8% 84%;
+    --ring: 240 5% 18%;
   }
 }
 
@@ -53,8 +55,18 @@
   * {
     @apply border-border;
   }
+
+  html {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-mono;
+    font-feature-settings: 'liga' 1, 'calt' 1;
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -67,26 +79,44 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(236, 235, 230, 0.14);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(236, 235, 230, 0.28);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(11, 11, 12, 0.18);
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(11, 11, 12, 0.34);
 }
 
 /* Glassmorphism Effect */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(14, 14, 16, 0.72);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(236, 235, 230, 0.09);
 }
 
 .light .glass-panel {
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(11, 11, 12, 0.09);
+}
+
+/* Precision architectural dot field */
+.bg-precision-dots {
+  background-image: radial-gradient(rgba(236, 235, 230, 0.085) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.light .bg-precision-dots {
+  background-image: radial-gradient(rgba(11, 11, 12, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 /* Code / Terminal font setup */
